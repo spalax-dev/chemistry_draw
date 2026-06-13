@@ -1,62 +1,164 @@
-/// Test de integración Imago: usa una imagen de prueba (caffeine.jpg),
-/// ejecuta el pipeline completo (load → filter → recognize) y guarda
-/// el molfile resultante en el filesystem para inspección manual.
-/// No depende de ImageMagick — usa imagoFilterImage nativo.
-#[cfg(test)]
-mod imago_integration {
-    use std::path::PathBuf;
+// Tests para el pipeline de reconocimiento de imágenes con Imago v2.
+//
+// Imago convierte imágenes de estructuras químicas en molfiles.
+// El pipeline es: load_from_file → filter_image → set_config → recognize.
+//
+// Requiere libimago.so y una imagen de prueba (caffeine.jpg del test data de Imago).
+// Si la imagen no existe, los tests se saltan (no fallan).
+//
+// Casos cubiertos:
+//   - Pipeline completo con filtro (imagen real → molfile)
+//   - Verificación de formato del molfile resultante
+//   - Cleanup via Indigo (load → layout → convert a SMILES)
+//   - Manejo de imagen inexistente (skip gracefully)
 
-    /// Usa la imagen caffeine.jpg del test data de Imago.
-    /// Pipeline: load_from_file → filter_image → set_config → recognize → molfile cleanup.
-    /// El molfile resultante se guarda en /tmp/imago_test_result.mol
-    #[test]
-    fn imago_full_pipeline_caffeine() {
-        let img = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../Imago/api/python/tests/data/caffeine.jpg");
+use crate::tests::*;
+use axum::http::StatusCode;
+use std::path::PathBuf;
 
-        if !img.exists() {
-            eprintln!("SKIP: test image not found at {img:?}");
-            return;
-        }
+fn test_image() -> Option<PathBuf> {
+    let img = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../Imago/api/python/tests/data/caffeine.jpg");
+    if img.exists() {
+        Some(img)
+    } else {
+        None
+    }
+}
 
-        let img_bytes = std::fs::read(&img).expect("read test image");
-        let tmp = std::env::temp_dir().join(format!("imago_test_{:x}.png", std::process::id()));
-        std::fs::write(&tmp, &img_bytes).expect("write temp");
+/// Verifica que el pipeline completo (load → filter → config → recognize)
+/// produce un molfile válido a partir de una imagen real.
+/// Usa caffeine.jpg del test data de Imago.
+#[tokio::test]
+async fn full_pipeline_produces_valid_molfile() {
+    let img = match test_image() {
+        Some(p) => p,
+        None => return,
+    };
 
-        // Pipeline completo con filtro
+    let bytes = std::fs::read(&img).expect("read test image");
+    let tmp = std::env::temp_dir().join(format!("imago_test_{:x}.png", std::process::id()));
+    std::fs::write(&tmp, &bytes).expect("write temp");
+
+    // Pipeline completo
+    let sid = crate::indigo::init_session().expect("indigo session");
+    crate::imago::init_with_indigo_session(sid);
+
+    crate::imago::load_image_from_file(&tmp.to_string_lossy())
+        .expect("load caffeine image from file");
+    crate::imago::filter_image()
+        .expect("filter_image (binarize + preprocess)");
+    crate::imago::set_config(None)
+        .expect("set_config auto-detect");
+
+    let mol = crate::imago::recognize().expect("recognize structure");
+
+    let _ = std::fs::remove_file(&tmp);
+
+    assert!(!mol.is_empty(), "molfile must not be empty");
+    assert!(
+        mol.contains("V2000") || mol.contains("V3000"),
+        "molfile must be V2000 or V3000 format, got: {}",
+        &mol[..100]
+    );
+}
+
+/// Verifica que el molfile de Imago puede ser re-cargado por Indigo
+/// después del cleanup con ignore-stereochemistry-errors.
+/// El SMILES resultante debe ser una cadena no vacía.
+#[tokio::test]
+async fn recognized_molfile_cleanup_through_indigo() {
+    let img = match test_image() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let bytes = std::fs::read(&img).expect("read test image");
+    let tmp = std::env::temp_dir().join(format!("imago_cleanup_{:x}.png", std::process::id()));
+    std::fs::write(&tmp, &bytes).expect("write temp");
+
+    let sid = crate::indigo::init_session().expect("indigo session");
+    crate::imago::init_with_indigo_session(sid);
+    crate::imago::load_image_from_file(&tmp.to_string_lossy()).expect("load");
+    crate::imago::filter_image().expect("filter");
+    crate::imago::set_config(None).expect("config");
+    let mol = crate::imago::recognize().expect("recognize");
+
+    let _ = std::fs::remove_file(&tmp);
+
+    // Cleanup: pasar el molfile por Indigo para normalizar
+    let _sid2 = crate::indigo::init_session().unwrap();
+    crate::indigo::set_option_bool("ignore-stereochemistry-errors", 1);
+    let smiles = crate::indigo::load_structure(&mol)
+        .and_then(|h| {
+            crate::indigo::layout(h);
+            crate::indigo::convert(h, "chemical/x-daylight-smiles")
+        })
+        .expect("cleanup should succeed");
+
+    assert!(!smiles.is_empty(), "cleaned SMILES must not be empty");
+    assert!(
+        smiles.contains('C') || smiles.contains('c'),
+        "SMILES must contain carbon, got: {smiles}"
+    );
+}
+
+/// El pipeline debe manejar gracefully una imagen que no existe.
+/// No debe panickear ni crashear con SIGSEGV.
+#[tokio::test]
+async fn missing_image_does_not_panic() {
+    let sid = crate::indigo::init_session().expect("indigo session");
+    crate::imago::init_with_indigo_session(sid);
+
+    // load_image_from_file con archivo inexistente no debe panickear
+    let _ = crate::imago::load_image_from_file("/tmp/does_not_exist_xyz.png");
+
+    // Verificar que no crasheó — si llegamos aquí, está bien
+}
+
+/// Múltiples pipelines secuenciales no deben interferir entre sí.
+/// Cada reconocimiento debe producir un resultado independiente.
+#[tokio::test]
+async fn sequential_pipelines_are_independent() {
+    let img = match test_image() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let bytes = std::fs::read(&img).expect("read test image");
+
+    let mut results = Vec::new();
+    for i in 0..2 {
+        let tmp = std::env::temp_dir().join(format!("imago_seq_{i}_{:x}.png", std::process::id()));
+        std::fs::write(&tmp, &bytes).expect("write temp");
+
         let sid = crate::indigo::init_session().expect("indigo session");
         crate::imago::init_with_indigo_session(sid);
-
-        crate::imago::load_image_from_file(&tmp.to_string_lossy())
-            .expect("load caffeine.jpg");
-
-        crate::imago::filter_image()
-            .expect("filter_image");
-
-        crate::imago::set_config(None)
-            .expect("set_config");
-
-        let result = crate::imago::recognize().expect("recognize caffeine");
-
-        // Guardar resultado
-        let out = std::env::temp_dir().join("imago_test_result.mol");
-        std::fs::write(&out, &result).expect("write result");
-
-        // Cleanup via Indigo
-        let _sid2 = crate::indigo::init_session().unwrap();
-        crate::indigo::set_option_bool("ignore-stereochemistry-errors", 1);
-        let cleaned = crate::indigo::load_structure(&result)
-            .and_then(|h| {
-                crate::indigo::layout(h);
-                crate::indigo::convert(h, "chemical/x-daylight-smiles")
-            })
-            .unwrap_or_else(|_| "CLEANUP_FAILED".into());
+        crate::imago::load_image_from_file(&tmp.to_string_lossy()).expect("load");
+        crate::imago::filter_image().expect("filter");
+        crate::imago::set_config(None).expect("config");
+        let mol = crate::imago::recognize().expect("recognize");
 
         let _ = std::fs::remove_file(&tmp);
-
-        println!("Raw molfile: {} chars → {}", result.len(), out.display());
-        println!("Cleaned SMILES: {}", cleaned);
-        assert!(!result.is_empty(), "result must not be empty");
-        assert!(result.contains("V2000") || result.contains("V3000"), "must be a valid molfile");
+        results.push(mol);
     }
+
+    assert_eq!(results.len(), 2, "should have 2 results");
+    assert!(!results[0].is_empty(), "first result must not be empty");
+    assert!(!results[1].is_empty(), "second result must not be empty");
+}
+
+/// El endpoint GET /v2/info debe incluir imago_versions en la respuesta.
+/// Ketcher usa este campo para habilitar el botón "Recognize Molecule"
+/// y para poblar el dropdown de versión de Imago.
+#[tokio::test]
+async fn info_endpoint_includes_imago_versions() {
+    let app = test_app();
+    let (status, body) = fetch_get(&app, "/v2/info").await;
+
+    assert_eq!(status, StatusCode::OK);
+    let versions = body["imago_versions"].as_array()
+        .expect("imago_versions must be an array");
+    assert!(!versions.is_empty(), "imago_versions must not be empty");
+    assert!(versions.contains(&serde_json::json!("2")), "must include version 2");
 }

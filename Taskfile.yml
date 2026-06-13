@@ -1,0 +1,39 @@
+version: '3'
+
+vars:
+  SIDECAR_DIR: sidecar
+  LIB_PATH: lib/linux-x86_64
+
+tasks:
+  test:
+    desc: Run tests for Indigo + Imago
+    dir: '{{.SIDECAR_DIR}}'
+    env:
+      LD_LIBRARY_PATH: '../{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+    cmds:
+      - cargo test
+
+  compile:
+    desc: Run tests, then build release sidecar binary with target triple suffix
+    dir: '{{.SIDECAR_DIR}}'
+    env:
+      LD_LIBRARY_PATH: '../{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+    deps:
+      - test
+    cmds:
+      - cargo build --release
+      - cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu
+
+  dev:
+    desc: Kill stale sidecar on port 9321, then start Tauri dev
+    env:
+      LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+    cmds:
+      - pkill -9 indigo-server || true
+      - sleep 1
+      - npm run tauri dev
+
+  package:
+    desc: Package as .deb (future)
+    cmds:
+      - echo "empaquetando .deb"
