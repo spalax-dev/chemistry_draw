@@ -25,7 +25,7 @@ async fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(9321);
 
-    let state = AppState { port };
+    let state = AppState { _port: port };
 
     let cors = CorsLayer::new()
         .allow_origin(Any)

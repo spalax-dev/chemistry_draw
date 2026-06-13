@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 // POST body genérico para /convert, /aromatize, etc.
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct IndigoRequest {
     #[serde(rename = "struct")]
     pub struct_: String,
@@ -29,6 +30,7 @@ pub struct IndigoError {
 
 // Render
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct RenderRequest {
     #[serde(rename = "struct")]
     pub struct_: String,
@@ -45,6 +47,7 @@ fn default_render_format() -> String {
 
 // Calculate
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct CalculateRequest {
     #[serde(rename = "struct")]
     pub struct_: String,
@@ -74,6 +77,7 @@ pub struct CalculateResponse {
 
 // Check
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct CheckRequest {
     #[serde(rename = "struct")]
     pub struct_: String,

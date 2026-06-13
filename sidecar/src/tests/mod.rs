@@ -37,7 +37,7 @@ fn init_tracing() {
 /// Construye una app de test con todas las rutas, sin CORS.
 pub fn test_app() -> Router {
     init_tracing();
-    let state = AppState { port: 9321 };
+    let state = AppState { _port: 9321 };
 
     Router::new()
         .route("/v2/info", axum::routing::get(handlers::get_info))

@@ -10,7 +10,7 @@ extern "C" {
     // -- Sesiones (qword = u64) --
     fn indigoAllocSessionId() -> u64;
     fn indigoSetSessionId(sid: u64);
-    fn indigoReleaseSessionId(sid: u64);
+    fn _indigoReleaseSessionId(sid: u64);
 
     // -- Moléculas --
     fn indigoLoadMoleculeFromString(str: *const c_char) -> i32;
@@ -30,17 +30,17 @@ extern "C" {
     fn indigoMolfile(handle: i32) -> *const c_char;
     fn indigoRxnfile(handle: i32) -> *const c_char;
     fn indigoCanonicalSmiles(handle: i32) -> *const c_char;
-    fn indigoSmiles(handle: i32) -> *const c_char;
+    fn _indigoSmiles(handle: i32) -> *const c_char;
     fn indigoCml(handle: i32) -> *const c_char;
     fn indigoCdxml(handle: i32) -> *const c_char;
     fn indigoJson(handle: i32) -> *const c_char;
 
     // -- Propiedades (MolecularWeight etc devuelven double, GrossFormula handle) --
     fn indigoMolecularWeight(handle: i32) -> f64;
-    fn indigoMostAbundantMass(handle: i32) -> f64;
-    fn indigoMonoisotopicMass(handle: i32) -> f64;
     fn indigoGrossFormula(handle: i32) -> i32;
-    fn indigoMassComposition(handle: i32) -> *const c_char;
+    fn _indigoMostAbundantMass(handle: i32) -> f64;
+    fn _indigoMonoisotopicMass(handle: i32) -> f64;
+    fn _indigoMassComposition(handle: i32) -> *const c_char;
 
     // -- Validación --
     fn indigoCheckObj(handle: i32, properties: *const c_char) -> *const c_char;
@@ -58,7 +58,7 @@ extern "C" {
 
     // -- Options --
     fn indigoSetOption(name: *const c_char, value: *const c_char) -> i32;
-    fn indigoSetOptionBool(name: *const c_char, value: i32) -> i32;
+    fn _indigoSetOptionBool(name: *const c_char, value: i32) -> i32;
 
     // -- Error --
     fn indigoGetLastError() -> *const c_char;

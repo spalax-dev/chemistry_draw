@@ -8,7 +8,7 @@ use crate::{indigo, models::*};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub port: u16,
+    pub _port: u16,
 }
 
 // ─── Info ──────────────────────────────────────────────────────
