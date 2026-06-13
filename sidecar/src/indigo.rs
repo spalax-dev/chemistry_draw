@@ -14,6 +14,7 @@ extern "C" {
 
     // -- Moléculas --
     fn indigoLoadMoleculeFromString(str: *const c_char) -> i32;
+    fn indigoLoadReactionFromString(str: *const c_char) -> i32;
 
     // -- Buffer I/O --
     fn indigoWriteBuffer() -> i32;
@@ -27,6 +28,7 @@ extern "C" {
     // -- Serialización --
     fn indigoToString(handle: i32) -> *const c_char;
     fn indigoMolfile(handle: i32) -> *const c_char;
+    fn indigoRxnfile(handle: i32) -> *const c_char;
     fn indigoCanonicalSmiles(handle: i32) -> *const c_char;
     fn indigoSmiles(handle: i32) -> *const c_char;
     fn indigoCml(handle: i32) -> *const c_char;
@@ -101,8 +103,10 @@ pub fn convert(handle: i32, output_format: &str) -> anyhow::Result<String> {
         unsafe { indigoCdxml(handle) }
     } else if output_format.contains("ket") || output_format.contains("json") {
         unsafe { indigoJson(handle) }
+    } else if output_format.contains("rxn") {
+        unsafe { indigoRxnfile(handle) }
     } else {
-        // default: molfile
+        // default: molfile (también usado para reacciones)
         unsafe { indigoMolfile(handle) }
     };
 
@@ -220,7 +224,19 @@ pub fn automap(handle: i32, mode: &str) -> anyhow::Result<i32> {
     Ok(res)
 }
 
-fn last_error() -> String {
+pub fn load_reaction(s: &str) -> anyhow::Result<i32> {
+    let c_str = CString::new(s)?;
+    let handle = unsafe { indigoLoadReactionFromString(c_str.as_ptr()) };
+    if handle < 0 {
+        return Err(anyhow::anyhow!(
+            "Indigo load reaction error: {}",
+            last_error()
+        ));
+    }
+    Ok(handle)
+}
+
+pub fn last_error() -> String {
     let ptr = unsafe { indigoGetLastError() };
     if ptr.is_null() {
         return "unknown error".into();

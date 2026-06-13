@@ -2,6 +2,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
+use tracing::{error, info};
 
 use crate::{indigo, models::*};
 
@@ -13,6 +14,7 @@ pub struct AppState {
 // ─── Info ──────────────────────────────────────────────────────
 
 pub async fn get_info() -> impl IntoResponse {
+    info!("GET /v2/info");
     let v = indigo::version();
     Json(serde_json::json!({
         "Indigo": { "version": v }
@@ -24,12 +26,20 @@ pub async fn get_info() -> impl IntoResponse {
 pub async fn post_convert(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
+    info!("POST /v2/indigo/convert fmt={}", payload.output_format);
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
     indigo::layout(handle);
-    let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+    let result = indigo::convert(handle, &payload.output_format).map_err(|e| {
+        error!("convert: {e}");
+        error_500(&e.to_string())
+    })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,
@@ -41,13 +51,24 @@ pub async fn post_convert(
 pub async fn post_aromatize(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
-    indigo::aromatize(handle).map_err(|e| error_500(&e.to_string()))?;
+    info!("POST /v2/indigo/aromatize");
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
+    indigo::aromatize(handle).map_err(|e| {
+        error!("aromatize: {e}");
+        error_500(&e.to_string())
+    })?;
     indigo::layout(handle);
-    let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+    let result = indigo::convert(handle, &payload.output_format).map_err(|e| {
+        error!("convert: {e}");
+        error_500(&e.to_string())
+    })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,
@@ -59,13 +80,24 @@ pub async fn post_aromatize(
 pub async fn post_dearomatize(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
-    indigo::dearomatize(handle).map_err(|e| error_500(&e.to_string()))?;
+    info!("POST /v2/indigo/dearomatize");
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
+    indigo::dearomatize(handle).map_err(|e| {
+        error!("dearomatize: {e}");
+        error_500(&e.to_string())
+    })?;
     indigo::layout(handle);
-    let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+    let result = indigo::convert(handle, &payload.output_format).map_err(|e| {
+        error!("convert: {e}");
+        error_500(&e.to_string())
+    })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,
@@ -77,12 +109,20 @@ pub async fn post_dearomatize(
 pub async fn post_layout(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
+    info!("POST /v2/indigo/layout");
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
     indigo::layout(handle);
-    let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+    let result = indigo::convert(handle, &payload.output_format).map_err(|e| {
+        error!("convert: {e}");
+        error_500(&e.to_string())
+    })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,
@@ -94,12 +134,20 @@ pub async fn post_layout(
 pub async fn post_clean(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
+    info!("POST /v2/indigo/clean");
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
     indigo::clean2d(handle);
-    let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+    let result = indigo::convert(handle, &payload.output_format).map_err(|e| {
+        error!("convert: {e}");
+        error_500(&e.to_string())
+    })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,
@@ -111,9 +159,18 @@ pub async fn post_clean(
 pub async fn post_render(
     Json(payload): Json<RenderRequest>,
 ) -> Result<Response, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
+    info!(
+        "POST /v2/indigo/render fmt={}",
+        payload.output_format
+    );
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
     indigo::layout(handle);
 
     let fmt = match payload.output_format.as_str() {
@@ -123,8 +180,10 @@ pub async fn post_render(
         other => other,
     };
 
-    let buf = indigo::render_to_buffer(handle, fmt)
-        .map_err(|e| error_500(&e.to_string()))?;
+    let buf = indigo::render_to_buffer(handle, fmt).map_err(|e| {
+        error!("render: {e}");
+        error_500(&e.to_string())
+    })?;
 
     let is_base64 = payload.output_format.contains("base64");
     let content_type = if is_base64 {
@@ -156,9 +215,15 @@ pub async fn post_render(
 pub async fn post_calculate(
     Json(payload): Json<CalculateRequest>,
 ) -> Result<Json<CalculateResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
+    info!("POST /v2/indigo/calculate props={:?}", payload.properties);
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
 
     let mut res = CalculateResponse {
         molecular_weight: None,
@@ -189,11 +254,18 @@ pub async fn post_calculate(
 pub async fn post_check(
     Json(payload): Json<CheckRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
+    info!("POST /v2/indigo/check types={:?}", payload.types);
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
     let types_json = serde_json::to_string(&payload.types)
         .map_err(|e| error_500(&e.to_string()))?;
     let result = indigo::check_structure(&payload.struct_, &types_json)
-        .map_err(|e| error_500(&e.to_string()))?;
+        .map_err(|e| {
+            error!("check_structure: {e}");
+            error_500(&e.to_string())
+        })?;
     Ok((StatusCode::OK, [("content-type", "application/json")], result))
 }
 
@@ -202,12 +274,24 @@ pub async fn post_check(
 pub async fn post_calculate_cip(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
-    indigo::calculate_cip(handle).map_err(|e| error_500(&e.to_string()))?;
+    info!("POST /v2/indigo/calculate_cip");
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    let handle = indigo::load_structure(&payload.struct_).map_err(|e| {
+        error!("load_structure: {e}");
+        error_400(&e.to_string())
+    })?;
+    indigo::calculate_cip(handle).map_err(|e| {
+        error!("calculate_cip: {e}");
+        error_500(&e.to_string())
+    })?;
     let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+        .map_err(|e| {
+            error!("convert: {e}");
+            error_500(&e.to_string())
+        })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,
@@ -219,12 +303,25 @@ pub async fn post_calculate_cip(
 pub async fn post_automap(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, (StatusCode, Json<IndigoError>)> {
-    let _sid = indigo::init_session().map_err(|e| error_500(&e.to_string()))?;
-    let handle = indigo::load_structure(&payload.struct_)
-        .map_err(|e| error_400(&e.to_string()))?;
-    indigo::automap(handle, "discard").map_err(|e| error_500(&e.to_string()))?;
+    info!("POST /v2/indigo/automap");
+    let _sid = indigo::init_session().map_err(|e| {
+        error!("init_session: {e}");
+        error_500(&e.to_string())
+    })?;
+    // automap needs a reaction
+    let handle = indigo::load_reaction(&payload.struct_).map_err(|e| {
+        error!("load_reaction: {e}");
+        error_400(&e.to_string())
+    })?;
+    indigo::automap(handle, "discard").map_err(|e| {
+        error!("automap: {e}");
+        error_500(&e.to_string())
+    })?;
     let result = indigo::convert(handle, &payload.output_format)
-        .map_err(|e| error_500(&e.to_string()))?;
+        .map_err(|e| {
+            error!("convert: {e}");
+            error_500(&e.to_string())
+        })?;
     Ok(Json(IndigoResponse {
         struct_: result,
         format: payload.output_format,

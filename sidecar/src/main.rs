@@ -2,7 +2,10 @@ mod handlers;
 mod indigo;
 mod models;
 
-use axum::routing::get;
+#[cfg(test)]
+mod tests;
+
+use axum::{routing::get, Router};
 use handlers::AppState;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
