@@ -30,6 +30,7 @@ pub async fn post_upload(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    tracing::info!("POST /v2/imago/uploads size={}", body.len());
     let id = state.imago_store.create();
     process_and_store(&state.imago_store, &id, &body);
     Ok(Json(serde_json::json!({ "upload_id": id })))

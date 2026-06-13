@@ -17,6 +17,7 @@ pub async fn get_indigo_info() -> Json<serde_json::Value> {
 pub async fn post_convert(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/convert fmt={}", payload.output_format);
     let result = indigo_ops::convert(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -27,6 +28,7 @@ pub async fn post_convert(
 pub async fn post_aromatize(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/aromatize");
     let result = indigo_ops::aromatize(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -37,6 +39,7 @@ pub async fn post_aromatize(
 pub async fn post_dearomatize(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/dearomatize");
     let result = indigo_ops::dearomatize(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -47,6 +50,7 @@ pub async fn post_dearomatize(
 pub async fn post_layout(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/layout");
     let result = indigo_ops::layout(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -57,6 +61,7 @@ pub async fn post_layout(
 pub async fn post_clean(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/clean");
     let result = indigo_ops::clean(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -67,6 +72,7 @@ pub async fn post_clean(
 pub async fn post_calculate_cip(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/calculate_cip");
     let result = indigo_ops::calculate_cip(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -77,6 +83,7 @@ pub async fn post_calculate_cip(
 pub async fn post_automap(
     Json(payload): Json<IndigoRequest>,
 ) -> Result<Json<IndigoResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/automap");
     let result = indigo_ops::automap(&payload.struct_, &payload.output_format)?;
     Ok(Json(IndigoResponse {
         struct_: result,
@@ -87,6 +94,7 @@ pub async fn post_automap(
 pub async fn post_render(
     Json(payload): Json<RenderRequest>,
 ) -> Result<Response, AppError> {
+    tracing::info!("POST /v2/indigo/render fmt={}", payload.output_format);
     let (buf, content_type) = indigo_ops::render(&payload.struct_, &payload.output_format)?;
 
     let is_base64 = payload.output_format.contains("base64");
@@ -111,6 +119,7 @@ pub async fn post_render(
 pub async fn post_calculate(
     Json(payload): Json<CalculateRequest>,
 ) -> Result<Json<CalculateResponse>, AppError> {
+    tracing::info!("POST /v2/indigo/calculate props={:?}", payload.properties);
     Ok(Json(indigo_ops::calculate(
         &payload.struct_,
         &payload.properties,

@@ -10,6 +10,7 @@ use crate::ffi::{imago, indigo};
 /// Ketcher reads `imago_versions` to register the image recognition
 /// backend and enable the "Recognize Molecule" button.
 pub async fn get_info() -> Json<serde_json::Value> {
+    tracing::info!("GET /v2/info");
     let v = indigo::version();
     let imago_v = imago::versions();
     Json(json!({

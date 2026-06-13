@@ -108,6 +108,7 @@ pub fn check(structure: &str, types: &[String]) -> Result<String, AppError> {
             types.push(required.to_string());
         }
     }
+    tracing::info!("POST /v2/indigo/check types={types:?}");
     let _sid = indigo::init_session().map_err(AppError::internal)?;
     let types_json =
         serde_json::to_string(&types).map_err(|e| AppError::internal(anyhow::anyhow!(e)))?;

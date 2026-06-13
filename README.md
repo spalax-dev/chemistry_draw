@@ -18,11 +18,36 @@ Desktop wrapper of the chemical structure editor [Ketcher](https://github.com/ep
 - Basic image-to-structure recognition powered by EPAM Imago v2
 - Offline-first — runs entirely on your machine
 
-## Development
+## Building from source
+
+### Prerequisites
+
+- [Task](https://taskfile.dev/) — task runner
+- Rust ≥ 1.84
+- [pnpm](https://pnpm.io/)
+- Tauri v2 system dependencies (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)):
+
+  ```bash
+  # Debian / Ubuntu
+  sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+  ```
+
+- OpenCV 4.x (`libopencv-dev`) — required by the Imago recognition library
+
+### Build & run
 
 ```bash
+# Install frontend dependencies
 pnpm install
-pnpm tauri dev
+
+# Run development server (builds sidecar automatically)
+task dev
+
+# Run sidecar tests only
+task test
+
+# Remove compiled artifacts (Rust target + dist)
+task clean
 ```
 
 ## License
