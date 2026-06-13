@@ -254,12 +254,22 @@ pub async fn post_calculate(
 pub async fn post_check(
     Json(payload): Json<CheckRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<IndigoError>)> {
-    info!("POST /v2/indigo/check types={:?}", payload.types);
+    // Fix: Ketcher (ketcher-react/index.js:3722) strips 'valence' and 'chiral_flag'
+    // from the backend request because it does them client-side via ketcherCheck().
+    // The client-side checks are less thorough than Indigo's, so we always
+    // enforce both server-side regardless of what Ketcher sends.
+    let mut types = payload.types.clone();
+    for required in &["valence", "chiral_flag"] {
+        if !types.iter().any(|t| t == *required) {
+            types.push(required.to_string());
+        }
+    }
+    info!("POST /v2/indigo/check types={:?}", types);
     let _sid = indigo::init_session().map_err(|e| {
         error!("init_session: {e}");
         error_500(&e.to_string())
     })?;
-    let types_json = serde_json::to_string(&payload.types)
+    let types_json = serde_json::to_string(&types)
         .map_err(|e| error_500(&e.to_string()))?;
     let result = indigo::check_structure(&payload.struct_, &types_json)
         .map_err(|e| {
