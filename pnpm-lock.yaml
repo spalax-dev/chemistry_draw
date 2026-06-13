@@ -20,15 +20,15 @@ importers:
       '@tauri-apps/plugin-opener':
         specifier: ^2
         version: 2.5.4
+      '@tauri-apps/plugin-shell':
+        specifier: ^2.3.5
+        version: 2.3.5
       ketcher-core:
         specifier: ^3.15.0
         version: 3.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       ketcher-react:
         specifier: ^3.15.0
         version: 3.15.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.31)
-      ketcher-standalone:
-        specifier: ^3.15.0
-        version: 3.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -801,6 +801,9 @@ packages:
   '@tauri-apps/plugin-opener@2.5.4':
     resolution: {integrity: sha512-1HnPkb+AmgO29HBazm4uPLKB+r7zzcTBW1d0fyYp1uP+jwtpoiNDGKMMzz58SFp49nOIrxdE3aUJtT57lfO9CQ==}
 
+  '@tauri-apps/plugin-shell@2.3.5':
+    resolution: {integrity: sha512-jewtULhiQ7lI7+owCKAjc8tYLJr92U16bPOeAa472LHJdgaibLP83NcfAF2e+wkEcA53FxKQAZ7byDzs2eeizg==}
+
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
 
@@ -1357,9 +1360,6 @@ packages:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
     engines: {node: '>=6'}
 
-  indigo-ketcher@1.43.0:
-    resolution: {integrity: sha512-kscIeTsXFxfucNwbqRWSjV1FOMOtOo1ly6Vw5ZyQ8yRLBsn4YvpI/twXMxj8M8wlf1xEc3Eh+umnA4oGZKFjRA==}
-
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
@@ -1456,10 +1456,6 @@ packages:
     peerDependencies:
       react: ^18.2.0 || ^19.0.0
       react-dom: ^18.2.0 || ^19.0.0
-
-  ketcher-standalone@3.15.0:
-    resolution: {integrity: sha512-as+FmPz7HmDR159+L980ePcOzlzUOnPS8KHB6mSFU4rHrLCQEciudszRnpvaR7/OGwQUSUVSXndwyVeWZHv89w==}
-    engines: {node: '>=24.14.1'}
 
   lexical@0.40.0:
     resolution: {integrity: sha512-wNvd/AY13h/QJYvx565M/FSdRjy0l99W5/MFA2x+mbK3KnKa5BifZbHZ1J4/YssCkdyZhSlLwFkyDaYi7l2Dsw==}
@@ -2815,6 +2811,10 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.11.0
 
+  '@tauri-apps/plugin-shell@2.3.5':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
   '@types/babel__core@7.20.5':
     dependencies:
       '@babel/parser': 7.29.7
@@ -3478,8 +3478,6 @@ snapshots:
       parent-module: 1.0.1
       resolve-from: 4.0.0
 
-  indigo-ketcher@1.43.0: {}
-
   inherits@2.0.4: {}
 
   internmap@2.0.3: {}
@@ -3613,15 +3611,6 @@ snapshots:
       - '@types/react'
       - supports-color
       - yjs
-
-  ketcher-standalone@3.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
-    dependencies:
-      '@babel/runtime': 7.29.7
-      indigo-ketcher: 1.43.0
-      ketcher-core: 3.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-    transitivePeerDependencies:
-      - react
-      - react-dom
 
   lexical@0.40.0: {}
 

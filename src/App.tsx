@@ -1,21 +1,30 @@
 import 'ketcher-react/dist/index.css';
 
+import { useCallback } from 'react';
 import { Editor } from 'ketcher-react';
-import { StandaloneStructServiceProvider } from 'ketcher-standalone';
+import { RemoteStructServiceProvider } from 'ketcher-core';
 
-
-const structServiceProvider = new StandaloneStructServiceProvider();
+const structServiceProvider = new RemoteStructServiceProvider('http://localhost:9321/v2');
 
 function App() {
+  const handleInit = useCallback((ketcher: any) => {
+    const currentOptions = ketcher.editor.options();
+    ketcher.editor.options({
+      ...currentOptions,
+      app: { ...currentOptions.app, server: true },
+    });
+  }, []);
+
   return (
     <Editor
       staticResourcesUrl={"/public"}
       structServiceProvider={structServiceProvider}
       errorHandler={(message) => {
         console.error('Ketcher error:', message);
-        // Aquí puedes mostrar un toast, notificación, etc.
       }}
+      onInit={handleInit}
     />
-  )}
+  );
+}
 
 export default App;
