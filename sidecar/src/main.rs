@@ -1,4 +1,6 @@
 mod handlers;
+mod imago;
+mod imago_jobs;
 mod indigo;
 mod models;
 
@@ -7,6 +9,7 @@ mod tests;
 
 use axum::{routing::get, Router};
 use handlers::AppState;
+use imago_jobs::ImagoJobStore;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -25,12 +28,20 @@ async fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(9321);
 
-    let state = AppState { _port: port };
+    let state = AppState {
+        _port: port,
+        imago_store: ImagoJobStore::new(),
+    };
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
+
+    // Sub-router para /v2/imago/uploads: POST / y GET /{id}
+    let imago_routes = Router::new()
+        .route("/", axum::routing::post(handlers::post_imago_upload))
+        .route("/:id", get(handlers::get_imago_status));
 
     let app = Router::new()
         .route("/v2/info", get(handlers::get_info))
@@ -75,6 +86,7 @@ async fn main() {
             "/v2/indigo/automap",
             axum::routing::post(handlers::post_automap),
         )
+        .nest("/v2/imago/uploads", imago_routes)
         .layer(cors)
         .with_state(state);
 

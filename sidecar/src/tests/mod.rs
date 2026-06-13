@@ -9,6 +9,7 @@ mod check;
 mod render;
 mod stereochemistry;
 mod layout_clean;
+mod imago_integration;
 
 use axum::{
     body::Body,
@@ -37,7 +38,10 @@ fn init_tracing() {
 /// Construye una app de test con todas las rutas, sin CORS.
 pub fn test_app() -> Router {
     init_tracing();
-    let state = AppState { _port: 9321 };
+    let state = AppState {
+        _port: 9321,
+        imago_store: crate::imago_jobs::ImagoJobStore::new(),
+    };
 
     Router::new()
         .route("/v2/info", axum::routing::get(handlers::get_info))
@@ -84,6 +88,12 @@ pub fn test_app() -> Router {
         .route(
             "/v2/indigo/automap",
             axum::routing::post(handlers::post_automap),
+        )
+        .nest(
+            "/v2/imago/uploads",
+            Router::new()
+                .route("/", axum::routing::post(handlers::post_imago_upload))
+                .route("/:id", axum::routing::get(handlers::get_imago_status)),
         )
         .with_state(state)
 }

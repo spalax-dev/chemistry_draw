@@ -1,14 +1,17 @@
 use axum::{
+    body::Bytes,
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
 use tracing::{error, info};
 
-use crate::{indigo, models::*};
+use crate::{imago, imago_jobs::ImagoJobStore, indigo, models::*};
 
 #[derive(Clone)]
 pub struct AppState {
     pub _port: u16,
+    pub imago_store: crate::imago_jobs::ImagoJobStore,
 }
 
 // ─── Info ──────────────────────────────────────────────────────
@@ -16,8 +19,12 @@ pub struct AppState {
 pub async fn get_info() -> impl IntoResponse {
     info!("GET /v2/info");
     let v = indigo::version();
+    let imago_v = imago::versions();
     Json(serde_json::json!({
-        "Indigo": { "version": v }
+        "Indigo": { "version": v },
+        "imago_versions": imago_v,
+        "indigo_version": v,
+        "api_path": "http://localhost:9321/v2"
     }))
 }
 
@@ -159,10 +166,7 @@ pub async fn post_clean(
 pub async fn post_render(
     Json(payload): Json<RenderRequest>,
 ) -> Result<Response, (StatusCode, Json<IndigoError>)> {
-    info!(
-        "POST /v2/indigo/render fmt={}",
-        payload.output_format
-    );
+    info!("POST /v2/indigo/render fmt={}", payload.output_format);
     let _sid = indigo::init_session().map_err(|e| {
         error!("init_session: {e}");
         error_500(&e.to_string())
@@ -254,10 +258,6 @@ pub async fn post_calculate(
 pub async fn post_check(
     Json(payload): Json<CheckRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<IndigoError>)> {
-    // Fix: Ketcher (ketcher-react/index.js:3722) strips 'valence' and 'chiral_flag'
-    // from the backend request because it does them client-side via ketcherCheck().
-    // The client-side checks are less thorough than Indigo's, so we always
-    // enforce both server-side regardless of what Ketcher sends.
     let mut types = payload.types.clone();
     for required in &["valence", "chiral_flag"] {
         if !types.iter().any(|t| t == *required) {
@@ -318,7 +318,6 @@ pub async fn post_automap(
         error!("init_session: {e}");
         error_500(&e.to_string())
     })?;
-    // automap needs a reaction
     let handle = indigo::load_reaction(&payload.struct_).map_err(|e| {
         error!("load_reaction: {e}");
         error_400(&e.to_string())
@@ -336,6 +335,116 @@ pub async fn post_automap(
         struct_: result,
         format: payload.output_format,
     }))
+}
+
+// ─── Imago: Image Recognition ──────────────────────────────────
+
+pub async fn post_imago_upload(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<IndigoError>)> {
+    info!("POST /v2/imago/uploads size={}", body.len());
+    let id = state.imago_store.create();
+    let id_clone = id.clone();
+    let body_vec = body.to_vec();
+
+    process_imago(&state.imago_store, &id_clone, &body_vec);
+
+    Ok(Json(serde_json::json!({ "upload_id": id })))
+}
+
+pub async fn get_imago_status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<IndigoError>)> {
+    match state.imago_store.get(&id) {
+        Some(crate::imago_jobs::JobStatus::Processing) => {
+            Ok(Json(serde_json::json!({ "state": "PROCESSING" })))
+        }
+        Some(crate::imago_jobs::JobStatus::Success { mol_str }) => {
+            info!("GET /v2/imago/uploads/{id} -> SUCCESS");
+            Ok(Json(serde_json::json!({
+                "state": "SUCCESS",
+                "metadata": { "mol_str": mol_str }
+            })))
+        }
+        Some(crate::imago_jobs::JobStatus::Failure { error }) => {
+            error!("Imago recognition failed: {error}");
+            Ok(Json(serde_json::json!({
+                "state": "FAILURE",
+                "error": error
+            })))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(IndigoError {
+                error: format!("upload_id {} not found", id),
+            }),
+        )),
+    }
+}
+
+fn process_imago(store: &ImagoJobStore, id: &str, image_bytes: &[u8]) {
+    let tmp_dir = std::env::temp_dir();
+    let input_path = tmp_dir.join(format!("imago_in_{id}.png"));
+
+    if let Err(e) = std::fs::write(&input_path, image_bytes) {
+        store.set_failure(id, format!("write temp: {e}"));
+        return;
+    }
+
+    info!("[imago] input={input_path:?}");
+
+    let indigo_sid = match crate::indigo::init_session() {
+        Ok(s) => s,
+        Err(e) => {
+            store.set_failure(id, format!("indigo session: {e}"));
+            let _ = std::fs::remove_file(&input_path);
+            return;
+        }
+    };
+    crate::imago::init_with_indigo_session(indigo_sid);
+
+    let path_str = input_path.to_string_lossy();
+    if let Err(e) = imago::load_image_from_file(&path_str) {
+        store.set_failure(id, format!("load: {e}"));
+        let _ = std::fs::remove_file(&input_path);
+        return;
+    }
+
+    if let Err(e) = imago::filter_image() {
+        store.set_failure(id, format!("filter: {e}"));
+        let _ = std::fs::remove_file(&input_path);
+        return;
+    }
+
+    if let Err(e) = imago::set_config(None) {
+        store.set_failure(id, format!("config: {e}"));
+        let _ = std::fs::remove_file(&input_path);
+        return;
+    }
+
+    match imago::recognize() {
+        Ok(mol_str) if !mol_str.trim().is_empty() => {
+            let cleaned = (|| -> anyhow::Result<String> {
+                let _sid = crate::indigo::init_session()?;
+                crate::indigo::set_option_bool("ignore-stereochemistry-errors", 1);
+                let h = crate::indigo::load_structure(&mol_str)?;
+                crate::indigo::layout(h);
+                crate::indigo::convert(h, "")
+            })()
+            .unwrap_or(mol_str);
+            store.set_success(id, cleaned);
+        }
+        Ok(_) => {
+            store.set_failure(id, "imago produced empty molfile".into());
+        }
+        Err(e) => {
+            store.set_failure(id, format!("recognize: {e}"));
+        }
+    }
+
+    let _ = std::fs::remove_file(&input_path);
 }
 
 // ─── Error helpers ─────────────────────────────────────────────

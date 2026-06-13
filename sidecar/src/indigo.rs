@@ -58,7 +58,7 @@ extern "C" {
 
     // -- Options --
     fn indigoSetOption(name: *const c_char, value: *const c_char) -> i32;
-    fn _indigoSetOptionBool(name: *const c_char, value: i32) -> i32;
+    fn indigoSetOptionBool(name: *const c_char, value: i32) -> i32;
 
     // -- Error --
     fn indigoGetLastError() -> *const c_char;
@@ -82,6 +82,11 @@ pub fn init_session() -> anyhow::Result<u64> {
     }
     INDIGO_SESSION.with(|s| *s.lock().unwrap() = sid);
     Ok(sid)
+}
+
+pub fn set_option_bool(name: &str, value: i32) -> i32 {
+    let c_name = CString::new(name).unwrap();
+    unsafe { indigoSetOptionBool(c_name.as_ptr(), value) }
 }
 
 pub fn load_structure(s: &str) -> anyhow::Result<i32> {
