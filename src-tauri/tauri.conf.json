@@ -27,10 +27,10 @@
     "active": true,
     "targets": ["deb"],
     "externalBin": [
-      "../sidecar/target/release/indigo-server"
+      "../target/release/indigo-server"
     ],
     "resources": {
-      "../lib/**/*": "lib/"
+      "lib/**/*": "lib/"
     },
     "icon": [
       "icons/32x32.png",

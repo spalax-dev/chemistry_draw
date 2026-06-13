@@ -1,15 +1,15 @@
 // Utilidades compartidas para los tests de integración del sidecar.
 // Cada archivo en este directorio prueba un grupo de endpoints.
 
-mod info;
-mod convert;
 mod aromatize;
 mod calculate;
 mod check;
+mod convert;
+mod imago_integration;
+mod info;
+mod layout_clean;
 mod render;
 mod stereochemistry;
-mod layout_clean;
-mod imago_integration;
 
 use axum::{
     body::Body,
@@ -21,11 +21,10 @@ use serde_json::{json, Value};
 use std::sync::Once;
 use tower::ServiceExt;
 
-use crate::handlers::{self, AppState};
+use crate::{build_router, AppState, ImagoJobStore};
 
 static INIT: Once = Once::new();
 
-/// Inicializa tracing una sola vez para todos los tests.
 fn init_tracing() {
     INIT.call_once(|| {
         tracing_subscriber::fmt()
@@ -36,70 +35,16 @@ fn init_tracing() {
 }
 
 /// Construye una app de test con todas las rutas, sin CORS.
-pub fn test_app() -> Router {
+pub fn test_app() -> axum::Router {
     init_tracing();
     let state = AppState {
         _port: 9321,
-        imago_store: crate::imago_jobs::ImagoJobStore::new(),
+        imago_store: ImagoJobStore::new(),
     };
-
-    Router::new()
-        .route("/v2/info", axum::routing::get(handlers::get_info))
-        .route(
-            "/v2/indigo/info",
-            axum::routing::get(handlers::get_info),
-        )
-        .route(
-            "/v2/indigo/convert",
-            axum::routing::post(handlers::post_convert),
-        )
-        .route(
-            "/v2/indigo/aromatize",
-            axum::routing::post(handlers::post_aromatize),
-        )
-        .route(
-            "/v2/indigo/dearomatize",
-            axum::routing::post(handlers::post_dearomatize),
-        )
-        .route(
-            "/v2/indigo/layout",
-            axum::routing::post(handlers::post_layout),
-        )
-        .route(
-            "/v2/indigo/clean",
-            axum::routing::post(handlers::post_clean),
-        )
-        .route(
-            "/v2/indigo/render",
-            axum::routing::post(handlers::post_render),
-        )
-        .route(
-            "/v2/indigo/calculate",
-            axum::routing::post(handlers::post_calculate),
-        )
-        .route(
-            "/v2/indigo/check",
-            axum::routing::post(handlers::post_check),
-        )
-        .route(
-            "/v2/indigo/calculate_cip",
-            axum::routing::post(handlers::post_calculate_cip),
-        )
-        .route(
-            "/v2/indigo/automap",
-            axum::routing::post(handlers::post_automap),
-        )
-        .nest(
-            "/v2/imago/uploads",
-            Router::new()
-                .route("/", axum::routing::post(handlers::post_imago_upload))
-                .route("/:id", axum::routing::get(handlers::get_imago_status)),
-        )
-        .with_state(state)
+    build_router(state)
 }
 
-/// Envía un POST con JSON y retorna (StatusCode, Value).
-pub async fn post_json(app: &Router, path: &str, body: Value) -> (StatusCode, Value) {
+pub async fn post_json(app: &axum::Router, path: &str, body: Value) -> (StatusCode, Value) {
     let req = Request::builder()
         .method(http::Method::POST)
         .uri(path)
@@ -118,8 +63,7 @@ pub async fn post_json(app: &Router, path: &str, body: Value) -> (StatusCode, Va
     (status, body)
 }
 
-/// Envía un GET y retorna (StatusCode, Value).
-pub async fn fetch_get(app: &Router, path: &str) -> (StatusCode, Value) {
+pub async fn fetch_get(app: &axum::Router, path: &str) -> (StatusCode, Value) {
     let req = Request::builder()
         .method(http::Method::GET)
         .uri(path)

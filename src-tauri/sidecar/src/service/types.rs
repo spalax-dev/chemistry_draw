@@ -1,13 +1,17 @@
+//! Request / response types for the Indigo REST v2 API.
+
 use serde::{Deserialize, Serialize};
 
-// POST body genérico para /convert, /aromatize, etc.
+/// Generic request for Indigo operations (convert, aromatize, layout, etc.).
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct IndigoRequest {
+    /// Input structure (SMILES, molfile, etc.).
     #[serde(rename = "struct")]
     pub struct_: String,
+    /// Desired output format, defaults to `chemical/x-mdl-molfile`.
     #[serde(default = "default_output_format")]
     pub output_format: String,
+    /// Extra options passed through to the backend.
     #[serde(default)]
     pub options: std::collections::HashMap<String, serde_json::Value>,
 }
@@ -16,26 +20,25 @@ fn default_output_format() -> String {
     "chemical/x-mdl-molfile".into()
 }
 
+/// Generic response for Indigo operations.
 #[derive(Serialize)]
 pub struct IndigoResponse {
+    /// Resulting structure in the requested format.
     #[serde(rename = "struct")]
     pub struct_: String,
+    /// Echo of the requested output format.
     pub format: String,
 }
 
-#[derive(Serialize)]
-pub struct IndigoError {
-    pub error: String,
-}
-
-// Render
+/// Render request (adds query for rendering options).
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct RenderRequest {
     #[serde(rename = "struct")]
     pub struct_: String,
+    /// Output format: `image/png`, `image/svg+xml`, etc.
     #[serde(default = "default_render_format")]
     pub output_format: String,
+    /// Optional rendering query string.
     pub query: Option<String>,
     #[serde(default)]
     pub options: std::collections::HashMap<String, serde_json::Value>,
@@ -45,12 +48,12 @@ fn default_render_format() -> String {
     "image/svg+xml".into()
 }
 
-// Calculate
+/// Calculate request: specify which properties to compute.
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct CalculateRequest {
     #[serde(rename = "struct")]
     pub struct_: String,
+    /// List of property names, e.g. `["molecular-weight", "gross"]`.
     #[serde(default = "default_properties")]
     pub properties: Vec<String>,
     #[serde(default)]
@@ -61,7 +64,8 @@ fn default_properties() -> Vec<String> {
     vec!["molecular-weight".into()]
 }
 
-#[derive(Serialize)]
+/// Calculate response with optional fields for each property.
+#[derive(Default, Serialize)]
 pub struct CalculateResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub molecular_weight: Option<String>,
@@ -75,12 +79,12 @@ pub struct CalculateResponse {
     pub mass_composition: Option<String>,
 }
 
-// Check
+/// Check request: run validation checks on a structure.
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct CheckRequest {
     #[serde(rename = "struct")]
     pub struct_: String,
+    /// Validation types, e.g. `["valence", "stereo", "overlapping_atoms"]`.
     #[serde(default = "default_check_types")]
     pub types: Vec<String>,
     #[serde(default)]

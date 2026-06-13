@@ -16,7 +16,7 @@ pub fn run() {
             // En dev: usar path absoluto desde el manifest dir
             // En prod: resource_dir tiene las .so copiadas por el bundle
             let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let lib_path = manifest_dir.join("../lib/linux-x86_64").canonicalize().unwrap_or_else(|_| {
+            let lib_path = manifest_dir.join("lib/linux-x86_64").canonicalize().unwrap_or_else(|_| {
                 let cwd = std::env::current_dir().unwrap_or_default();
                 cwd.join("lib/linux-x86_64")
             });

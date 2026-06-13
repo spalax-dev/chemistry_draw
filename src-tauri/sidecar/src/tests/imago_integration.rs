@@ -41,17 +41,17 @@ async fn full_pipeline_produces_valid_molfile() {
     std::fs::write(&tmp, &bytes).expect("write temp");
 
     // Pipeline completo
-    let sid = crate::indigo::init_session().expect("indigo session");
-    crate::imago::init_with_indigo_session(sid);
+    let sid = crate::ffi::indigo::init_session().expect("indigo session");
+    crate::ffi::imago::init_with_indigo_session(sid);
 
-    crate::imago::load_image_from_file(&tmp.to_string_lossy())
+    crate::ffi::imago::load_image_from_file(&tmp.to_string_lossy())
         .expect("load caffeine image from file");
-    crate::imago::filter_image()
+    crate::ffi::imago::filter_image()
         .expect("filter_image (binarize + preprocess)");
-    crate::imago::set_config(None)
+    crate::ffi::imago::set_config(None)
         .expect("set_config auto-detect");
 
-    let mol = crate::imago::recognize().expect("recognize structure");
+    let mol = crate::ffi::imago::recognize().expect("recognize structure");
 
     let _ = std::fs::remove_file(&tmp);
 
@@ -77,22 +77,22 @@ async fn recognized_molfile_cleanup_through_indigo() {
     let tmp = std::env::temp_dir().join(format!("imago_cleanup_{:x}.png", std::process::id()));
     std::fs::write(&tmp, &bytes).expect("write temp");
 
-    let sid = crate::indigo::init_session().expect("indigo session");
-    crate::imago::init_with_indigo_session(sid);
-    crate::imago::load_image_from_file(&tmp.to_string_lossy()).expect("load");
-    crate::imago::filter_image().expect("filter");
-    crate::imago::set_config(None).expect("config");
-    let mol = crate::imago::recognize().expect("recognize");
+    let sid = crate::ffi::indigo::init_session().expect("indigo session");
+    crate::ffi::imago::init_with_indigo_session(sid);
+    crate::ffi::imago::load_image_from_file(&tmp.to_string_lossy()).expect("load");
+    crate::ffi::imago::filter_image().expect("filter");
+    crate::ffi::imago::set_config(None).expect("config");
+    let mol = crate::ffi::imago::recognize().expect("recognize");
 
     let _ = std::fs::remove_file(&tmp);
 
     // Cleanup: pasar el molfile por Indigo para normalizar
-    let _sid2 = crate::indigo::init_session().unwrap();
-    crate::indigo::set_option_bool("ignore-stereochemistry-errors", 1);
-    let smiles = crate::indigo::load_structure(&mol)
+    let _sid2 = crate::ffi::indigo::init_session().unwrap();
+    crate::ffi::indigo::set_option_bool("ignore-stereochemistry-errors", 1);
+    let smiles = crate::ffi::indigo::load_structure(&mol)
         .and_then(|h| {
-            crate::indigo::layout(h);
-            crate::indigo::convert(h, "chemical/x-daylight-smiles")
+            crate::ffi::indigo::layout(h);
+            crate::ffi::indigo::convert(h, "chemical/x-daylight-smiles")
         })
         .expect("cleanup should succeed");
 
@@ -107,11 +107,11 @@ async fn recognized_molfile_cleanup_through_indigo() {
 /// No debe panickear ni crashear con SIGSEGV.
 #[tokio::test]
 async fn missing_image_does_not_panic() {
-    let sid = crate::indigo::init_session().expect("indigo session");
-    crate::imago::init_with_indigo_session(sid);
+    let sid = crate::ffi::indigo::init_session().expect("indigo session");
+    crate::ffi::imago::init_with_indigo_session(sid);
 
     // load_image_from_file con archivo inexistente no debe panickear
-    let _ = crate::imago::load_image_from_file("/tmp/does_not_exist_xyz.png");
+    let _ = crate::ffi::imago::load_image_from_file("/tmp/does_not_exist_xyz.png");
 
     // Verificar que no crasheó — si llegamos aquí, está bien
 }
@@ -132,12 +132,12 @@ async fn sequential_pipelines_are_independent() {
         let tmp = std::env::temp_dir().join(format!("imago_seq_{i}_{:x}.png", std::process::id()));
         std::fs::write(&tmp, &bytes).expect("write temp");
 
-        let sid = crate::indigo::init_session().expect("indigo session");
-        crate::imago::init_with_indigo_session(sid);
-        crate::imago::load_image_from_file(&tmp.to_string_lossy()).expect("load");
-        crate::imago::filter_image().expect("filter");
-        crate::imago::set_config(None).expect("config");
-        let mol = crate::imago::recognize().expect("recognize");
+        let sid = crate::ffi::indigo::init_session().expect("indigo session");
+        crate::ffi::imago::init_with_indigo_session(sid);
+        crate::ffi::imago::load_image_from_file(&tmp.to_string_lossy()).expect("load");
+        crate::ffi::imago::filter_image().expect("filter");
+        crate::ffi::imago::set_config(None).expect("config");
+        let mol = crate::ffi::imago::recognize().expect("recognize");
 
         let _ = std::fs::remove_file(&tmp);
         results.push(mol);
