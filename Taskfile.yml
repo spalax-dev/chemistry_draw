@@ -46,11 +46,16 @@ tasks:
       - rm -rf dist
 
   package:
-    desc: Build production .deb package (bundle-libs + sidecar + frontend + package)
+    desc: Build production .deb + AppImage (bundle-libs + sidecar + frontend + package)
     deps:
       - task: bundle-libs
       - task: build-sidecar
     cmds:
-      - pnpm tauri build --bundles deb
+      - pnpm tauri build --bundles deb,appimage
     env:
       LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+
+  arch:
+    desc: Build Arch Linux package via PKGBUILD (makepkg)
+    cmds:
+      - makepkg -si
