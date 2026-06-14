@@ -48,9 +48,15 @@ task dev
 # Run sidecar tests only
 task test
 
+# Build production .deb package
+task package
+
 # Remove compiled artifacts (Rust target + dist)
 task clean
 ```
+
+The `.deb` package bundles all shared library dependencies (OpenCV, image codecs, etc.)
+so it works on Debian 12 and Ubuntu 22.04+ without extra system packages.
 
 ## License
 

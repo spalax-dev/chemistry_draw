@@ -28,17 +28,33 @@ tasks:
     internal: true
     env:
       LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+    dir: '{{.SIDECAR_DIR}}'
     cmds:
       - cargo build --release -p indigo-server --bin indigo-server
       - cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu
+      # Tauri externalBin expects binary in <project-root>/target/release/
+      - mkdir -p ../../target/release
+      - cp target/release/indigo-server-x86_64-unknown-linux-gnu ../../target/release/
+
+  bundle-libs:
+    internal: true
+    desc: Bundle transitive .so dependencies for cross-distro compatibility
+    cmds:
+      - bash scripts/bundle-libs.sh
 
   clean:
     desc: Remove compiled artifacts (Rust target, dist)
     cmds:
       - cargo clean
+      - cargo clean --manifest-path src-tauri/sidecar/Cargo.toml
       - rm -rf dist
 
   package:
-    desc: Package as .deb (future)
+    desc: Build production .deb package (bundle-libs + sidecar + frontend + package)
+    deps:
+      - task: bundle-libs
+      - task: build-sidecar
     cmds:
-      - echo "empaquetando .deb"
+      - pnpm tauri build --bundles deb
+    env:
+      LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'

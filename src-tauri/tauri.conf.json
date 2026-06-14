@@ -30,18 +30,24 @@
       "../target/release/indigo-server"
     ],
     "resources": {
-      "lib/**/*": "lib/"
+      "lib/linux-x86_64/**/*": "lib/linux-x86_64/"
     },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/128x128@2x.png"
     ],
     "category": "Science",
-    "shortDescription": "Desktop wrapper of the Ketcher chemical structure editor",
-    "longDescription": "Chemistry Draw is an unofficial desktop wrapper of Ketcher (Apache 2.0, EPAM Systems) for Linux. Draw molecules, reactions and macromolecules offline.",
-    "licenseFile": "../LICENSE"
+    "shortDescription": "Desktop chemical structure editor",
+    "longDescription": "Chemistry Draw is an unofficial desktop wrapper of Ketcher (Apache 2.0, EPAM Systems) for Linux. Draw molecules, reactions and macromolecules offline.\n\nBuilt with Tauri (Rust + React/TypeScript). Uses native Indigo and Imago libraries for cheminformatics and image-to-structure recognition.",
+    "licenseFile": "../LICENSE",
+    "linux": {
+      "deb": {
+        "depends": [
+          "libgl1",
+          "libstdc++6"
+        ]
+      }
+    }
   }
 }

@@ -13,13 +13,20 @@ pub fn run() {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(9321);
 
-            // En dev: usar path absoluto desde el manifest dir
-            // En prod: resource_dir tiene las .so copiadas por el bundle
-            let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let lib_path = manifest_dir.join("lib/linux-x86_64").canonicalize().unwrap_or_else(|_| {
-                let cwd = std::env::current_dir().unwrap_or_default();
-                cwd.join("lib/linux-x86_64")
-            });
+            // En dev: ruta absoluta desde el source tree
+            // En prod: resource_dir contiene las .so copiadas por el bundle
+            #[cfg(debug_assertions)]
+            let lib_path = {
+                let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+                manifest_dir.join("lib/linux-x86_64")
+            };
+            #[cfg(not(debug_assertions))]
+            let lib_path = {
+                let p = app.path().resource_dir().unwrap_or_else(|_|
+                    std::env::current_dir().unwrap_or_default()
+                );
+                p.join("lib").join("linux-x86_64")
+            };
             println!("[chemistry-draw] LD_LIBRARY_PATH = {}", lib_path.display());
 
             let sidecar_cmd = app
