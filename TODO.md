@@ -13,5 +13,5 @@
 - [x] Add structural error detection tests (duplicate bonds, invalid SMILES, corrupted molfiles)
 
 ## Packaging
-- [ ] Configure `.deb` packaging via Tauri bundle
+- [x] Configure `.deb` packaging via Tauri bundle (FHS-compliant, bundled shared libs)
 - [ ] Configure Flatpak packaging
