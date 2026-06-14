@@ -1,5 +1,5 @@
-# Maintainer: Your Name <your@email>
-# Contributor: Chemistry Draw Contributors
+# Maintainer: Spalax-dev <jorge@spalax.dev>
+# Contributor: Spalax-dev
 
 pkgname=chemistry-draw
 pkgver=0.1.0
@@ -73,7 +73,7 @@ Name=Chemistry Draw
 Comment=${pkgdesc}
 Exec=/usr/lib/${pkgname}/chemistry-draw
 Icon=${pkgname}
-Categories=Science;Chemistry;
+Categories=Education;Chemistry;Science;
 Terminal=false
 EOF
 }
