@@ -27,3 +27,4 @@ Imago/
 test_*.png
 *_result.mol
 
+*.AppImage
