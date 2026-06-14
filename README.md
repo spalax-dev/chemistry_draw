@@ -29,13 +29,6 @@ Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rus
 - [pnpm](https://pnpm.io/)
 - Tauri v2 system dependencies (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)):
 
-  ```bash
-  # Debian / Ubuntu
-  sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-  ```
-
-- OpenCV 4.x (`libopencv-dev`) — required by the Imago recognition library
-
 ### Build & run
 
 ```bash
@@ -51,12 +44,24 @@ task test
 # Build production .deb package
 task package
 
+# Build AppImage (requires linuxdeploy, see below)
+task appimage
+
 # Remove compiled artifacts (Rust target + dist)
 task clean
 ```
 
-The `.deb` package bundles all shared library dependencies (OpenCV, image codecs, etc.)
+*The `.deb` package bundles all shared library dependencies (OpenCV, image codecs, etc.)
 so it works on Debian 12 and Ubuntu 22.04+ without extra system packages.
+
+### AppImage
+
+```bash
+task appimage
+```
+
+Output: `target/release/bundle/appimage/chemistry-draw_*.AppImage`
+
 
 ## License
 

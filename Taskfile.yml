@@ -46,7 +46,7 @@ tasks:
       - rm -rf dist
 
   package:
-    desc: Build production .deb package (bundle-libs + sidecar + frontend + package)
+    desc: Build production .deb (bundle-libs + sidecar + frontend + package)
     deps:
       - task: bundle-libs
       - task: build-sidecar
@@ -54,3 +54,13 @@ tasks:
       - pnpm tauri build --bundles deb
     env:
       LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+
+  appimage:
+    desc: "Build AppImage"
+    deps:
+      - task: bundle-libs
+      - task: build-sidecar
+    cmds:
+      - pnpm build
+      - cargo build --release -p chemistry-draw
+      - bash scripts/build-appimage.sh

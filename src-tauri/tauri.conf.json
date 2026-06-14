@@ -37,7 +37,7 @@
       "icons/128x128.png",
       "icons/128x128@2x.png"
     ],
-    "category": "Science",
+    "category": "Education",
     "shortDescription": "Desktop chemical structure editor",
     "longDescription": "Chemistry Draw is an unofficial desktop wrapper of Ketcher (Apache 2.0, EPAM Systems) for Linux. Draw molecules, reactions and macromolecules offline.\n\nBuilt with Tauri (Rust + React/TypeScript). Uses native Indigo and Imago libraries for cheminformatics and image-to-structure recognition.",
     "licenseFile": "../LICENSE",
