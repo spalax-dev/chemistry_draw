@@ -65,7 +65,7 @@ pub fn render(structure: &str, output_format: &str) -> Result<(Vec<u8>, String),
 
     let fmt = match output_format {
         "image/png" | "image/png;base64" => "png",
-        "image/svg+xml" | "image/svg;base64" => "svg",
+        "image/svg+xml" | "image/svg+xml;base64" => "svg",
         "application/pdf" | "application/pdf;base64" => "pdf",
         other => other,
     };
@@ -92,6 +92,17 @@ pub fn calculate(structure: &str, properties: &[String]) -> Result<CalculateResp
             }
             "gross" => {
                 res.gross = Some(indigo::calculate_gross(handle));
+            }
+            "most-abundant-mass" => {
+                res.most_abundant_mass =
+                    Some(format!("{:.4}", indigo::calculate_most_abundant_mass(handle)));
+            }
+            "monoisotopic-mass" => {
+                res.monoisotopic_mass =
+                    Some(format!("{:.4}", indigo::calculate_monoisotopic_mass(handle)));
+            }
+            "mass-composition" => {
+                res.mass_composition = Some(indigo::calculate_mass_composition(handle));
             }
             _ => {}
         }

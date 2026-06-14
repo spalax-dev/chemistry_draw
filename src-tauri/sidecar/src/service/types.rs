@@ -67,15 +67,15 @@ fn default_properties() -> Vec<String> {
 /// Calculate response with optional fields for each property.
 #[derive(Default, Serialize)]
 pub struct CalculateResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "molecular-weight")]
     pub molecular_weight: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gross: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "most-abundant-mass")]
     pub most_abundant_mass: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "monoisotopic-mass")]
     pub monoisotopic_mass: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "mass-composition")]
     pub mass_composition: Option<String>,
 }
 

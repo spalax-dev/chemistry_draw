@@ -94,26 +94,29 @@ pub async fn post_automap(
 pub async fn post_render(
     Json(payload): Json<RenderRequest>,
 ) -> Result<Response, AppError> {
-    tracing::info!("POST /v2/indigo/render fmt={}", payload.output_format);
-    let (buf, content_type) = indigo_ops::render(&payload.struct_, &payload.output_format)?;
+    let fmt = match payload
+        .options
+        .get("render-output-format")
+        .and_then(|v| v.as_str())
+    {
+        Some("png") => "image/png;base64",
+        Some("svg") => "image/svg+xml;base64",
+        Some(other) => other,
+        None => &payload.output_format,
+    };
+    tracing::info!("POST /v2/indigo/render fmt={fmt}");
 
-    let is_base64 = payload.output_format.contains("base64");
-    if is_base64 {
-        use base64::Engine;
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
-        Ok(Json(serde_json::json!({
-            "data": b64,
-            "content-type": content_type,
-        }))
+    let (buf, _) = indigo_ops::render(&payload.struct_, fmt)?;
+    tracing::info!("render buf size={}", buf.len());
+
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain")],
+        b64,
+    )
         .into_response())
-    } else {
-        Ok((
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, content_type)],
-            buf,
-        )
-            .into_response())
-    }
 }
 
 pub async fn post_calculate(

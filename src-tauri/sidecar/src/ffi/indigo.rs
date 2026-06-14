@@ -38,18 +38,19 @@ extern "C" {
     fn indigoJson(handle: i32) -> *const c_char;
     fn indigoMolecularWeight(handle: i32) -> f64;
     fn indigoGrossFormula(handle: i32) -> i32;
-    fn _indigoMostAbundantMass(handle: i32) -> f64;
-    fn _indigoMonoisotopicMass(handle: i32) -> f64;
-    fn _indigoMassComposition(handle: i32) -> *const c_char;
+    fn indigoMostAbundantMass(handle: i32) -> f64;
+    fn indigoMonoisotopicMass(handle: i32) -> f64;
+    fn indigoMassComposition(handle: i32) -> *const c_char;
     fn indigoCheckObj(handle: i32, properties: *const c_char) -> *const c_char;
     fn indigoRendererInit(sid: u64) -> i32;
-    fn indigoRender(handle: i32, output: i32);
+    fn indigoRender(handle: i32, output: i32) -> i32;
     fn indigoAutomap(handle: i32, mode: *const c_char) -> i32;
     fn indigoAddCIPStereoDescriptors(handle: i32) -> i32;
     fn indigoVersion() -> *const c_char;
     fn indigoSetOption(name: *const c_char, value: *const c_char) -> i32;
     fn indigoSetOptionBool(name: *const c_char, value: i32) -> i32;
     fn indigoGetLastError() -> *const c_char;
+    fn indigoToBuffer(handle: i32, buf: *mut *mut c_char, size: *mut i32) -> i32;
     fn indigoFree(handle: i32) -> i32;
 }
 
@@ -183,6 +184,28 @@ pub fn calculate_gross(handle: i32) -> String {
     s
 }
 
+/// Returns the most abundant mass.
+pub fn calculate_most_abundant_mass(handle: i32) -> f64 {
+    unsafe { indigoMostAbundantMass(handle) }
+}
+
+/// Returns the monoisotopic mass.
+pub fn calculate_monoisotopic_mass(handle: i32) -> f64 {
+    unsafe { indigoMonoisotopicMass(handle) }
+}
+
+/// Returns the mass composition as a string.
+pub fn calculate_mass_composition(handle: i32) -> String {
+    let ptr = unsafe { indigoMassComposition(handle) };
+    if ptr.is_null() {
+        return String::new();
+    }
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .unwrap_or("")
+        .to_owned()
+}
+
 /// Checks a structure for problems (valence, stereo, overlapping atoms, etc.).
 ///
 /// `types` is a JSON array of check names, e.g. `["valence","stereo"]`.
@@ -202,19 +225,29 @@ pub fn check_structure(s: &str, types: &str) -> anyhow::Result<String> {
 /// `fmt` should be `"png"`, `"svg"`, or `"pdf"`.
 pub fn render_to_buffer(handle: i32, fmt: &str) -> anyhow::Result<Vec<u8>> {
     unsafe {
-        indigoSetOption(
+        let r = indigoSetOption(
             CString::new("render-output-format").unwrap().as_ptr(),
             CString::new(fmt).unwrap().as_ptr(),
         );
+        if r < 0 {
+            return Err(anyhow::anyhow!("setOption(render-output-format, {fmt}) failed: {}", last_error()));
+        }
     }
     let buf = unsafe { indigoWriteBuffer() };
-    unsafe { indigoRender(handle, buf) };
-    let ptr = unsafe { indigoToString(buf) };
-    if ptr.is_null() {
+    let rc = unsafe { indigoRender(handle, buf) };
+    if rc < 0 {
         unsafe { indigoFree(buf) };
-        return Err(anyhow::anyhow!("render failed: {}", last_error()));
+        return Err(anyhow::anyhow!("indigoRender({fmt}) failed: {}", last_error()));
     }
-    let result = unsafe { CStr::from_ptr(ptr) }.to_bytes().to_vec();
+
+    let mut raw: *mut c_char = std::ptr::null_mut();
+    let mut size: i32 = 0;
+    let r = unsafe { indigoToBuffer(buf, &mut raw, &mut size) };
+    if r < 0 {
+        unsafe { indigoFree(buf) };
+        return Err(anyhow::anyhow!("render: toBuffer failed: {}", last_error()));
+    }
+    let result = unsafe { std::slice::from_raw_parts(raw as *const u8, size as usize) }.to_vec();
     unsafe { indigoFree(buf) };
     Ok(result)
 }
