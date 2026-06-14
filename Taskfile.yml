@@ -56,7 +56,7 @@ tasks:
       LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
 
   appimage:
-    desc: "Build AppImage (requires linuxdeploy from AUR: linuxdeploy-appimage)"
+    desc: "Build AppImage (requires appimagetool, bundled with linuxdeploy-appimage from AUR)"
     deps:
       - task: bundle-libs
       - task: build-sidecar
