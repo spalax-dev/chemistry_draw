@@ -50,7 +50,7 @@ function App() {
 
   return (
     <Editor
-      staticResourcesUrl={"/public"}
+      staticResourcesUrl={"."}
       structServiceProvider={structServiceProvider}
       errorHandler={handleError}
       onInit={handleInit}

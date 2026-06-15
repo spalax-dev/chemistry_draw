@@ -16,6 +16,16 @@ export default defineConfig(async () => ({
     }),
   ],
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      external: ["raphael"],
+      output: {
+        globals: {
+          raphael: "Raphael",
+        },
+      },
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,
@@ -26,7 +36,7 @@ export default defineConfig(async () => ({
   },
   resolve: {
     alias: {
-      'file-saver': path.resolve(__dirname, 'src/tauri-file-saver.ts'),
+      "file-saver": path.resolve(__dirname, "src/tauri-file-saver.ts"),
     },
   },
 }));
