@@ -27,7 +27,8 @@ Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rus
 - [Task](https://taskfile.dev/) — task runner
 - Rust ≥ 1.84
 - [pnpm](https://pnpm.io/)
-- Tauri v2 system dependencies (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)):
+- Tauri v2 system dependencies (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
+- `patchelf` — required for bundling (Arch: `sudo pacman -S patchelf`, Debian/Ubuntu: `sudo apt install patchelf`)
 
 ### Build & run
 
@@ -44,23 +45,15 @@ task test
 # Build production .deb package
 task package
 
-# Build AppImage (requires linuxdeploy, see below)
+# Build AppImage
 task appimage
 
 # Remove compiled artifacts (Rust target + dist)
 task clean
 ```
 
-*The `.deb` package bundles all shared library dependencies (OpenCV, image codecs, etc.)
-so it works on Debian 12 and Ubuntu 22.04+ without extra system packages.
-
-### AppImage
-
-```bash
-task appimage
-```
-
-Output: `target/release/bundle/appimage/chemistry-draw_*.AppImage`
+*Both `.deb` and AppImage packages bundle all shared library dependencies (OpenCV, image codecs, etc.)
+so they work on Debian 12 and Ubuntu 22.04+ without extra system packages.*
 
 
 ## License
