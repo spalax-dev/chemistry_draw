@@ -63,9 +63,9 @@ async fn full_pipeline_produces_valid_molfile() {
     );
 }
 
-/// Verifica que el molfile de Imago puede ser re-cargado por Indigo
+/// Verifies Imago molfile can be reloaded by Indigo
 /// después del cleanup con ignore-stereochemistry-errors.
-/// El SMILES resultante debe ser una cadena no vacía.
+/// The resulting SMILES must be a non-empty string.
 #[tokio::test]
 async fn recognized_molfile_cleanup_through_indigo() {
     let img = match test_image() {
@@ -103,21 +103,21 @@ async fn recognized_molfile_cleanup_through_indigo() {
     );
 }
 
-/// El pipeline debe manejar gracefully una imagen que no existe.
-/// No debe panickear ni crashear con SIGSEGV.
+/// The pipeline should gracefully handle an image that does not exist.
+/// Should not panic or crash with SIGSEGV.
 #[tokio::test]
 async fn missing_image_does_not_panic() {
     let sid = crate::ffi::indigo::init_session().expect("indigo session");
     crate::ffi::imago::init_with_indigo_session(sid);
 
-    // load_image_from_file con archivo inexistente no debe panickear
+    // load_image_from_file with non-existent file does not panic
     let _ = crate::ffi::imago::load_image_from_file("/tmp/does_not_exist_xyz.png");
 
     // Verificar que no crasheó — si llegamos aquí, está bien
 }
 
-/// Múltiples pipelines secuenciales no deben interferir entre sí.
-/// Cada reconocimiento debe producir un resultado independiente.
+/// Multiple sequential pipelines do not interfere with each other.
+/// Each recognition must produce an independent result.
 #[tokio::test]
 async fn sequential_pipelines_are_independent() {
     let img = match test_image() {
@@ -148,7 +148,7 @@ async fn sequential_pipelines_are_independent() {
     assert!(!results[1].is_empty(), "second result must not be empty");
 }
 
-/// El endpoint GET /v2/info debe incluir imago_versions en la respuesta.
+/// The GET /v2/info endpoint includes imago_versions in the response.
 /// Ketcher usa este campo para habilitar el botón "Recognize Molecule"
 /// y para poblar el dropdown de versión de Imago.
 #[tokio::test]

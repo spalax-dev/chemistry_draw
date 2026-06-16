@@ -19,7 +19,7 @@ const NAPHTHALENE_KEKULE: &str = "C1=CC=C2C=CC=CC2=C1";
 const HEXENE: &str = "C=CCCCC";
 
 /// El benceno en notación Kekulé (C1=CC=CC=C1) al aromatizarse
-/// debe producir SMILES con carbonos aromáticos en minúscula.
+/// produces SMILES with lowercase aromatic carbons.
 #[tokio::test]
 async fn aromatize_basic_kekule_to_aromatic() {
     let app = test_app();
@@ -35,7 +35,7 @@ async fn aromatize_basic_kekule_to_aromatic() {
     assert!(s.contains('c'), "expected aromatic SMILES, got: {s}");
 }
 
-/// Si la molécula ya es aromática, aromatize no debe romperla.
+/// If the molecule is already aromatic, aromatize should not break it.
 #[tokio::test]
 async fn aromatize_already_aromatic_is_idempotent() {
     let app = test_app();
@@ -99,7 +99,7 @@ async fn dearomatize_naphthalene() {
     assert!(!s.contains('c'), "Kekulé form must not have aromatic carbons, got: {s}");
 }
 
-/// Aromatize + dearomatize deben ser idempotentes (roundtrip semántico).
+/// Aromatize + dearomatize are idempotent (semantic roundtrip).
 #[tokio::test]
 async fn aromatize_dearomatize_roundtrip() {
     let app = test_app();
@@ -127,7 +127,7 @@ async fn aromatize_dearomatize_roundtrip() {
     assert!(!back.contains('c'), "dearomatize must remove aromatic notation");
 }
 
-/// Molécula no aromática (hexeno) no debe cambiar al aromatizar.
+/// Non-aromatic molecule (hexene) does not change when aromatizing.
 #[tokio::test]
 async fn aromatize_non_aromatic_unchanged() {
     let app = test_app();
@@ -139,13 +139,13 @@ async fn aromatize_non_aromatic_unchanged() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    // hexeno no se aromatiza. El orden de átomos puede cambiar (Indigo reordena).
+    // hexene is not aromatized; atom order may change (Indigo reorders).
     let s = body["struct"].as_str().unwrap();
     assert!(!s.contains('c'), "non-aromatic must not become aromatic, got: {s}");
     assert_eq!(s.chars().filter(|&c| c == 'C').count(), 6, "should have 6 carbons");
 }
 
-/// Entrada inválida debe devolver HTTP 500.
+/// Invalid input returns HTTP 500.
 #[tokio::test]
 async fn aromatize_invalid_input() {
     let app = test_app();

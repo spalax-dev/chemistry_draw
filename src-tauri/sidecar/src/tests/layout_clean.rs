@@ -6,15 +6,15 @@
 //        (útil para estructuras dibujadas a mano o importadas).
 //
 // Casos cubiertos:
-//   - Benceno: layout no debe alterar la identidad química
+//   - Benzene: layout does not alter chemical identity
 //   - Ciclohexano: clean reorganiza pero preserva fórmula
-//   - Etanol (acíclico): layout y clean funcionan en cadenas abiertas
+//   - Ethanol (acyclic): layout and clean work on open chains
 
 use crate::tests::*;
 use axum::http::StatusCode;
 
-/// Layout en benceno no debe cambiar la conectividad.
-/// El SMILES resultante debe seguir representando benceno.
+/// Layout on benzene does not change connectivity.
+/// The resulting SMILES still represents benzene.
 #[tokio::test]
 async fn layout_preserves_benzene() {
     let app = test_app();
@@ -29,7 +29,7 @@ async fn layout_preserves_benzene() {
     assert_eq!(body["struct"].as_str().unwrap().trim(), "c1ccccc1");
 }
 
-/// Layout en ciclohexano debe preservar la estructura.
+/// Cyclohexane layout preserves the structure.
 #[tokio::test]
 async fn layout_preserves_cyclohexane() {
     let app = test_app();
@@ -47,7 +47,7 @@ async fn layout_preserves_cyclohexane() {
     );
 }
 
-/// Layout en etanol (molécula acíclica) no debe romper la estructura.
+/// Layout on ethanol (acyclic molecule) does not break the structure.
 #[tokio::test]
 async fn layout_preserves_ethanol() {
     let app = test_app();
@@ -80,7 +80,7 @@ async fn clean_cyclohexane() {
     );
 }
 
-/// Clean en benceno debe seguir produciendo benceno.
+/// Clean on benzene still produces benzene.
 #[tokio::test]
 async fn clean_benzene() {
     let app = test_app();
@@ -95,7 +95,7 @@ async fn clean_benzene() {
     assert_eq!(body["struct"].as_str().unwrap().trim(), "c1ccccc1");
 }
 
-/// Layout + clean en secuencia no deben degradar la estructura.
+/// Layout + clean in sequence do not degrade the structure.
 #[tokio::test]
 async fn layout_then_clean_roundtrip() {
     let app = test_app();

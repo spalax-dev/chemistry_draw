@@ -1,20 +1,20 @@
 // Tests para POST /v2/indigo/calculate
 //
-// Calcula propiedades moleculares: peso molecular, fórmula bruta,
+// Molecular property calculations: molecular weight, brute formula,
 // masa monoisotópica, masa más abundante, composición másica.
 //
 // Casos cubiertos:
-//   - Benceno: peso molecular y fórmula bruta con precisión
+//   - Benzene: molecular weight and brute formula with precision
 //   - Etanol: molécula pequeña con oxígeno
 //   - Ácido acético: molécula con grupo carboxilo
-//   - Alanina (quiral): no debe afectar el cálculo
+//   - Alanine (chiral): does not affect the calculation
 //   - Múltiples propiedades en una sola llamada
 //   - Propiedades desconocidas (ignoradas sin error)
 
 use crate::tests::*;
 use axum::http::StatusCode;
 
-/// El peso molecular del benceno (C6H6) debe ser ~78.11 g/mol.
+/// The molecular weight of benzene (C6H6) is ~78.11 g/mol.
 /// Verificamos con tolerancia de 0.01 para diferencias de redondeo.
 #[tokio::test]
 async fn benzene_molecular_weight() {
@@ -31,7 +31,7 @@ async fn benzene_molecular_weight() {
     assert!((mw - 78.114).abs() < 0.01, "benzene MW ~78.114, got {mw}");
 }
 
-/// La fórmula bruta del benceno debe ser C6 H6.
+/// The brute formula of benzene is C6 H6.
 #[tokio::test]
 async fn benzene_gross_formula() {
     let app = test_app();
@@ -87,8 +87,8 @@ async fn acetic_acid_molecular_weight() {
     assert!((mw - 60.052).abs() < 0.1, "acetic acid MW ~60.05, got {mw}");
 }
 
-/// La quiralidad no debe afectar el peso molecular.
-/// Alanina debe tener el mismo MW con o sin @.
+/// Chirality does not affect molecular weight.
+/// Alanine has the same MW with or without @.
 #[tokio::test]
 async fn chiral_molecule_mw_unaffected() {
     let app = test_app();
@@ -105,7 +105,7 @@ async fn chiral_molecule_mw_unaffected() {
     assert!((mw - 89.094).abs() < 0.2, "alanine MW ~89.09, got {mw}");
 }
 
-/// Pide múltiples propiedades a la vez. El endpoint debe devolver
+/// Requests multiple properties at once. The endpoint returns
 /// las que estén disponibles sin error.
 #[tokio::test]
 async fn multiple_properties_at_once() {
@@ -122,7 +122,7 @@ async fn multiple_properties_at_once() {
     assert!(body["gross"].is_string(), "gross should be present");
 }
 
-/// Pedir una propiedad no soportada no debe causar error.
+/// Requesting an unsupported property should not error.
 /// Simplemente se ignora y no aparece en la respuesta.
 #[tokio::test]
 async fn unknown_property_ignored() {
@@ -140,7 +140,7 @@ async fn unknown_property_ignored() {
 
 // ─── Nuevas propiedades ────────────────────────────────────────
 
-/// Benceno: most-abundant-mass debe ser ~78.046 (C6H6).
+/// Benzene: most-abundant-mass is ~78.046 (C6H6).
 #[tokio::test]
 async fn benzene_most_abundant_mass() {
     let app = test_app();
@@ -155,7 +155,7 @@ async fn benzene_most_abundant_mass() {
     assert!((m - 78.046).abs() < 0.01, "benzene most-abundant-mass ~78.046, got {m}");
 }
 
-/// Benceno: monoisotopic-mass debe ser ~78.046.
+/// Benzene: monoisotopic-mass is ~78.046.
 #[tokio::test]
 async fn benzene_monoisotopic_mass() {
     let app = test_app();
@@ -170,7 +170,7 @@ async fn benzene_monoisotopic_mass() {
     assert!((m - 78.046).abs() < 0.01, "benzene monoisotopic-mass ~78.046, got {m}");
 }
 
-/// Benceno: mass-composition debe contener C y H con porcentajes.
+/// Benzene: mass-composition contains C and H with percentages.
 #[tokio::test]
 async fn benzene_mass_composition() {
     let app = test_app();

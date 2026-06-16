@@ -1,22 +1,22 @@
 // Tests para POST /v2/indigo/convert
 //
-// Convierte una estructura química entre formatos (SMILES, molfile, KET, etc.).
-// Es el endpoint más usado por Ketcher para transformar estructuras.
+// Converts a chemical structure between formats (SMILES, molfile, KET, etc.).
+// It is the most used endpoint by Ketcher to transform structures.
 //
 // Casos cubiertos:
-//   - Conversión SMILES → molfile (formato por defecto)
+//   - SMILES → molfile conversion (default format)
 //   - Conversión SMILES → SMILES explícito
 //   - Conversión molfile → SMILES
-//   - Conversión de formatos químicos alternativos
+//   - Alternative chemical format conversion
 //   - Roundtrip (ida y vuelta sin pérdida semántica)
-//   - Manejo de entradas inválidas (HTTP 400)
-//   - Manejo de string vacío
+//   - Invalid input handling (HTTP 400)
+//   - Empty string handling
 
 use crate::tests::*;
 use axum::http::StatusCode;
 
-/// Convierte benceno (SMILES aromático) al formato molfile por defecto.
-/// El molfile debe contener el magic number "V2000".
+/// Converts benzene (aromatic SMILES) to default molfile format.
+/// The molfile must contain the magic number "V2000".
 #[tokio::test]
 async fn smiles_to_default_molfile() {
     let app = test_app();
@@ -30,7 +30,7 @@ async fn smiles_to_default_molfile() {
 }
 
 /// Convierte benceno explicitamente a SMILES diurno.
-/// El resultado debe ser el SMILES canónico aromático.
+/// The result must be the canonical aromatic SMILES.
 #[tokio::test]
 async fn smiles_to_smiles_explicit() {
     let app = test_app();
@@ -54,7 +54,7 @@ async fn smiles_to_smiles_explicit() {
 }
 
 /// Convierte ciclohexano (Kekulé) a aromatic.
-/// Verifica que el output_format se respeta al ser solicitado.
+/// Verifies that output_format is respected when requested.
 #[tokio::test]
 async fn cyclohexane_to_smiles() {
     let app = test_app();
@@ -99,12 +99,12 @@ async fn acetic_acid_smiles() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    // Indigo puede reordenar: CC(=O)O y CC(O)=O son la misma molécula
+    // Indigo may reorder: CC(=O)O and CC(O)=O are the same molecule
     let s = body["struct"].as_str().unwrap();
     assert_eq!(s.len(), 7, "acetic acid SMILES should be 7 chars, got: {s}");
 }
 
-/// L-alanina (quiral) debe preservar el marcador @ en la conversión.
+/// L-alanine (chiral) preserves the @ marker during conversion.
 #[tokio::test]
 async fn chiral_alanine_preserves_stereo() {
     let app = test_app();
@@ -124,7 +124,7 @@ async fn chiral_alanine_preserves_stereo() {
 }
 
 /// Convierte benceno a molfile y ese molfile de vuelta a SMILES.
-/// El resultado debe ser idéntico al SMILES original.
+/// The result is identical to the original SMILES.
 #[tokio::test]
 async fn roundtrip_smiles_molfile_smiles() {
     let app = test_app();
@@ -150,7 +150,7 @@ async fn roundtrip_smiles_molfile_smiles() {
     );
 }
 
-/// String que no es una molécula válida debe devolver HTTP 400.
+/// String that is not a valid molecule returns HTTP 400.
 #[tokio::test]
 async fn invalid_input_returns_400() {
     let app = test_app();
@@ -164,7 +164,7 @@ async fn invalid_input_returns_400() {
     );
 }
 
-/// String vacío: Indigo puede aceptarlo o rechazarlo según el build.
+/// Empty string: Indigo may accept or reject depending on the build.
 /// Verificamos que al menos no crashee (panick).
 #[tokio::test]
 async fn empty_input_does_not_panic() {
@@ -174,7 +174,7 @@ async fn empty_input_does_not_panic() {
     // Lo importante es que no haya panic.
 }
 
-/// Convierte a formato CML (Chemical Markup Language).
+/// Converts to CML format (Chemical Markup Language).
 #[tokio::test]
 async fn convert_to_cml() {
     let app = test_app();
@@ -190,7 +190,7 @@ async fn convert_to_cml() {
     assert!(s.contains("<molecule") || s.contains("<cml"), "expected CML, got: {s}");
 }
 
-/// Convierte a formato KET/JSON.
+/// Converts to KET/JSON format.
 #[tokio::test]
 async fn convert_to_ket_json() {
     let app = test_app();

@@ -45,6 +45,19 @@ tasks:
       - cargo clean --manifest-path src-tauri/sidecar/Cargo.toml
       - rm -rf dist
 
+  build-libs:
+    desc: Build Indigo/Imago native libs from source (Docker Ubuntu 22.04)
+    cmds:
+      - bash scripts/build-libs.sh
+      - bash scripts/check-libs.sh build-libs/out build-libs/backup
+      - cp build-libs/out/*.so src-tauri/lib/linux-x86_64/
+      - |
+        echo "Required GLIBC:"
+        for f in src-tauri/lib/linux-x86_64/*.so; do
+          echo -n "$(basename $f): "
+          objdump -T "$f" 2>/dev/null | grep -oP 'GLIBC_[0-9.]+' | sort -t. -k2 -n -u | tail -1
+        done
+
   package:
     desc: Build production .deb (bundle-libs + sidecar + frontend + package)
     deps:

@@ -1,9 +1,9 @@
-// Tests para POST /v2/indigo/check — cada tipo de validación por separado.
+// Tests for POST /v2/indigo/check — each validation type tested separately.
 //
-// Ketcher envía estos tipos: valence, radicals, pseudoatoms, stereo, query,
+// Ketcher sends these types: valence, radicals, pseudoatoms, stereo, query,
 // overlapping_atoms, overlapping_bonds, rgroups, chiral, 3d, chiral_flag.
 //
-// Cada test verifica que el tipo individual no crashea el sidecar (HTTP != 500)
+// Each test verifies that each type does not crash the sidecar (HTTP != 500)
 // y que devuelve JSON válido (sea {} o [] o string).
 
 use crate::tests::*;
@@ -27,7 +27,7 @@ async fn check_type_does_not_crash(app: &Router, struct_smiles: &str, check_type
     }
 }
 
-// ─── Tests individuales: cada tipo que Ketcher envía ───────────
+// ─── Individual tests: each type sent by Ketcher ───────────
 
 #[tokio::test]
 async fn check_valence_does_not_crash() {
@@ -81,7 +81,7 @@ async fn check_3d_does_not_crash() {
 
 #[tokio::test]
 async fn check_chiral_flag_does_not_crash() {
-    // Nota: Ketcher puede enviar "chiral_flag" aunque no esté en nuestra lista default
+    // Note: Ketcher may send "chiral_flag" even if not in our default list
     check_type_does_not_crash(&test_app(), BENZENE, "chiral_flag").await;
 }
 
@@ -128,7 +128,7 @@ async fn check_radical_molecule() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    // [CH3] tiene un electrón desapareado → Indigo debe reportar radical
+    // [CH3] has an unpaired electron → Indigo should report radical
     let s = body.to_string();
     assert!(
         s.contains("radical"),

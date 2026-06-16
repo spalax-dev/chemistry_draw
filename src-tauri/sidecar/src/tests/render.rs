@@ -1,15 +1,15 @@
 // Tests para POST /v2/indigo/render
 //
-// Genera una imagen (SVG, PNG, PDF) de la estructura química.
+// Generates an image (SVG, PNG, PDF) of the chemical structure.
 // El endpoint siempre devuelve base64 como text/plain.
 // Ketcher decodifica con atob() y crea un Blob.
 //
 // Casos cubiertos:
 //   - Render SVG: validar que devuelve base64 decodificable a XML
 //   - Render PNG: validar header PNG (iVBOR) en base64
-//   - Molécula quiral: renderizar sin error
-//   - Molécula grande: aspirina desde molfile real
-//   - Molécula inválida: debe devolver HTTP 400
+//   - Chiral molecule: renders without error
+//   - Large molecule: aspirin from real molfile
+//   - Invalid molecule: returns HTTP 400
 //   - Render via options (Ketcher path: render-output-format en options)
 //   - Render sin output_format (default SVG)
 
@@ -23,7 +23,7 @@ fn decode_b64(b64: &str) -> Vec<u8> {
         .expect("valid base64")
 }
 
-/// Renderiza benceno como SVG via options (Ketcher envía el formato en options).
+/// Renders benzene as SVG via options (Ketcher sends format via options).
 /// Valida que la respuesta sea base64 decodificable a XML SVG.
 #[tokio::test]
 async fn render_benzene_svg_via_options() {
@@ -103,7 +103,7 @@ async fn render_benzene_png_via_options() {
     );
 }
 
-/// Molécula quiral (alanina) debe renderizarse correctamente como SVG.
+/// Chiral molecule (alanine) renders correctly as SVG.
 #[tokio::test]
 async fn render_chiral_molecule_svg() {
     let app = test_app();
@@ -126,7 +126,7 @@ async fn render_chiral_molecule_svg() {
     assert!(svg.contains("<svg"), "chiral molecule SVG must be valid");
 }
 
-/// Ciclohexano debe renderizar PNG sin error.
+/// Cyclohexane renders PNG without error.
 #[tokio::test]
 async fn render_cyclohexane_png() {
     let app = test_app();
@@ -145,7 +145,7 @@ async fn render_cyclohexane_png() {
     assert!(!body_bytes.is_empty(), "should produce non-empty response");
 }
 
-/// Aspirina desde molfile real debe renderizar SVG.
+/// Aspirin from real molfile renders SVG.
 #[tokio::test]
 async fn render_aspirin_from_molfile() {
     let app = test_app();
@@ -168,7 +168,7 @@ async fn render_aspirin_from_molfile() {
     assert!(svg.contains("<svg"), "aspirin SVG must be valid");
 }
 
-/// Renderizar molécula inválida debe devolver error.
+/// Rendering invalid molecule returns error.
 #[tokio::test]
 async fn render_invalid_molecule_returns_error() {
     let app = test_app();
@@ -185,7 +185,7 @@ async fn render_invalid_molecule_returns_error() {
     assert!(resp.status().is_client_error(), "invalid molecule should fail");
 }
 
-/// Render sin output_format debe usar formato SVG (via options).
+/// Render without output_format uses SVG format (via options).
 #[tokio::test]
 async fn render_default_format_is_svg() {
     let app = test_app();

@@ -23,7 +23,7 @@ async fn info_endpoint_returns_version() {
     );
 }
 
-/// /v2/indigo/info debe devolver lo mismo que /v2/info.
+/// /v2/indigo/info returns the same as /v2/info.
 /// Ketcher consulta ambas rutas dependiendo del contexto.
 #[tokio::test]
 async fn indigo_info_is_same_as_info() {
@@ -37,7 +37,7 @@ async fn indigo_info_is_same_as_info() {
     assert_eq!(b1, b2, "both info endpoints should return identical data");
 }
 
-/// Múltiples llamadas consecutivas a /v2/info deben devolver
+/// Repeated consecutive calls to /v2/info return
 /// la misma versión consistente.
 #[tokio::test]
 async fn info_idempotent() {
