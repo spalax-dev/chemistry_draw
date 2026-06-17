@@ -7,8 +7,8 @@ rm -rf build-libs/out build-libs/Dockerfile
 mkdir -p build-libs/out build-libs/backup
 
 # Backup current libs
-if ls src-tauri/lib/linux-x86_64/*.so &>/dev/null; then
-  cp src-tauri/lib/linux-x86_64/*.so build-libs/backup/
+if ls src-tauri/lib/linux-x86_64/*.so* &>/dev/null; then
+  cp -a src-tauri/lib/linux-x86_64/lib*.so* build-libs/backup/
   echo "   Backup saved to build-libs/backup/"
 fi
 
@@ -86,22 +86,50 @@ RUN cmake .. \
     -DIMAGO_ENABLE_TESTS=OFF \
     && make -j$(nproc) imago-c
 
-# ----- Extract results -----
+# ----- Extract results + transitive deps -----
 RUN mkdir -p /out && \
     cp /src/indigo/build/bin/libindigo.so /out/ && \
     cp /src/indigo/build/bin/libindigo-renderer.so /out/ && \
-    cp /src/imago/build/api/c/libimago.so /out/
+    cp /src/imago/build/api/c/libimago.so /out/ && \
+    # Copy all transitive shared library dependencies (skip system libs)
+    for f in /out/libindigo.so /out/libindigo-renderer.so /out/libimago.so; do \
+      LD_LIBRARY_PATH=/out ldd "$f" 2>/dev/null | grep "=> /" | awk '{print $3}' | sort -u | while read dep; do \
+        case "$dep" in /out/*) continue ;; esac; \
+        name=$(basename "$dep"); \
+        case "$name" in \
+          libc.so.*|libm.so.*|libgcc_s.so.*|libz.so.*| \
+          libdl.so.*|libpthread.so.*|librt.so.*| \
+          libGL*|libX11*|libxcb*|libXau*|libXdmcp*| \
+          linux-vdso*|ld-linux*) ;; \
+          *) \
+            real=$(readlink -f "$dep"); \
+            dir=$(dirname "$dep"); \
+            for link in "$dir"/lib*.so*; do \
+              [ -e "$link" ] || continue; \
+              [ "$(readlink -f "$link" 2>/dev/null)" = "$real" ] && cp -a "$link" /out/; \
+            done ;; \
+        esac; \
+      done; \
+    done
 
 # Final stage: tiny image with just the .so files
 FROM alpine:latest
-COPY --from=0 /out/*.so /lib/
+COPY --from=0 /out/ /sofiles/
 DOCKER_EOF
 
 echo "==> Building Docker image (this will take a while)..."
 docker build -t indigo-builder build-libs
 
 echo "==> Extracting .so..."
-docker run --rm -v "$(pwd)/build-libs/out:/mnt" indigo-builder sh -c 'cp /lib/*.so /mnt/'
+docker run --rm -v "$(pwd)/build-libs/out:/mnt" indigo-builder sh -c 'cp -a /sofiles/. /mnt/'
 
 echo "==> Done. .so in build-libs/out/"
 ls -lh build-libs/out/
+
+echo "==> Removing broken symlinks..."
+find build-libs/out/ -type l ! -exec test -e {} \; -delete -print
+
+echo "==> Setting RPATH on bundled libraries..."
+for f in build-libs/out/lib*.so*; do
+  patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true
+done

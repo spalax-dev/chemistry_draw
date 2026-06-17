@@ -16,7 +16,7 @@ tasks:
   dev:
     desc: Build sidecar, kill stale process on port 9321, then start Tauri dev
     env:
-      LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+      WEBKIT_DISABLE_COMPOSITING_MODE: '1'
     deps:
       - task: build-sidecar
     cmds:
@@ -32,11 +32,27 @@ tasks:
       - cargo build --release -p indigo-server --bin indigo-server
       - cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu
 
-  bundle-libs:
-    internal: true
-    desc: Bundle transitive .so dependencies for cross-distro compatibility
+  build-libs:
+    desc: Build Indigo/Imago native libs from source (Docker Ubuntu 22.04)
     cmds:
-      - bash scripts/bundle-libs.sh
+      - bash scripts/build-libs.sh
+      - bash scripts/check-libs.sh build-libs/out build-libs/backup
+      - rm -f src-tauri/lib/linux-x86_64/lib*.so*
+      - cp -a build-libs/out/lib*.so* src-tauri/lib/linux-x86_64/
+      - |
+        echo "Removing broken symlinks..."
+        find src-tauri/lib/linux-x86_64/ -type l ! -exec test -e {} \; -delete -print
+      - |
+        echo "Setting RPATH on bundled libraries..."
+        for f in src-tauri/lib/linux-x86_64/lib*.so*; do
+          patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true
+        done
+      - |
+        echo "Required GLIBC:"
+        for f in src-tauri/lib/linux-x86_64/lib*.so*; do
+          echo -n "$(basename $f): "
+          objdump -T "$f" 2>/dev/null | grep -oP 'GLIBC_[0-9.]+' | sort -t. -k2 -n -u | tail -1
+        done
 
   clean:
     desc: Remove compiled artifacts (Rust target, dist)
@@ -45,23 +61,10 @@ tasks:
       - cargo clean --manifest-path src-tauri/sidecar/Cargo.toml
       - rm -rf dist
 
-  build-libs:
-    desc: Build Indigo/Imago native libs from source (Docker Ubuntu 22.04)
-    cmds:
-      - bash scripts/build-libs.sh
-      - bash scripts/check-libs.sh build-libs/out build-libs/backup
-      - cp build-libs/out/*.so src-tauri/lib/linux-x86_64/
-      - |
-        echo "Required GLIBC:"
-        for f in src-tauri/lib/linux-x86_64/*.so; do
-          echo -n "$(basename $f): "
-          objdump -T "$f" 2>/dev/null | grep -oP 'GLIBC_[0-9.]+' | sort -t. -k2 -n -u | tail -1
-        done
-
   package:
-    desc: Build production .deb (bundle-libs + sidecar + frontend + package)
+    desc: Build production .deb (build-libs + sidecar + frontend + package)
     deps:
-      - task: bundle-libs
+      - task: build-libs
       - task: build-sidecar
     cmds:
       - pnpm tauri build --bundles deb
@@ -73,7 +76,7 @@ tasks:
     env:
       NO_STRIP: '1'
     deps:
-      - task: bundle-libs
+      - task: build-libs
       - task: build-sidecar
     cmds:
       - pnpm tauri build --bundles appimage

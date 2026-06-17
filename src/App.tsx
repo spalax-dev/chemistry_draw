@@ -1,6 +1,6 @@
 import 'ketcher-react/dist/index.css';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Editor } from 'ketcher-react';
 import { RemoteStructServiceProvider } from 'ketcher-core';
 import { message } from '@tauri-apps/plugin-dialog';
@@ -25,6 +25,7 @@ function friendly(msg: string): string {
 
 function App() {
   const lastError = useRef<{ msg: string; at: number }>({ msg: '', at: 0 });
+  const [ready, setReady] = useState(false);
 
   const handleInit = useCallback((ketcher: any) => {
     const currentOptions = ketcher.editor.options();
@@ -32,6 +33,7 @@ function App() {
       ...currentOptions,
       app: { ...currentOptions.app, server: true },
     });
+    setReady(true);
   }, []);
 
   const handleError = useCallback((raw: unknown) => {
@@ -49,12 +51,24 @@ function App() {
   }, []);
 
   return (
-    <Editor
-      staticResourcesUrl={"."}
-      structServiceProvider={structServiceProvider}
-      errorHandler={handleError}
-      onInit={handleInit}
-    />
+    <>
+      {!ready && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'sans-serif', color: '#888', fontSize: '1.2em',
+          background: '#fff',
+        }}>
+          Loading chemistry editor...
+        </div>
+      )}
+      <Editor
+        staticResourcesUrl={"."}
+        structServiceProvider={structServiceProvider}
+        errorHandler={handleError}
+        onInit={handleInit}
+      />
+    </>
   );
 }
 
