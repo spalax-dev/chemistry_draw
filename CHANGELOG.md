@@ -14,6 +14,13 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
+## [0.1.2](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.1...chemistry-draw-v0.1.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **appimage:** assemble the AppDir ourselves instead of linuxdeploy ([f873d3b](https://github.com/spalax-dev/chemistry_draw/commit/f873d3b571657cfc1542c4ea8bfd221cac222aa8))
+
 ## [0.1.1](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.0...chemistry-draw-v0.1.1) (2026-10-31)
 
 
