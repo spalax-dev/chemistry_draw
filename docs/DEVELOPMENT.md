@@ -84,6 +84,28 @@ host-specific SONAME shims are required.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.
 
+## Supported distros
+
+The packages are built in a Debian 12 container, and the native Indigo/Imago
+libraries use symbols from its C library (`arc4random@GLIBC_2.36`), so the real
+floor is **glibc 2.36**:
+
+| Distro | glibc | Status |
+| --- | --- | --- |
+| Debian 12 (bookworm) | 2.36 | supported |
+| Debian 13 (trixie) | 2.41 | supported |
+| Ubuntu 24.04 | 2.39 | supported |
+| Ubuntu 22.04 | 2.35 | **not supported** (`GLIBC_2.36 not found`) |
+| Debian 11 | 2.31 | not supported |
+
+GTK3 and the `webkit2gtk-4.1` runtime are required too, which Debian 11 does not
+provide. CI runs on `ubuntu-24.04` for the same reason: linking a test binary
+against the libraries fails on an older glibc.
+
+Lowering the floor would mean building Indigo/Imago *and* the Tauri app on
+Debian 11, which is not possible today because Tauri v2 needs
+`webkit2gtk-4.1` (Debian 12+).
+
 ## Quick checks
 
 ```bash
