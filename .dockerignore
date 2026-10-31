@@ -1,0 +1,10 @@
+.git/
+.gitignore
+target/
+node_modules/
+dist/
+.pnpm-store/
+*.md
+CHANGELOG.md
+LICENSE
+NOTICE

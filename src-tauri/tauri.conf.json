@@ -26,9 +26,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage"],
+    "targets": ["deb", "appimage", "rpm"],
     "externalBin": [
-      "../target/release/indigo-server"
+      "../target/release/indigo-server",
+      "../target/release/imago-worker"
     ],
     "resources": {
       "lib/linux-x86_64/**/*": "lib/linux-x86_64/"
