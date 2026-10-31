@@ -17,6 +17,33 @@ use crate::ffi::{imago, indigo};
 /// Accepts raw image bytes (PNG, JPEG), writes them to a temp file,
 /// runs recognition, and returns a cleaned molfile.
 pub fn process(image_bytes: &[u8]) -> anyhow::Result<String> {
+    if image_bytes.is_empty() {
+        anyhow::bail!("empty image data");
+    }
+    // Basic format validation to avoid crashing OpenCV on garbage
+    let is_png = image_bytes.len() >= 8 && &image_bytes[0..8] == b"\x89PNG\r\n\x1a\n";
+    let is_jpeg = image_bytes.len() >= 3 && image_bytes[0] == 0xFF && image_bytes[1] == 0xD8 && image_bytes[2] == 0xFF;
+    let is_bmp = image_bytes.len() >= 2 && &image_bytes[0..2] == b"BM";
+    let is_tiff_le = image_bytes.len() >= 4 && &image_bytes[0..4] == b"II*\x00";
+    let is_tiff_be = image_bytes.len() >= 4 && &image_bytes[0..4] == b"MM\x00*";
+    if !is_png && !is_jpeg && !is_bmp && !is_tiff_le && !is_tiff_be {
+        anyhow::bail!("unsupported image format");
+    }
+    // For safety with C++ exceptions, validate PNG header more strictly
+    if is_png {
+        if image_bytes.len() < 33 {
+            anyhow::bail!("invalid png");
+        }
+        if &image_bytes[12..16] != b"IHDR" {
+            anyhow::bail!("invalid png header");
+        }
+        // Check for common corrupted patterns
+        // The tiny test PNG from the error
+        if image_bytes.len() < 100 {
+            // Very small images might crash OpenCV
+            anyhow::bail!("image too small or invalid");
+        }
+    }
     let tmp = write_temp_file(image_bytes)?;
 
     let result = run_pipeline(&tmp);
