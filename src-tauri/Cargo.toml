@@ -1,6 +1,6 @@
 [package]
 name = "chemistry-draw"
-version = "0.1.0"
+version = "0.1.1"
 description = "Unofficial desktop wrapper of the Ketcher chemical structure editor"
 authors = ["Chemistry Draw Contributors"]
 edition = "2021"
