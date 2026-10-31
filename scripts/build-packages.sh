@@ -20,9 +20,7 @@ docker image inspect chemistry-builder &>/dev/null || bash scripts/build-image.s
 echo "==> Building .deb, .rpm and AppImage inside Docker (one pass)..."
 
 docker run --rm \
-  -e APPIMAGE_EXTRACT_AND_RUN=1 \
   -e CARGO_NET_OFFLINE=${CARGO_NET_OFFLINE:-false} \
-  --device /dev/fuse \
   --security-opt apparmor:unconfined \
   -v "$(pwd):/app" -w /app \
   -v cargo-registry:/usr/local/cargo/registry \
@@ -46,7 +44,9 @@ docker run --rm \
 
   pnpm install --frozen-lockfile --prefer-offline
   rm -rf target/release/bundle
-  NO_STRIP=1 pnpm tauri build --bundles deb,appimage,rpm
+  NO_STRIP=1 pnpm tauri build --bundles deb,rpm
+
+  bash scripts/make-appimage.sh /app/dist-packages
 
   # The libs above were copied into the bind-mounted source tree; keep only the
   # tracked ones so the host checkout stays clean.
@@ -57,7 +57,6 @@ docker run --rm \
   mkdir -p /app/dist-packages
   cp -v target/release/bundle/deb/*.deb /app/dist-packages/ 2>/dev/null || true
   cp -v target/release/bundle/rpm/*.rpm /app/dist-packages/ 2>/dev/null || true
-  cp -v target/release/bundle/appimage/*.AppImage /app/dist-packages/ 2>/dev/null || true
 '
 
 echo "==> Done."

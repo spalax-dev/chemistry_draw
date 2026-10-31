@@ -17,12 +17,9 @@ fi
 
 docker image inspect chemistry-builder &>/dev/null || bash scripts/build-image.sh
 
-echo "==> Building AppImage inside Docker..."
+echo "==> Building AppImage inside Docker (custom AppDir, no linuxdeploy)..."
 
 docker run --rm \
-  -e APPIMAGE_EXTRACT_AND_RUN=1 \
-  --device /dev/fuse \
-  --security-opt apparmor:unconfined \
   -v "$(pwd):/app" -w /app \
   -v cargo-registry:/usr/local/cargo/registry \
   -v cargo-git:/usr/local/cargo/git \
@@ -44,17 +41,16 @@ docker run --rm \
   cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu
 
   pnpm install --frozen-lockfile --prefer-offline
-  rm -rf target/release/bundle
-  NO_STRIP=1 pnpm tauri build --bundles appimage
+  # --no-bundle: we assemble the AppImage ourselves (see make-appimage.sh).
+  NO_STRIP=1 pnpm tauri build --no-bundle
+
+  bash scripts/make-appimage.sh /app/dist-packages
 
   # The libs above were copied into the bind-mounted source tree; keep only the
   # tracked ones so the host checkout stays clean.
   find src-tauri/lib/linux-x86_64 -maxdepth 1 \( -type f -o -type l \) \
-    ! -name 'libimago.so' ! -name 'libindigo.so' ! -name 'libindigo-renderer.so' \
+    ! -name "libimago.so" ! -name "libindigo.so" ! -name "libindigo-renderer.so" \
     -delete
-
-  mkdir -p /app/dist-packages
-  cp -v target/release/bundle/appimage/*.AppImage /app/dist-packages/ 2>/dev/null || true
 '
 
 echo "==> Done."

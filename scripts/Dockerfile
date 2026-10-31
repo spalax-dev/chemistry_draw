@@ -36,3 +36,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# AppImage packaging without linuxdeploy: we assemble the AppDir ourselves so the
+# bundle does not drag in the host GTK/WebKit/Wayland stack (linuxdeploy copies
+# 200+ libraries, which breaks EGL on distros other than the build one).
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends squashfs-tools file desktop-file-utils && \
+    curl -fsSL -o /tmp/appimagetool \
+      https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage && \
+    chmod +x /tmp/appimagetool && \
+    cd /opt && /tmp/appimagetool --appimage-extract >/dev/null && \
+    mv squashfs-root appimagetool && rm -f /tmp/appimagetool && \
+    rm -rf /var/lib/apt/lists/*
+ENV APPIMAGETOOL=/opt/appimagetool/AppRun
