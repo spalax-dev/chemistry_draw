@@ -1,0 +1,36 @@
+diff --git a/dist/infrastructure/services/struct/remoteStructService.js b/dist/infrastructure/services/struct/remoteStructService.js
+index 087fae49890c0a49b8611ef93d999df7fe1ba642..b0802dacb478431ecc5be0e9e4328432ca53b244 100644
+--- a/dist/infrastructure/services/struct/remoteStructService.js
++++ b/dist/infrastructure/services/struct/remoteStructService.js
+@@ -61,8 +61,11 @@ function pollDeferred(process, complete, timeGap, startTimeGap) {
+   });
+ }
+ function parametrizeUrl(url, params) {
+-  return url.replace(/:(\w+)/g, function (_, val) {
+-    return params[val];
++  return url.replace(/:([A-Za-z_]\w*)/g, function (match, key) {
++    if (params && Object.prototype.hasOwnProperty.call(params, key) && params[key] !== undefined && params[key] !== null) {
++      return String(params[key]);
++    }
++    return match;
+   });
+ }
+ function request(method, url, data, headers, responseHandler) {
+diff --git a/dist/infrastructure/services/struct/remoteStructService.modern.js b/dist/infrastructure/services/struct/remoteStructService.modern.js
+index f755ba750e380e35d62b787007189d871482cac1..f0ca4ad3799a3f683d8cbb5492eaf2eec5e724dc 100644
+--- a/dist/infrastructure/services/struct/remoteStructService.modern.js
++++ b/dist/infrastructure/services/struct/remoteStructService.modern.js
+@@ -49,8 +49,11 @@ function pollDeferred(process, complete, timeGap, startTimeGap) {
+   });
+ }
+ function parametrizeUrl(url, params) {
+-  return url.replace(/:(\w+)/g, function (_, val) {
+-    return params[val];
++  return url.replace(/:([A-Za-z_]\w*)/g, function (match, key) {
++    if (params && Object.prototype.hasOwnProperty.call(params, key) && params[key] !== undefined && params[key] !== null) {
++      return String(params[key]);
++    }
++    return match;
+   });
+ }
+ function request(method, url, data, headers, responseHandler) {

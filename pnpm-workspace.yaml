@@ -1,2 +1,4 @@
 allowBuilds:
   esbuild: false
+patchedDependencies:
+  ketcher-core@3.18.0: patches/ketcher-core@3.18.0.patch
