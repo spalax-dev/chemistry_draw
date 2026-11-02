@@ -160,6 +160,23 @@ As soon as a published `ketcher-core` includes the upstream fix:
 - Their conclusion: confirmed in source, `\w` matching digits, blast radius matches
   (only the Imago status poll), and CI missed it because the example `.env` uses a
   relative `/v2` path with no port.
-- They are landing the fix themselves, test-first (`recognize()` through the public
-  API with a stubbed `fetch`, asserting the poll URL keeps the port), so we are not
-  opening a competing PR.
+- **Fixed upstream** in [PR #12552](https://github.com/epam/ketcher/pull/12552)
+  ("Recognize fails when Indigo apiPath contains explicit port"), merged on
+  2026-11-02. The change is identical to our patch: `:([A-Za-z_]\w*)` plus
+  `hasOwnProperty`, leaving unknown placeholders untouched.
+- They also added a regression test
+  (`packages/ketcher-core/src/infrastructure/services/struct/__tests__/remoteStructService.test.ts`)
+  that asserts the poll URL keeps the port:
+  `http://127.0.0.1:9321/v2/imago/uploads/abc`.
+
+### Why the patch is still applied
+
+As of 2026-11-02 the fix is only on `master`; it is **not published to npm**:
+
+| Version | Published | Has the fix |
+| --- | --- | --- |
+| 3.18.0 (`latest`) | 2026-09-02 | no |
+| 3.20.0-rc.3 (`beta`) | 2026-10-20 | no |
+
+Check with `pnpm info ketcher-core version` and `pnpm info ketcher-core dist-tags`.
+As soon as a published version includes it, follow [Removing the patch](#removing-the-patch).
