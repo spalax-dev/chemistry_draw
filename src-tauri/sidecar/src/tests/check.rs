@@ -20,7 +20,10 @@ async fn check_type_does_not_crash(app: &Router, struct_smiles: &str, check_type
 
     if status.is_server_error() {
         let err = body["error"].as_str().unwrap_or("no error field");
-        panic!("check '{}' crashed with HTTP {}: {}", check_type, status, err);
+        panic!(
+            "check '{}' crashed with HTTP {}: {}",
+            check_type, status, err
+        );
     }
     if body.is_null() {
         panic!("check '{}' returned null (possible segfault)", check_type);
@@ -102,7 +105,10 @@ async fn check_ketcher_full_batch_does_not_crash() {
         "3d",
     ];
 
-    let types_json: Vec<Value> = ketcher_types.iter().map(|t| Value::String(t.to_string())).collect();
+    let types_json: Vec<Value> = ketcher_types
+        .iter()
+        .map(|t| Value::String(t.to_string()))
+        .collect();
 
     let (status, _) = post_json(
         &app,

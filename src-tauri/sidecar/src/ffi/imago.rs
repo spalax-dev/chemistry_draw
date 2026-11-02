@@ -58,10 +58,7 @@ pub fn load_image_from_file(path: &str) -> anyhow::Result<()> {
     let c_path = CString::new(path)?;
     let res = unsafe { imagoLoadImageFromFile(c_path.as_ptr()) };
     if res < 0 {
-        return Err(anyhow::anyhow!(
-            "imago load image failed: {}",
-            last_error()
-        ));
+        return Err(anyhow::anyhow!("imago load image failed: {}", last_error()));
     }
     Ok(())
 }
@@ -73,10 +70,7 @@ pub fn load_image_from_file(path: &str) -> anyhow::Result<()> {
 pub fn filter_image() -> anyhow::Result<()> {
     let res = unsafe { imagoFilterImage() };
     if res < 0 {
-        return Err(anyhow::anyhow!(
-            "imago filter failed: {}",
-            last_error()
-        ));
+        return Err(anyhow::anyhow!("imago filter failed: {}", last_error()));
     }
     Ok(())
 }
@@ -90,10 +84,7 @@ pub fn set_config(config: Option<&str>) -> anyhow::Result<()> {
         .unwrap_or(std::ptr::null());
     let res = unsafe { imagoSetConfig(ptr) };
     if res < 0 {
-        return Err(anyhow::anyhow!(
-            "imago set config failed: {}",
-            last_error()
-        ));
+        return Err(anyhow::anyhow!("imago set config failed: {}", last_error()));
     }
     Ok(())
 }
@@ -107,10 +98,7 @@ pub fn recognize() -> anyhow::Result<String> {
     let mut warnings: i32 = 0;
     let res = unsafe { imagoRecognize(&mut warnings) };
     if res < 0 {
-        return Err(anyhow::anyhow!(
-            "imago recognize failed: {}",
-            last_error()
-        ));
+        return Err(anyhow::anyhow!("imago recognize failed: {}", last_error()));
     }
     let ptr = unsafe { imagoGetMol() };
     if ptr.is_null() {

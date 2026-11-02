@@ -230,14 +230,20 @@ pub fn render_to_buffer(handle: i32, fmt: &str) -> anyhow::Result<Vec<u8>> {
             CString::new(fmt).unwrap().as_ptr(),
         );
         if r < 0 {
-            return Err(anyhow::anyhow!("setOption(render-output-format, {fmt}) failed: {}", last_error()));
+            return Err(anyhow::anyhow!(
+                "setOption(render-output-format, {fmt}) failed: {}",
+                last_error()
+            ));
         }
     }
     let buf = unsafe { indigoWriteBuffer() };
     let rc = unsafe { indigoRender(handle, buf) };
     if rc < 0 {
         unsafe { indigoFree(buf) };
-        return Err(anyhow::anyhow!("indigoRender({fmt}) failed: {}", last_error()));
+        return Err(anyhow::anyhow!(
+            "indigoRender({fmt}) failed: {}",
+            last_error()
+        ));
     }
 
     let mut raw: *mut c_char = std::ptr::null_mut();

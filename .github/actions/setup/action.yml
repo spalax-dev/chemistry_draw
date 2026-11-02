@@ -6,6 +6,8 @@ runs:
   steps:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
 
     - name: Use Node.js
       uses: actions/setup-node@v4
@@ -42,6 +44,7 @@ runs:
         librsvg2-dev patchelf libfuse2
         libopencv-dev libblas-dev
         liblapack-dev libgfortran5
+        shellcheck
 
     - name: Install pnpm deps
       shell: bash

@@ -20,8 +20,11 @@ pub async fn post_upload(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    tracing::info!("POST /v2/imago/uploads size={} content_type_check", body.len());
-    
+    tracing::info!(
+        "POST /v2/imago/uploads size={} content_type_check",
+        body.len()
+    );
+
     // Try to handle different input formats
     let image_bytes = if body.is_empty() {
         return Err(AppError::bad_request("empty body"));
@@ -48,7 +51,7 @@ pub async fn post_upload(
     } else {
         body.to_vec()
     };
-    
+
     let id = state.imago_store.create();
     process_and_store(&state.imago_store, &id, &image_bytes);
     Ok(Json(serde_json::json!({ "upload_id": id })))
@@ -97,7 +100,10 @@ fn process_and_store(store: &ImagoJobStore, id: &str, image_bytes: &[u8]) {
             use std::process::Command;
             let output = Command::new(&worker)
                 .arg(&tmp_in)
-                .env("LD_LIBRARY_PATH", std::env::var("LD_LIBRARY_PATH").unwrap_or_default())
+                .env(
+                    "LD_LIBRARY_PATH",
+                    std::env::var("LD_LIBRARY_PATH").unwrap_or_default(),
+                )
                 .output();
             let _ = std::fs::remove_file(&tmp_in);
             match output {
@@ -112,7 +118,11 @@ fn process_and_store(store: &ImagoJobStore, id: &str, image_bytes: &[u8]) {
                     } else {
                         let err = String::from_utf8_lossy(&out.stderr).to_string();
                         tracing::error!("Imago worker failed for {id_clone}: {err}");
-                        let msg = if err.is_empty() { "recognition failed".to_string() } else { err.trim().to_string() };
+                        let msg = if err.is_empty() {
+                            "recognition failed".to_string()
+                        } else {
+                            err.trim().to_string()
+                        };
                         store_clone.set_failure(&id_clone, msg);
                     }
                 }

@@ -94,12 +94,16 @@ pub fn calculate(structure: &str, properties: &[String]) -> Result<CalculateResp
                 res.gross = Some(indigo::calculate_gross(handle));
             }
             "most-abundant-mass" => {
-                res.most_abundant_mass =
-                    Some(format!("{:.4}", indigo::calculate_most_abundant_mass(handle)));
+                res.most_abundant_mass = Some(format!(
+                    "{:.4}",
+                    indigo::calculate_most_abundant_mass(handle)
+                ));
             }
             "monoisotopic-mass" => {
-                res.monoisotopic_mass =
-                    Some(format!("{:.4}", indigo::calculate_monoisotopic_mass(handle)));
+                res.monoisotopic_mass = Some(format!(
+                    "{:.4}",
+                    indigo::calculate_monoisotopic_mass(handle)
+                ));
             }
             "mass-composition" => {
                 res.mass_composition = Some(indigo::calculate_mass_composition(handle));

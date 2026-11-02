@@ -58,9 +58,7 @@ export function initLogging(): void {
   }
 
   window.addEventListener("error", (event) => {
-    const where = event.filename
-      ? ` (${event.filename}:${event.lineno}:${event.colno})`
-      : "";
+    const where = event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : "";
     emit("error", `uncaught error: ${event.message}${where}`);
   });
 

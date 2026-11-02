@@ -10,7 +10,6 @@ Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rus
 
 > Not an official EPAM product. Community-maintained packaging without affiliation or official support.
 
-
 ## Features
 
 - Full Ketcher editor with molecule, reaction and macromolecule drawing
@@ -39,6 +38,7 @@ task build-libs   # requires Docker (Ubuntu 22.04 image)
 ```
 
 On Arch Linux, install build dependencies:
+
 ```bash
 sudo pacman -S base-devel cmake git \
   patchelf libcairo libpng fontconfig \
@@ -46,6 +46,7 @@ sudo pacman -S base-devel cmake git \
 ```
 
 On Debian/Ubuntu:
+
 ```bash
 sudo apt install build-essential cmake git \
   patchelf libcairo2-dev libpng-dev libfontconfig1-dev \
@@ -81,9 +82,8 @@ task appimage
 task clean
 ```
 
-*Both `.deb` and AppImage packages bundle all shared library dependencies (OpenCV, image codecs, etc.)
-so they work on Debian 12 and Ubuntu 22.04+ without extra system packages.*
-
+_Both `.deb` and AppImage packages bundle all shared library dependencies (OpenCV, image codecs, etc.)
+so they work on Debian 12 and Ubuntu 22.04+ without extra system packages._
 
 ## License
 

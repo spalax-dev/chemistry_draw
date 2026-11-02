@@ -93,9 +93,7 @@ pub async fn post_automap(
     }))
 }
 
-pub async fn post_render(
-    Json(payload): Json<RenderRequest>,
-) -> Result<Response, AppError> {
+pub async fn post_render(Json(payload): Json<RenderRequest>) -> Result<Response, AppError> {
     let fmt = match payload
         .options
         .get("render-output-format")
@@ -113,12 +111,7 @@ pub async fn post_render(
 
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
-    Ok((
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "text/plain")],
-        b64,
-    )
-        .into_response())
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, "text/plain")], b64).into_response())
 }
 
 pub async fn post_calculate(
@@ -131,9 +124,7 @@ pub async fn post_calculate(
     )?))
 }
 
-pub async fn post_check(
-    Json(payload): Json<CheckRequest>,
-) -> Result<Response, AppError> {
+pub async fn post_check(Json(payload): Json<CheckRequest>) -> Result<Response, AppError> {
     let result = indigo_ops::check(&payload.struct_, &payload.types)?;
     Ok((
         StatusCode::OK,

@@ -39,7 +39,7 @@ fn strip_ansi(input: &str) -> String {
     while let Some(c) = chars.next() {
         if c == '\x1b' && chars.peek() == Some(&'[') {
             chars.next(); // consume '['
-            // Skip parameter/intermediate bytes until the final byte (@-~).
+                          // Skip parameter/intermediate bytes until the final byte (@-~).
             for c in chars.by_ref() {
                 if ('@'..='~').contains(&c) {
                     break;
@@ -142,10 +142,14 @@ pub fn run() {
             };
             #[cfg(not(debug_assertions))]
             let lib_path = {
-                let p = app.path().resource_dir().unwrap_or_else(|_|
-                    std::env::current_dir().unwrap_or_default()
-                );
-                p.join("lib").join("linux-x86_64").to_string_lossy().to_string()
+                let p = app
+                    .path()
+                    .resource_dir()
+                    .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+                p.join("lib")
+                    .join("linux-x86_64")
+                    .to_string_lossy()
+                    .to_string()
             };
             println!("[chemistry-draw] LD_LIBRARY_PATH = {}", lib_path);
             log::info!("[chemistry-draw] LD_LIBRARY_PATH = {lib_path}");
@@ -161,8 +165,7 @@ pub fn run() {
                 match sidecar_cmd.spawn() {
                     Ok((mut rx, child)) => {
                         // Keep the handle so we can kill it on exit.
-                        *sidecar_state.0.lock().unwrap_or_else(|e| e.into_inner()) =
-                            Some(child);
+                        *sidecar_state.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
 
                         while let Some(event) = rx.recv().await {
                             match event {
@@ -193,10 +196,8 @@ pub fn run() {
                                     );
                                     // Drop the stale handle so we don't try to kill
                                     // an already dead process.
-                                    *sidecar_state
-                                        .0
-                                        .lock()
-                                        .unwrap_or_else(|e| e.into_inner()) = None;
+                                    *sidecar_state.0.lock().unwrap_or_else(|e| e.into_inner()) =
+                                        None;
                                 }
                                 _ => {}
                             }

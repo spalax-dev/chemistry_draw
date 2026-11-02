@@ -49,6 +49,19 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
+      - name: Lint frontend
+        run: |
+          pnpm run lint
+          pnpm run format:check
+
+      - name: Lint Rust
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Lint shell scripts
+        run: shellcheck --severity=warning scripts/*.sh
+
       - name: Build sidecar
         env:
           LD_LIBRARY_PATH: src-tauri/lib/linux-x86_64

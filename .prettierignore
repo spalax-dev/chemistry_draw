@@ -1,0 +1,20 @@
+# Generated or vendored content
+node_modules/
+dist/
+dist-packages/
+target/
+build-libs/
+src-tauri/gen/
+src-tauri/target/
+src-tauri/lib/
+patches/
+.pnpm-store/
+public/
+
+# Lockfiles and generated changelog
+pnpm-lock.yaml
+Cargo.lock
+CHANGELOG.md
+
+# Agent tooling
+.opencode/

@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 vars:
   SIDECAR_DIR: src-tauri/sidecar
@@ -7,16 +7,41 @@ vars:
 tasks:
   test:
     desc: Run tests for Indigo + Imago
-    dir: '{{.SIDECAR_DIR}}'
+    dir: "{{.SIDECAR_DIR}}"
     env:
-      LD_LIBRARY_PATH: '../../{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+      LD_LIBRARY_PATH: "../../{{.LIB_PATH}}:$LD_LIBRARY_PATH"
     cmds:
       - cargo test
+
+  harness:
+    desc: Verification gate (env, harness files, typecheck, build, check, tests)
+    cmds:
+      - node scripts/harness.mjs
+
+  harness:init:
+    desc: Create the harness tracking files (activities.json, progress/)
+    cmds:
+      - node scripts/build-harness.mjs
+
+  lint:
+    desc: Lint and format check (ESLint, Prettier, rustfmt, Clippy, ShellCheck)
+    cmds:
+      - pnpm run lint
+      - pnpm run format:check
+      - cargo fmt --all --check
+      - cargo clippy --workspace --all-targets -- -D warnings
+      - shellcheck --severity=warning scripts/*.sh
+
+  format:
+    desc: Format the code (Prettier + rustfmt)
+    cmds:
+      - pnpm run format
+      - cargo fmt --all
 
   run:
     desc: Build sidecar, kill stale process on port 9321, then start Tauri dev
     env:
-      WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
     deps:
       - task: build-sidecar
     cmds:
@@ -27,7 +52,7 @@ tasks:
   build-sidecar:
     internal: true
     env:
-      LD_LIBRARY_PATH: '{{.LIB_PATH}}:$LD_LIBRARY_PATH'
+      LD_LIBRARY_PATH: "{{.LIB_PATH}}:$LD_LIBRARY_PATH"
     cmds:
       - cargo build --release -p indigo-server --bin indigo-server
       - cargo build --release -p indigo-server --bin imago-worker

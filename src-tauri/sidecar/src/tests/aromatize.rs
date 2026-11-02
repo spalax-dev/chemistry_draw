@@ -63,7 +63,10 @@ async fn aromatize_naphthalene() {
 
     assert_eq!(status, StatusCode::OK);
     let s = body["struct"].as_str().unwrap();
-    assert!(s.contains('c'), "expected aromatic SMILES for naphthalene, got: {s}");
+    assert!(
+        s.contains('c'),
+        "expected aromatic SMILES for naphthalene, got: {s}"
+    );
 }
 
 /// Benceno aromático → Kekulé.
@@ -79,8 +82,14 @@ async fn dearomatize_basic_aromatic_to_kekule() {
 
     assert_eq!(status, StatusCode::OK);
     let s = body["struct"].as_str().unwrap();
-    assert!(!s.contains('c'), "expected Kekulé form (no lowercase 'c'), got: {s}");
-    assert!(s.contains('C'), "expected uppercase 'C' in Kekulé, got: {s}");
+    assert!(
+        !s.contains('c'),
+        "expected Kekulé form (no lowercase 'c'), got: {s}"
+    );
+    assert!(
+        s.contains('C'),
+        "expected uppercase 'C' in Kekulé, got: {s}"
+    );
 }
 
 /// Naftaleno aromático → Kekulé.
@@ -96,7 +105,10 @@ async fn dearomatize_naphthalene() {
 
     assert_eq!(status, StatusCode::OK);
     let s = body["struct"].as_str().unwrap();
-    assert!(!s.contains('c'), "Kekulé form must not have aromatic carbons, got: {s}");
+    assert!(
+        !s.contains('c'),
+        "Kekulé form must not have aromatic carbons, got: {s}"
+    );
 }
 
 /// Aromatize + dearomatize are idempotent (semantic roundtrip).
@@ -124,7 +136,10 @@ async fn aromatize_dearomatize_roundtrip() {
     .await;
     assert_eq!(s2, StatusCode::OK);
     let back = b2["struct"].as_str().unwrap();
-    assert!(!back.contains('c'), "dearomatize must remove aromatic notation");
+    assert!(
+        !back.contains('c'),
+        "dearomatize must remove aromatic notation"
+    );
 }
 
 /// Non-aromatic molecule (hexene) does not change when aromatizing.
@@ -141,8 +156,15 @@ async fn aromatize_non_aromatic_unchanged() {
     assert_eq!(status, StatusCode::OK);
     // hexene is not aromatized; atom order may change (Indigo reorders).
     let s = body["struct"].as_str().unwrap();
-    assert!(!s.contains('c'), "non-aromatic must not become aromatic, got: {s}");
-    assert_eq!(s.chars().filter(|&c| c == 'C').count(), 6, "should have 6 carbons");
+    assert!(
+        !s.contains('c'),
+        "non-aromatic must not become aromatic, got: {s}"
+    );
+    assert_eq!(
+        s.chars().filter(|&c| c == 'C').count(),
+        6,
+        "should have 6 carbons"
+    );
 }
 
 /// Invalid input returns HTTP 500.

@@ -11,7 +11,10 @@ async fn duplicate_bond_returns_400_on_convert() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body["error"].as_str().unwrap().contains("already have edge"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("already have edge"));
 }
 
 #[tokio::test]
@@ -48,7 +51,10 @@ async fn duplicate_bond_returns_400_on_layout() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body["error"].as_str().unwrap().contains("already have edge"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("already have edge"));
 }
 
 #[tokio::test]
@@ -79,12 +85,7 @@ async fn invalid_smiles_returns_400_on_convert() {
 #[tokio::test]
 async fn invalid_smiles_returns_400_on_layout() {
     let app = test_app();
-    let (status, _) = post_json(
-        &app,
-        "/v2/indigo/layout",
-        json!({"struct": INVALID_SMILES}),
-    )
-    .await;
+    let (status, _) = post_json(&app, "/v2/indigo/layout", json!({"struct": INVALID_SMILES})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 

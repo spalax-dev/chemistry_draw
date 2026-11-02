@@ -20,12 +20,14 @@ use axum::http::StatusCode;
 #[tokio::test]
 async fn smiles_to_default_molfile() {
     let app = test_app();
-    let (status, body) =
-        post_json(&app, "/v2/indigo/convert", json!({"struct": BENZENE})).await;
+    let (status, body) = post_json(&app, "/v2/indigo/convert", json!({"struct": BENZENE})).await;
 
     assert_eq!(status, StatusCode::OK);
     let mol = body["struct"].as_str().unwrap();
-    assert!(mol.contains("V2000"), "molfile must contain V2000 header, got: {mol}");
+    assert!(
+        mol.contains("V2000"),
+        "molfile must contain V2000 header, got: {mol}"
+    );
     assert!(mol.contains("INDIGO"), "molfile should have Indigo header");
 }
 
@@ -130,8 +132,7 @@ async fn roundtrip_smiles_molfile_smiles() {
     let app = test_app();
 
     // SMILES → molfile
-    let (s1, b1) =
-        post_json(&app, "/v2/indigo/convert", json!({"struct": BENZENE})).await;
+    let (s1, b1) = post_json(&app, "/v2/indigo/convert", json!({"struct": BENZENE})).await;
     assert_eq!(s1, StatusCode::OK);
     let molfile = b1["struct"].as_str().unwrap();
 
@@ -154,8 +155,12 @@ async fn roundtrip_smiles_molfile_smiles() {
 #[tokio::test]
 async fn invalid_input_returns_400() {
     let app = test_app();
-    let (status, body) =
-        post_json(&app, "/v2/indigo/convert", json!({"struct": NOT_A_MOLECULE})).await;
+    let (status, body) = post_json(
+        &app,
+        "/v2/indigo/convert",
+        json!({"struct": NOT_A_MOLECULE}),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(
@@ -187,7 +192,10 @@ async fn convert_to_cml() {
 
     assert_eq!(status, StatusCode::OK);
     let s = body["struct"].as_str().unwrap();
-    assert!(s.contains("<molecule") || s.contains("<cml"), "expected CML, got: {s}");
+    assert!(
+        s.contains("<molecule") || s.contains("<cml"),
+        "expected CML, got: {s}"
+    );
 }
 
 /// Converts to KET/JSON format.
@@ -204,5 +212,8 @@ async fn convert_to_ket_json() {
     assert_eq!(status, StatusCode::OK);
     let s = body["struct"].as_str().unwrap();
     assert!(s.contains("root"), "KET JSON must have 'root', got: {s}");
-    assert!(serde_json::from_str::<Value>(s).is_ok(), "must be valid JSON");
+    assert!(
+        serde_json::from_str::<Value>(s).is_ok(),
+        "must be valid JSON"
+    );
 }

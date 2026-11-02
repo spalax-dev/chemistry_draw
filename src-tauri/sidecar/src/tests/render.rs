@@ -95,7 +95,11 @@ async fn render_benzene_png_via_options() {
     let png_bytes = decode_b64(&b64);
 
     // PNG header: 89 50 4E 47 0D 0A 1A 0A
-    assert_eq!(&png_bytes[..4], [137, 80, 78, 71], "must be PNG magic bytes");
+    assert_eq!(
+        &png_bytes[..4],
+        [137, 80, 78, 71],
+        "must be PNG magic bytes"
+    );
     assert!(
         png_bytes.len() > 100,
         "PNG should be more than 100 bytes, got {}",
@@ -182,7 +186,10 @@ async fn render_invalid_molecule_returns_error() {
         .unwrap();
 
     let resp = app.clone().oneshot(req).await.unwrap();
-    assert!(resp.status().is_client_error(), "invalid molecule should fail");
+    assert!(
+        resp.status().is_client_error(),
+        "invalid molecule should fail"
+    );
 }
 
 /// Render without output_format uses SVG format (via options).

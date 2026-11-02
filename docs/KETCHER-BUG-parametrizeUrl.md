@@ -66,8 +66,8 @@ rejection to `recognize()`, which forwards it to `editor.errorHandler(e)`.
 Reproducible with plain JavaScript — no Ketcher, no Tauri, no browser:
 
 ```js
-const url = 'http://localhost:8000/v2/imago/uploads/:id';
-url.replace(/:(\w+)/g, (_, v) => ({ id: 'abc' })[v]);
+const url = "http://localhost:8000/v2/imago/uploads/:id";
+url.replace(/:(\w+)/g, (_, v) => ({ id: "abc" })[v]);
 // -> 'http://localhostundefined/v2/imago/uploads/abc'
 ```
 
@@ -76,10 +76,10 @@ url.replace(/:(\w+)/g, (_, v) => ({ id: 'abc' })[v]);
 `parametrizeUrl` runs only for `GET` requests with a payload. `remoteStructService`
 has exactly two `GET`s:
 
-| Call | Method | Payload | Goes through `parametrizeUrl` |
-| --- | --- | --- | --- |
-| `info()` | GET | no | no |
-| Imago status poll | GET | `{ id }` | **yes** |
+| Call              | Method | Payload  | Goes through `parametrizeUrl` |
+| ----------------- | ------ | -------- | ----------------------------- |
+| `info()`          | GET    | no       | no                            |
+| Imago status poll | GET    | `{ id }` | **yes**                       |
 
 Everything else is `POST` through `indigoCall` (convert, layout, clean, aromatize,
 dearomatize, calculate, check, aromap, render, ...), so it never touches the helper.
@@ -173,10 +173,10 @@ As soon as a published `ketcher-core` includes the upstream fix:
 
 As of 2026-11-02 the fix is only on `master`; it is **not published to npm**:
 
-| Version | Published | Has the fix |
-| --- | --- | --- |
-| 3.18.0 (`latest`) | 2026-09-02 | no |
-| 3.20.0-rc.3 (`beta`) | 2026-10-20 | no |
+| Version              | Published  | Has the fix |
+| -------------------- | ---------- | ----------- |
+| 3.18.0 (`latest`)    | 2026-09-02 | no          |
+| 3.20.0-rc.3 (`beta`) | 2026-10-20 | no          |
 
 Check with `pnpm info ketcher-core version` and `pnpm info ketcher-core dist-tags`.
 As soon as a published version includes it, follow [Removing the patch](#removing-the-patch).

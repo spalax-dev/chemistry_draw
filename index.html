@@ -5,10 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chemistry Draw</title>
     <style>
-      html, body, #root { height: 100%; margin: 0; padding: 0; }
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
     </style>
     <script src="/raphael.min.js"></script>
-    <script>window.require=function(name){if(name==='raphael')return window.Raphael}</script>
+    <script>
+      window.require = function (name) {
+        if (name === "raphael") return window.Raphael;
+      };
+    </script>
   </head>
 
   <body>

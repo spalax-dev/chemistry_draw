@@ -47,19 +47,18 @@ async fn cip_on_achiral_molecule_no_error() {
 
     assert_eq!(status, StatusCode::OK);
     let s = body["struct"].as_str().unwrap();
-    assert!(!s.contains('@'), "achiral molecule must not gain chiral markers");
+    assert!(
+        !s.contains('@'),
+        "achiral molecule must not gain chiral markers"
+    );
 }
 
 /// calculate_cip also works with molfile output (not only SMILES).
 #[tokio::test]
 async fn cip_molfile_output() {
     let app = test_app();
-    let (status, body) = post_json(
-        &app,
-        "/v2/indigo/calculate_cip",
-        json!({"struct": ALANINE}),
-    )
-    .await;
+    let (status, body) =
+        post_json(&app, "/v2/indigo/calculate_cip", json!({"struct": ALANINE})).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(

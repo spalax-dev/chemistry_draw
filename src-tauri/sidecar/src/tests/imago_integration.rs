@@ -46,10 +46,8 @@ async fn full_pipeline_produces_valid_molfile() {
 
     crate::ffi::imago::load_image_from_file(&tmp.to_string_lossy())
         .expect("load caffeine image from file");
-    crate::ffi::imago::filter_image()
-        .expect("filter_image (binarize + preprocess)");
-    crate::ffi::imago::set_config(None)
-        .expect("set_config auto-detect");
+    crate::ffi::imago::filter_image().expect("filter_image (binarize + preprocess)");
+    crate::ffi::imago::set_config(None).expect("set_config auto-detect");
 
     let mol = crate::ffi::imago::recognize().expect("recognize structure");
 
@@ -157,8 +155,12 @@ async fn info_endpoint_includes_imago_versions() {
     let (status, body) = fetch_get(&app, "/v2/info").await;
 
     assert_eq!(status, StatusCode::OK);
-    let versions = body["imago_versions"].as_array()
+    let versions = body["imago_versions"]
+        .as_array()
         .expect("imago_versions must be an array");
     assert!(!versions.is_empty(), "imago_versions must not be empty");
-    assert!(versions.contains(&serde_json::json!("2")), "must include version 2");
+    assert!(
+        versions.contains(&serde_json::json!("2")),
+        "must include version 2"
+    );
 }

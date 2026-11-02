@@ -31,6 +31,12 @@ pub struct ImagoJobStore {
     jobs: Arc<Mutex<HashMap<String, JobStatus>>>,
 }
 
+impl Default for ImagoJobStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImagoJobStore {
     /// Creates an empty store.
     pub fn new() -> Self {
@@ -38,7 +44,6 @@ impl ImagoJobStore {
             jobs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
-
     /// Creates a new job in [`JobStatus::Processing`].
     ///
     /// Returns the UUID v4 that the client uses for polling.

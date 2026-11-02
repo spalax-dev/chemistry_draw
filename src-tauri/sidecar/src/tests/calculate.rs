@@ -135,7 +135,10 @@ async fn unknown_property_ignored() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert!(!body.as_object().unwrap().contains_key("this-does-not-exist"));
+    assert!(!body
+        .as_object()
+        .unwrap()
+        .contains_key("this-does-not-exist"));
 }
 
 // ─── Nuevas propiedades ────────────────────────────────────────
@@ -151,8 +154,15 @@ async fn benzene_most_abundant_mass() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let m: f64 = body["most-abundant-mass"].as_str().unwrap().parse().unwrap();
-    assert!((m - 78.046).abs() < 0.01, "benzene most-abundant-mass ~78.046, got {m}");
+    let m: f64 = body["most-abundant-mass"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(
+        (m - 78.046).abs() < 0.01,
+        "benzene most-abundant-mass ~78.046, got {m}"
+    );
 }
 
 /// Benzene: monoisotopic-mass is ~78.046.
@@ -167,7 +177,10 @@ async fn benzene_monoisotopic_mass() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let m: f64 = body["monoisotopic-mass"].as_str().unwrap().parse().unwrap();
-    assert!((m - 78.046).abs() < 0.01, "benzene monoisotopic-mass ~78.046, got {m}");
+    assert!(
+        (m - 78.046).abs() < 0.01,
+        "benzene monoisotopic-mass ~78.046, got {m}"
+    );
 }
 
 /// Benzene: mass-composition contains C and H with percentages.

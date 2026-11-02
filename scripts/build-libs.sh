@@ -27,7 +27,7 @@ cmake .. \
   -DBUILD_INDIGO_WRAPPERS=OFF \
   -DBUILD_BINGO=OFF \
   -DBUILD_BINGO_ELASTIC=OFF
-make -j$(nproc) indigo indigo-renderer
+make -j"$(nproc)" indigo indigo-renderer
 
 # ----- Repo 1.5: Build a minimal OpenCV -----
 # The distro's OpenCV drags in GDAL (-> GEOS, HDF5, Poppler, ...): 120+ shared
@@ -102,7 +102,7 @@ cmake .. \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DIMAGO_ENABLE_TESTS=OFF
-make -j$(nproc) imago-c
+make -j"$(nproc)" imago-c
 
 # ----- Extract results + transitive deps -----
 echo "==> Copying .so files..."

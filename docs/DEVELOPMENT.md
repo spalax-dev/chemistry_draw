@@ -90,19 +90,19 @@ The packages are built in a Debian 12 container, and the native Indigo/Imago
 libraries use symbols from its C library (`arc4random@GLIBC_2.36`), so the real
 floor is **glibc 2.36**:
 
-| Distro | glibc | Status |
-| --- | --- | --- |
-| Debian 12 (bookworm) | 2.36 | supported |
-| Debian 13 (trixie) | 2.41 | supported |
-| Ubuntu 24.04 | 2.39 | supported |
-| Ubuntu 22.04 | 2.35 | **not supported** (`GLIBC_2.36 not found`) |
-| Debian 11 | 2.31 | not supported |
+| Distro               | glibc | Status                                     |
+| -------------------- | ----- | ------------------------------------------ |
+| Debian 12 (bookworm) | 2.36  | supported                                  |
+| Debian 13 (trixie)   | 2.41  | supported                                  |
+| Ubuntu 24.04         | 2.39  | supported                                  |
+| Ubuntu 22.04         | 2.35  | **not supported** (`GLIBC_2.36 not found`) |
+| Debian 11            | 2.31  | not supported                              |
 
 GTK3 and the `webkit2gtk-4.1` runtime are required too, which Debian 11 does not
 provide. CI runs on `ubuntu-24.04` for the same reason: linking a test binary
 against the libraries fails on an older glibc.
 
-Lowering the floor would mean building Indigo/Imago *and* the Tauri app on
+Lowering the floor would mean building Indigo/Imago _and_ the Tauri app on
 Debian 11, which is not possible today because Tauri v2 needs
 `webkit2gtk-4.1` (Debian 12+).
 
@@ -139,7 +139,7 @@ To locate the directory at runtime:
 
 ```js
 // DevTools console of the app
-await window.__TAURI_INTERNALS__.invoke("log_dir")
+await window.__TAURI_INTERNALS__.invoke("log_dir");
 ```
 
 ### Health endpoint
@@ -149,7 +149,7 @@ use it). It reports uptime, PID, port, versions and whether the `imago-worker`
 binary was found next to the sidecar:
 
 ```bash
-curl -s http://127.0.0.1:9321/v2/health | python3 -m json.tool
+curl -s http://127.0.0.1:9321/v2/health | jq
 ```
 
 `GET /v2/info` now builds `api_path` from the port actually bound, so it stays

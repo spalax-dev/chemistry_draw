@@ -1,0 +1,5 @@
+{
+  "project": "chemistry-draw",
+  "description": "Tauri desktop wrapper of Ketcher with a native Indigo sidecar",
+  "activities": []
+}

@@ -3,7 +3,7 @@ fn main() {
     if args.len() != 2 {
         std::process::exit(1);
     }
-    
+
     let input_path = &args[1];
     let bytes = match std::fs::read(input_path) {
         Ok(b) => b,
@@ -12,17 +12,15 @@ fn main() {
             std::process::exit(2);
         }
     };
-    
+
     // Set up signal handling to avoid crashes
     std::panic::set_hook(Box::new(|_| {
         eprintln!("panic in worker");
         std::process::exit(99);
     }));
-    
-    let result = std::panic::catch_unwind(|| {
-        indigo_server::service::imago_ops::process(&bytes)
-    });
-    
+
+    let result = std::panic::catch_unwind(|| indigo_server::service::imago_ops::process(&bytes));
+
     match result {
         Ok(Ok(mol)) => {
             print!("{}", mol);

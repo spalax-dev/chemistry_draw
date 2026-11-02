@@ -22,7 +22,10 @@ pub fn process(image_bytes: &[u8]) -> anyhow::Result<String> {
     }
     // Basic format validation to avoid crashing OpenCV on garbage
     let is_png = image_bytes.len() >= 8 && &image_bytes[0..8] == b"\x89PNG\r\n\x1a\n";
-    let is_jpeg = image_bytes.len() >= 3 && image_bytes[0] == 0xFF && image_bytes[1] == 0xD8 && image_bytes[2] == 0xFF;
+    let is_jpeg = image_bytes.len() >= 3
+        && image_bytes[0] == 0xFF
+        && image_bytes[1] == 0xD8
+        && image_bytes[2] == 0xFF;
     let is_bmp = image_bytes.len() >= 2 && &image_bytes[0..2] == b"BM";
     let is_tiff_le = image_bytes.len() >= 4 && &image_bytes[0..4] == b"II*\x00";
     let is_tiff_be = image_bytes.len() >= 4 && &image_bytes[0..4] == b"MM\x00*";

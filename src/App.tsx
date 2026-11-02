@@ -1,27 +1,26 @@
-import 'ketcher-react/dist/index.css';
+import "ketcher-react/dist/index.css";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Editor } from 'ketcher-react';
-import { RemoteStructServiceProvider } from 'ketcher-core';
-import { message } from '@tauri-apps/plugin-dialog';
-import { invoke } from '@tauri-apps/api/core';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Editor } from "ketcher-react";
+import { RemoteStructServiceProvider, type Ketcher } from "ketcher-core";
+import { message } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 const SIMPLE_ERRORS: Record<string, string> = {
-  'already have edge between vertices':
-    'The structure contains duplicate bonds. Please remove overlapping bonds and try again.',
-  'Indigo load error':
-    'Cannot read the structure. The data may be corrupted or in an unsupported format.',
-  'Load failed':
-    'The chemistry server is not responding. Restart the app or check the connection.',
-  'Connection terminated unexpectedly':
-    'The chemistry server stopped unexpectedly. Restart the app.',
+  "already have edge between vertices":
+    "The structure contains duplicate bonds. Please remove overlapping bonds and try again.",
+  "Indigo load error":
+    "Cannot read the structure. The data may be corrupted or in an unsupported format.",
+  "Load failed": "The chemistry server is not responding. Restart the app or check the connection.",
+  "Connection terminated unexpectedly":
+    "The chemistry server stopped unexpectedly. Restart the app.",
 };
 
 function friendly(msg: string): string {
   for (const [key, hint] of Object.entries(SIMPLE_ERRORS)) {
     if (msg.includes(key)) return hint;
   }
-  return '';
+  return "";
 }
 
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
@@ -47,7 +46,7 @@ async function resolveApiBase(): Promise<string> {
 
   while (Date.now() < deadline) {
     try {
-      port = await invoke<number>('indigo_port');
+      port = await invoke<number>("indigo_port");
     } catch {
       // Not running under Tauri (plain browser): keep the default.
     }
@@ -67,7 +66,7 @@ async function resolveApiBase(): Promise<string> {
 }
 
 function App() {
-  const lastError = useRef<{ msg: string; at: number }>({ msg: '', at: 0 });
+  const lastError = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const [ready, setReady] = useState(false);
   const [provider, setProvider] = useState<RemoteStructServiceProvider | null>(null);
 
@@ -75,7 +74,7 @@ function App() {
     let cancelled = false;
     resolveApiBase().then((apiBase) => {
       if (cancelled) return;
-      console.info('[chemistry-draw] Indigo API:', apiBase);
+      console.info("[chemistry-draw] Indigo API:", apiBase);
       setProvider(new RemoteStructServiceProvider(apiBase));
     });
     return () => {
@@ -83,7 +82,7 @@ function App() {
     };
   }, []);
 
-  const handleInit = useCallback((ketcher: any) => {
+  const handleInit = useCallback((ketcher: Ketcher) => {
     const currentOptions = ketcher.editor.options();
     ketcher.editor.options({
       ...currentOptions,
@@ -93,15 +92,15 @@ function App() {
   }, []);
 
   const handleError = useCallback((raw: unknown) => {
-    const msg = typeof raw === 'string' ? raw : String(raw);
-    console.error('Ketcher error:', msg);
+    const msg = typeof raw === "string" ? raw : String(raw);
+    console.error("Ketcher error:", msg);
     const now = Date.now();
     if (msg === lastError.current.msg && now - lastError.current.at < 5000) return;
     lastError.current = { msg, at: now };
     const hint = friendly(msg);
     const text = hint || msg;
-    const title = hint ? 'Structure problem' : 'Error';
-    message(text, { title, kind: 'error' }).catch(() => {
+    const title = hint ? "Structure problem" : "Error";
+    message(text, { title, kind: "error" }).catch(() => {
       alert(`${title}: ${text}`);
     });
   }, []);
@@ -109,12 +108,20 @@ function App() {
   return (
     <>
       {(!provider || !ready) && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'sans-serif', color: '#888', fontSize: '1.2em',
-          background: '#fff',
-        }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: "sans-serif",
+            color: "#888",
+            fontSize: "1.2em",
+            background: "#fff",
+          }}
+        >
           Loading chemistry editor...
         </div>
       )}
