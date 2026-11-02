@@ -5,6 +5,7 @@ mod aromatize;
 mod calculate;
 mod check;
 mod convert;
+mod health;
 mod imago_integration;
 mod info;
 mod layout_clean;
@@ -39,7 +40,8 @@ fn init_tracing() {
 pub fn test_app() -> axum::Router {
     init_tracing();
     let state = AppState {
-        _port: 9321,
+        port: 9321,
+        started_at: std::time::Instant::now(),
         imago_store: ImagoJobStore::new(),
     };
     build_router(state)

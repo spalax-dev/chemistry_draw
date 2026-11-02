@@ -116,6 +116,45 @@ pkg-config --exists glib-2.0 gtk+-3.0 webkit2gtk-4.1 && echo "GTK/WebKit OK"
 ldd target/debug/indigo-server 2>/dev/null | grep "not found"
 ```
 
+## Logs and diagnostics
+
+Both the Rust host and the frontend write to a rotating log file, so a bug
+report can be diagnosed without rebuilding or attaching a debugger.
+
+- **Location** (Linux): `~/.local/share/dev.spalax.ChemistryDraw/logs/chemistry-draw.log`
+  (Tauri's per-app log directory; on other platforms it follows the OS
+  convention).
+- **Rotation**: 2 MB per file, the last 5 files are kept.
+- **What is captured**:
+  - Host lifecycle: app version, log directory, sidecar spawn/exit, panics.
+  - The sidecar's stdout/stderr, forwarded line by line (ANSI colors stripped)
+    with the `indigo-server` target.
+  - Every frontend `console.*` call, plus uncaught errors and unhandled
+    promise rejections, tagged `[frontend]`.
+
+The frontend integration lives in `src/logging.ts` and is installed from
+`src/main.tsx` before the first render; nothing else has to be done in the UI.
+
+To locate the directory at runtime:
+
+```js
+// DevTools console of the app
+await window.__TAURI_INTERNALS__.invoke("log_dir")
+```
+
+### Health endpoint
+
+The sidecar exposes `GET /v2/health` for support/diagnostics (Ketcher does not
+use it). It reports uptime, PID, port, versions and whether the `imago-worker`
+binary was found next to the sidecar:
+
+```bash
+curl -s http://127.0.0.1:9321/v2/health | python3 -m json.tool
+```
+
+`GET /v2/info` now builds `api_path` from the port actually bound, so it stays
+correct when the sidecar falls back to a different port because 9321 is busy.
+
 ## Notes
 
 - **Packaged `.rpm/.deb/.AppImage`**: Runtime deps are declared in the bundle. You don't need `*-devel` packages to run them.

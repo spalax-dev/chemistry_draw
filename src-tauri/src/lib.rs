@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -16,6 +17,39 @@ struct SidecarProcess(Arc<Mutex<Option<CommandChild>>>);
 #[tauri::command]
 fn indigo_port(state: tauri::State<'_, IndigoPort>) -> u16 {
     *state.0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Directory holding the rotated log files.
+///
+/// Exposed as a command so the UI (or a support workflow) can point users at
+/// the logs without hardcoding platform-specific paths.
+#[tauri::command]
+fn log_dir(app: tauri::AppHandle) -> Option<String> {
+    app.path()
+        .app_log_dir()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Remove ANSI SGR sequences (the sidecar's `tracing` output is colorized when
+/// it detects a terminal). Log files should stay readable.
+fn strip_ansi(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next(); // consume '['
+            // Skip parameter/intermediate bytes until the final byte (@-~).
+            for c in chars.by_ref() {
+                if ('@'..='~').contains(&c) {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Pick a port we can actually listen on. Prefers `preferred`, then any free
@@ -39,22 +73,51 @@ fn pick_free_port(preferred: u16) -> u16 {
 fn kill_sidecar(process: &SidecarProcess) {
     let child = process.0.lock().unwrap_or_else(|e| e.into_inner()).take();
     if let Some(child) = child {
-        println!("[chemistry-draw] stopping indigo-server");
+        log::info!("[chemistry-draw] stopping indigo-server");
         if let Err(e) = child.kill() {
-            eprintln!("[chemistry-draw] could not stop indigo-server: {e}");
+            log::error!("[chemistry-draw] could not stop indigo-server: {e}");
         }
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Log panics with their location instead of losing them on stderr.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("panic: {info}");
+        default_hook(info);
+    }));
+
     let app = tauri::Builder::default()
+        // Registered first so the other plugins and the setup hook can log.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("chemistry-draw".into()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                // Keep the last handful of files instead of growing forever.
+                .max_file_size(2_000_000)
+                .rotation_strategy(RotationStrategy::KeepSome(5))
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![indigo_port])
+        .invoke_handler(tauri::generate_handler![indigo_port, log_dir])
         .setup(|app| {
+            log::info!(
+                "[chemistry-draw] starting version {}",
+                app.package_info().version
+            );
+            if let Ok(dir) = app.path().app_log_dir() {
+                log::info!("[chemistry-draw] logs directory: {}", dir.display());
+            }
             let preferred_port: u16 = std::env::var("INDIGO_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
@@ -85,6 +148,7 @@ pub fn run() {
                 p.join("lib").join("linux-x86_64").to_string_lossy().to_string()
             };
             println!("[chemistry-draw] LD_LIBRARY_PATH = {}", lib_path);
+            log::info!("[chemistry-draw] LD_LIBRARY_PATH = {lib_path}");
 
             let sidecar_cmd = app
                 .shell()
@@ -103,7 +167,7 @@ pub fn run() {
                         while let Some(event) = rx.recv().await {
                             match event {
                                 CommandEvent::Stdout(line) => {
-                                    let text = String::from_utf8_lossy(&line).to_string();
+                                    let text = strip_ansi(&String::from_utf8_lossy(&line));
                                     // The sidecar reports the port it actually bound
                                     // to, which may differ if the preferred one was busy.
                                     if let Some(rest) = text.trim().strip_prefix("INDIGO_PORT=") {
@@ -111,22 +175,20 @@ pub fn run() {
                                             if let Ok(mut current) = port_state.0.lock() {
                                                 *current = actual;
                                             }
-                                            println!(
+                                            log::info!(
                                                 "[chemistry-draw] indigo-server port = {actual}"
                                             );
                                         }
                                     }
-                                    println!("[indigo-server] {}", text.trim_end());
+                                    log::info!(target: "indigo-server", "{}", text.trim_end());
                                 }
                                 CommandEvent::Stderr(line) => {
-                                    eprintln!(
-                                        "[indigo-server:err] {}",
-                                        String::from_utf8_lossy(&line)
-                                    );
+                                    let text = strip_ansi(&String::from_utf8_lossy(&line));
+                                    log::warn!(target: "indigo-server", "{}", text.trim_end());
                                 }
                                 CommandEvent::Terminated(payload) => {
-                                    eprintln!(
-                                        "[indigo-server] exited with {:?}",
+                                    log::error!(
+                                        "[chemistry-draw] indigo-server exited with {:?}",
                                         payload.code
                                     );
                                     // Drop the stale handle so we don't try to kill
@@ -141,7 +203,7 @@ pub fn run() {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[chemistry-draw] sidecar spawn failed: {e}");
+                        log::error!("[chemistry-draw] sidecar spawn failed: {e}");
                     }
                 }
             });

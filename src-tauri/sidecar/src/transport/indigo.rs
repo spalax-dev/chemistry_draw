@@ -3,15 +3,17 @@
 //! Each handler delegates to [`indigo_ops`], mapping [`AppError`] to HTTP.
 
 use axum::{
+    extract::State,
     http::{header, StatusCode},
     response::{IntoResponse, Json, Response},
 };
 
 use crate::error::AppError;
 use crate::service::{indigo_ops, types::*};
+use crate::state::AppState;
 
-pub async fn get_indigo_info() -> Json<serde_json::Value> {
-    super::info::get_info().await
+pub async fn get_indigo_info(State(state): State<AppState>) -> Json<serde_json::Value> {
+    super::info::get_info(State(state)).await
 }
 
 pub async fn post_convert(

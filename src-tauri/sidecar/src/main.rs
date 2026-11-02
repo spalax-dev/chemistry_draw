@@ -102,6 +102,16 @@ async fn bind(preferred: u16) -> std::io::Result<(TcpListener, u16)> {
 
 #[tokio::main]
 async fn main() {
+    // Panics would otherwise vanish into the sidecar's stderr, which the host
+    // forwards to the log file but without location information.
+    std::panic::set_hook(Box::new(|info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        eprintln!("PANIC at {location}: {info}");
+    }));
+
     tracing_subscriber::fmt()
         .with_target(true)
         .with_thread_ids(true)
@@ -129,7 +139,8 @@ async fn main() {
     info!("indigo-server listening on http://127.0.0.1:{port}");
 
     let state = AppState {
-        _port: port,
+        port,
+        started_at: std::time::Instant::now(),
         imago_store: ImagoJobStore::new(),
     };
 

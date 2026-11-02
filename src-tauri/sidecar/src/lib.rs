@@ -20,6 +20,7 @@
 //! | Method | Path                            | Backend  |
 //! |--------|----------------------------------|----------|
 //! | GET    | `/v2/info`                      |          |
+//! | GET    | `/v2/health`                    |          |
 //! | POST   | `/v2/indigo/convert`            | Indigo   |
 //! | POST   | `/v2/indigo/aromatize`          | Indigo   |
 //! | POST   | `/v2/indigo/layout`             | Indigo   |
@@ -49,6 +50,7 @@ pub fn build_router(state: AppState) -> axum::Router {
 
     Router::new()
         .route("/v2/info", get(transport::info::get_info))
+        .route("/v2/health", get(transport::health::get_health))
         .route("/v2/indigo/info", get(transport::indigo::get_indigo_info))
         .route("/v2/indigo/convert", post(transport::indigo::post_convert))
         .route(
