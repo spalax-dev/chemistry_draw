@@ -163,6 +163,50 @@
         }
       ],
       "status": "done"
+    },
+    {
+      "id": 4,
+      "type": "fix",
+      "name": "windows-install-webview2-per-machine",
+      "title": "Install the Windows build per-machine so WebView2 is available",
+      "description": "The NSIS installer defaults to a per-user install, so the embedded WebView2 bootstrapper leaves the runtime scoped to the installing account (or fails without elevation) and the app shows 'Could not find the WebView2 Runtime'. Switch to a per-machine install and document the offline installer option.",
+      "acceptance": [
+        "tauri.windows.conf.json sets bundle.windows.nsis.installMode to perMachine",
+        "A bundle-config test asserts the install mode and the Windows webview mode",
+        "README and docs/architecture explain the admin requirement and the offlineInstaller alternative",
+        "Harness and tests stay green"
+      ],
+      "tasks": [
+        {
+          "id": "a",
+          "phase": "docs",
+          "description": "Document per-machine installation and the offline WebView2 option",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "b",
+          "phase": "test",
+          "description": "Add a Windows bundle-config test; confirm RED",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "c",
+          "phase": "implement",
+          "description": "Set nsis.installMode to perMachine in tauri.windows.conf.json",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "d",
+          "phase": "review",
+          "description": "Review the config, docs and tests against the acceptance criteria",
+          "status": "done",
+          "agent": "reviewer"
+        }
+      ],
+      "status": "done"
     }
   ]
 }

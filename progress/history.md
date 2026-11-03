@@ -54,3 +54,15 @@
 - Added `scripts/lib/release-workflow.test.mjs` (YAML structure tests) and made
   the harness run every `scripts/lib/*.test.mjs`; 37 tests pass.
 - README and `docs/architecture.md` document the Windows release artifact.
+
+## 2026-11-03 — Activity 4: per-machine Windows install
+
+- Installing the NSIS bundle as the default current user left WebView2 scoped to
+  that account (or failed without elevation), so the app showed "Could not find
+  the WebView2 Runtime".
+- `src-tauri/tauri.windows.conf.json` now sets `bundle.windows.nsis.installMode`
+  to `perMachine`; the installer asks for admin and installs WebView2 for every
+  user. The embedded bootstrapper still needs network; offline targets can use
+  `offlineInstaller` (+127 MB).
+- Added `scripts/lib/windows-bundle.test.mjs` (install mode, WebView2 mode,
+  Imago-free bundle). Harness green with 40 tests.

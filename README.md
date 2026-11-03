@@ -149,6 +149,12 @@ CI builds and smoke-tests this installer on `windows-latest`
 `/v2/imago/uploads`. `release.yml` runs the same action on a release and attaches
 the installer to the GitHub release next to the Linux packages.
 
+The installer is **per-machine** (`bundle.windows.nsis.installMode`), so it asks
+for Administrator privileges and installs the WebView2 Runtime for every user.
+The embedded bootstrapper still downloads WebView2 during installation; for
+offline machines set `bundle.windows.webviewInstallMode` to `offlineInstaller`
+(adds ~127 MB to the installer).
+
 ### Build & run (Linux)
 
 ```bash
