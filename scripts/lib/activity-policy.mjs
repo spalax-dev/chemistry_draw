@@ -3,8 +3,9 @@
  *
  * Enforces the mandatory delivery order docs → test → implement → review:
  * every task declares a phase, phases never move backwards, and each phase is
- * paired with the right agent. Returns `{ errors, warnings }`; the harness
- * fails on any error.
+ * paired with the right agent. Tasks also progress sequentially: a task may be
+ * `done` or `in_progress` only after every earlier task is `done`. Returns
+ * `{ errors, warnings }`; the harness fails on any error.
  *
  * Docs-only activities (`type: "docs"`) are the exception: they run docs →
  * review and must not contain test/implement tasks.

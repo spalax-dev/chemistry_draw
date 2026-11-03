@@ -56,8 +56,9 @@ not contain `test` or `implement` tasks.
 - **docs → test → implement → review** — no implementation before its failing
   test, and no test before its docs. The harness enforces the task phases
   (`scripts/lib/activity-policy.mjs`).
-- **One task at a time**; don't mix activities. Parallel tasks only within one
-  activity.
+- **One task at a time**; don't mix activities. Tasks execute sequentially; only
+  one task may be `in_progress`, and no later task may start before every
+  earlier task is `done`.
 - **No `done` without green harness** — `node scripts/harness.mjs` all green
   (includes typecheck, ESLint, Prettier, rustfmt, Clippy and ShellCheck).
 - Document in `progress/current.md` **while** working, not after. Include plan +

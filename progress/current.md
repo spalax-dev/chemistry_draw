@@ -2,52 +2,32 @@
 
 ## Activity
 
-- ID: 2
-- Name: enforce-docs-test-implement
-- Type: chore
-- Status: in_progress
+- ID: 1
+- Name: windows-build-without-imago
+- Type: feat
+- Status: blocked
 
 ## Tasks
 
-- Current: d — final review of the policy enforcement and docs
-- Done: a, b, c
-- Blocked: Activity 1 (Windows build) awaits a pushed commit and the Windows CI run
+- Current: none
+- Pending: g — run Windows CI and fix Windows-only failures; h — final review
+- Done: a, b, c, d, e, f
 
 ## Plan
 
-1. **Docs first**
-   - Updated `AGENTS.md`, `README.md`, `docs/testing.md`,
-     `docs/conventions.md`, `docs/verification.md`, `docs/CHECKPOINTS.md`,
-     `docs/DEVELOPMENT.md`, `docs/architecture.md` and all three agent role
-     files.
-   - Defined the task `phase` field and the mandatory order
-     docs → test → implement → review, including the docs-only exception.
-
-2. **Tests**
-   - Added `scripts/lib/activity-policy.test.mjs` with phase-order, docs-only,
-     agent-mapping, status-cardinality, sequential-status and negative cases.
-   - RED was confirmed before the validator existed; the suite now has 29 tests.
-
-3. **Implementation**
-   - Added `scripts/lib/activity-policy.mjs` with `validateActivities`.
-   - A task may be `done` or `in_progress` only after every earlier task is
-     `done`, in addition to the non-decreasing phase check.
-   - `scripts/harness.mjs` runs the policy tests and validator in block 3.
-   - `package.json` exposes `pnpm run test:policy`.
-
-4. **Review**
-   - Reviewer requested targeted test/status/heading fixes; they are applied.
-   - Final review is in progress.
+- Windows build implementation is complete: pinned Indigo 1.46.0, Imago
+  compiled out, platform Tauri configs, Windows CI/NSIS job and docs.
+- Next: commit/push the branch, run the `windows` job, verify the NSIS artifact,
+  the sidecar smoke test and the 87-test sidecar suite on Windows.
+- Then mark task g done and send the artifact review to task h.
 
 ## Notes
 
-- The user requested docs → test → implement as a permanent rule.
-- Activity 1 remains `blocked` until its Windows CI job runs; its task list
-  declares docs/test/implement/review phases.
-- Harness is green with two activities; 29 policy tests pass.
-- No commit or push has been made.
+- Activity 2 (docs → test → implement → review enforcement) is done; see
+  `progress/history.md`.
+- `node scripts/harness.mjs` is green; 32 policy tests pass.
+- No commit or push has been made for the Windows build.
 
 ## Blockers
 
-- Activity 1: Windows CI needs a pushed commit.
-- Activity 2: final review completion.
+- Windows CI requires a pushed commit.

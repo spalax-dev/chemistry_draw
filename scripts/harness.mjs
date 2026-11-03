@@ -5,7 +5,7 @@
  * Run with: node scripts/harness.mjs
  *
  * Checks, in order:
- *  1. Environment (rustc/cargo, node/pnpm)
+ *  1. Environment (rustc/cargo, node/pnpm, Tauri plugin version parity)
  *  2. Base harness files exist (AGENTS.md, activities.json, progress/, docs/)
  *  3. Activity policy: run scripts/lib/activity-policy.test.mjs, then validate
  *     activities.json (phases docs → test → implement → review, statuses,
@@ -124,6 +124,40 @@ for (const [binary, args] of [
 
 if (!commandExists("task")) {
   warn("task is not installed (optional, but the documented workflows use it)");
+}
+
+// Tauri refuses to bundle when a plugin crate and its npm package are on
+// different major/minor versions (they communicate over the same IPC schema).
+// The CLI only reports this at bundle time, so check it here instead.
+const cargoLock = readFileSync(path.join(PROJECT_ROOT, "Cargo.lock"), "utf8");
+for (const plugin of ["log", "dialog", "fs", "opener", "shell"]) {
+  const npmManifest = path.join(
+    PROJECT_ROOT,
+    "node_modules",
+    "@tauri-apps",
+    `plugin-${plugin}`,
+    "package.json",
+  );
+  if (!existsSync(npmManifest)) continue;
+
+  const npmVersion = JSON.parse(readFileSync(npmManifest, "utf8")).version;
+  const crate = cargoLock.match(
+    new RegExp(`name = "tauri-plugin-${plugin}"\\nversion = "([^"]+)"`),
+  );
+  if (!crate) {
+    warn(`tauri-plugin-${plugin}: not found in Cargo.lock (npm ${npmVersion})`);
+    continue;
+  }
+
+  const minor = (version) => version.split(".").slice(0, 2).join(".");
+  if (minor(crate[1]) === minor(npmVersion)) {
+    ok(`tauri-plugin-${plugin} ${crate[1]} / npm ${npmVersion}`);
+  } else {
+    fail(
+      `tauri-plugin-${plugin} version mismatch: crate ${crate[1]} vs npm ${npmVersion} ` +
+        "(align major.minor or the Tauri bundler will refuse)",
+    );
+  }
 }
 
 console.log("\n── 2. Base Harness Files ─────────────────────────────");

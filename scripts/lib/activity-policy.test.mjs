@@ -248,6 +248,27 @@ test("rejects an implement task in_progress while the test task is pending", () 
   );
 });
 
+test("rejects a test task in_progress while the docs task is blocked", () => {
+  const { errors } = validateActivities(
+    payload(
+      activity({
+        status: "in_progress",
+        tasks: [
+          task("a", "docs", { status: "blocked" }),
+          task("b", "test", { status: "in_progress" }),
+          task("c", "implement"),
+          task("d", "review"),
+        ],
+      }),
+    ),
+  );
+
+  assertError(
+    errors,
+    /Activity 1 task b: cannot be "in_progress" while earlier task "a" is "blocked"/,
+  );
+});
+
 test("rejects a done task while an earlier task is pending", () => {
   const { errors } = validateActivities(
     payload(
@@ -477,6 +498,21 @@ test("rejects a task without a description", () => {
   );
 
   assertError(errors, /Activity 1 task b: missing required field "description"/);
+});
+
+test("rejects an activity without a name", () => {
+  const broken = activity();
+  delete broken.name;
+
+  const { errors } = validateActivities(payload(broken));
+
+  assertError(errors, /Activity 1: missing required field "name"/);
+});
+
+test("rejects an activity with empty acceptance criteria", () => {
+  const { errors } = validateActivities(payload(activity({ acceptance: [] })));
+
+  assertError(errors, /Activity 1: missing required acceptance criteria/);
 });
 
 test("rejects data without an activities array", () => {

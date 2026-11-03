@@ -28,7 +28,9 @@ for coordinating complex workflows between implementer and reviewer agents.
 ### Phase 1: Planning
 
 - Analyze the user's request to identify all required work streams
-- Determine the order of operations (sequential vs parallel where possible)
+- Determine the order of operations: activity tasks are sequential in phase
+  order (`docs → test → implement → review`); only read-only research may be
+  batched.
 - Identify dependencies between tasks
 - Create a coordination plan
 
@@ -61,8 +63,10 @@ for coordinating complex workflows between implementer and reviewer agents.
 
 When deciding how to split work:
 
-- Independent tasks → delegate in parallel for efficiency
-- Sequential tasks → delegate in order, passing context forward
+- Activity tasks → execute sequentially in phase order (docs → test →
+  implement → review); the validator enforces the order
+- Read-only research → batch parallel explore/general sub-agents separately
+  from activity task execution
 - Quality gates → always route to reviewer after implementation
 
 When handling failures:
@@ -102,12 +106,13 @@ When handling failures:
 
 - One implementer agent handles it start-to-finish
 
-### Large Task → Batch Processing
+### Research → Batch Processing (read-only)
 
-- Break the task into sub-tasks
-- Delegate each sub-task to a separate implementer agent
-- Each sub-agent writes results to `progress/explore/<theme>.md` and returns only
-  the reference
+- Applies only to read-only research, never to activity task execution
+- Break the research question into sub-tasks
+- Delegate each sub-task to a separate explore/general agent
+- Each sub-agent writes results to `progress/explore/<theme>.md` and returns
+  only the reference
 - Reassemble results when all sub-agents complete
 
 ## Anti-Teléfono-Descompuesto Rule
@@ -180,8 +185,8 @@ Fields:
 - `title`: human-readable title
 - `description`: brief explanation of what the activity does
 - `acceptance`: array of concrete criteria to consider the activity done
-- `tasks`: array of delegable sub-tasks in execution order (can be parallelized
-  across agents only within a phase)
+- `tasks`: array of delegable sub-tasks in strict execution order; tasks are
+  sequential (validator-enforced), never parallel across agents
   - `id`: single letter (a, b, c...)
   - `phase`: `docs` | `test` | `implement` | `review`
   - `description`: what needs to be done

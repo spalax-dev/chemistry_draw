@@ -113,11 +113,11 @@
           "id": "d",
           "phase": "review",
           "description": "Review the enforcement, docs and harness output against acceptance criteria",
-          "status": "in_progress",
+          "status": "done",
           "agent": "reviewer"
         }
       ],
-      "status": "in_progress"
+      "status": "done"
     }
   ]
 }
