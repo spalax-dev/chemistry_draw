@@ -16,7 +16,7 @@
     "test:policy": "node --test scripts/lib/activity-policy.test.mjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11",
+    "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",
     "@tauri-apps/plugin-log": "^2.10.1",
@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tauri-apps/cli": "^2.11",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/node": "^25.9.3",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",

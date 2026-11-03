@@ -130,6 +130,25 @@ if (!commandExists("task")) {
 // different major/minor versions (they communicate over the same IPC schema).
 // The CLI only reports this at bundle time, so check it here instead.
 const cargoLock = readFileSync(path.join(PROJECT_ROOT, "Cargo.lock"), "utf8");
+const minor = (version) => version.split(".").slice(0, 2).join(".");
+
+// The same rule applies to the core package (tauri crate vs @tauri-apps/api).
+const apiManifest = path.join(PROJECT_ROOT, "node_modules", "@tauri-apps", "api", "package.json");
+if (existsSync(apiManifest)) {
+  const apiVersion = JSON.parse(readFileSync(apiManifest, "utf8")).version;
+  const crate = cargoLock.match(/name = "tauri"\nversion = "([^"]+)"/);
+  if (!crate) {
+    warn(`tauri: not found in Cargo.lock (npm api ${apiVersion})`);
+  } else if (minor(crate[1]) === minor(apiVersion)) {
+    ok(`tauri ${crate[1]} / npm api ${apiVersion}`);
+  } else {
+    fail(
+      `tauri version mismatch: crate ${crate[1]} vs npm api ${apiVersion} ` +
+        "(align major.minor or the Tauri bundler will refuse)",
+    );
+  }
+}
+
 for (const plugin of ["log", "dialog", "fs", "opener", "shell"]) {
   const npmManifest = path.join(
     PROJECT_ROOT,
