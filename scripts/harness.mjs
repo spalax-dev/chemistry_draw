@@ -207,10 +207,14 @@ for (const file of baseFiles) {
 
 console.log("\n── 3. Activity Policy & activities.json ──────────────");
 
-if (run("node", ["--test", "scripts/lib/activity-policy.test.mjs"]).status === 0) {
-  ok("Activity policy tests pass");
+const policyTests = readdirSync(path.join(PROJECT_ROOT, "scripts", "lib"))
+  .filter((file) => file.endsWith(".test.mjs"))
+  .map((file) => path.join("scripts", "lib", file));
+
+if (run("node", ["--test", ...policyTests]).status === 0) {
+  ok(`Activity and workflow policy tests pass (${policyTests.length} files)`);
 } else {
-  fail("Activity policy tests failed");
+  fail("Activity or workflow policy tests failed");
 }
 
 try {

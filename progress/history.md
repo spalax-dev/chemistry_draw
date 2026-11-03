@@ -42,3 +42,15 @@
   compiled Imago out on Windows and disabled Recognize Molecule.
 - Linux CI passed in the same run; Tauri JS/core versions are aligned at 2.12.
 - Activity 2 (docs → test → implement → review enforcement) also done.
+
+## 2026-11-03 — Activity 3: publish the Windows installer
+
+- Extracted the Windows job into `.github/actions/windows-build` (toolchain,
+  pinned Indigo DLLs, sidecar build/stage, harness, smoke test, NSIS bundle).
+- `ci.yml` now calls the action and uploads the artifact; `release.yml` adds a
+  `windows-packages` job with the same gating as the Linux publish job and
+  attaches `target/release/bundle/nsis/*.exe` to the release. Manual runs keep
+  the workflow artifact.
+- Added `scripts/lib/release-workflow.test.mjs` (YAML structure tests) and made
+  the harness run every `scripts/lib/*.test.mjs`; 37 tests pass.
+- README and `docs/architecture.md` document the Windows release artifact.

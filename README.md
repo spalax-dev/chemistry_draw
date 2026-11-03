@@ -20,6 +20,22 @@ Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rus
 - Save as PNG / SVG with proper image rendering via the sidecar
 - Offline-first — runs entirely on your machine
 
+## Releases
+
+GitHub Releases publish four artifacts built from the same commit:
+
+| Platform             | Artifact                                      |
+| -------------------- | --------------------------------------------- |
+| Debian / Ubuntu      | `.deb`                                        |
+| Fedora / RHEL        | `.rpm`                                        |
+| Any Linux            | AppImage                                      |
+| Windows 10/11 x86_64 | NSIS `chemistry-draw_<version>_x64-setup.exe` |
+
+Windows builds ship without Imago/OpenCV, so image recognition is unavailable
+there. The Windows installer is built and smoke-tested by
+`.github/actions/windows-build`, the same action CI uses, and attached to the
+release by the Windows job in `.github/workflows/release.yml`.
+
 ## Development workflow
 
 Work follows a fixed order: **docs → test → implement → review**.
@@ -127,8 +143,11 @@ The installer lands in
 runtime DLLs under `lib/windows-x86_64/`; no Imago or OpenCV is packaged.
 
 CI builds and smoke-tests this installer on `windows-latest`
-(`.github/workflows/ci.yml`); the Windows sidecar must answer `/v2/info` with an
-empty `imago_versions` array and return 404 for `/v2/imago/uploads`.
+(`.github/workflows/ci.yml`) through the shared
+`.github/actions/windows-build` action; the Windows sidecar must answer
+`/v2/info` with an empty `imago_versions` array and return 404 for
+`/v2/imago/uploads`. `release.yml` runs the same action on a release and attaches
+the installer to the GitHub release next to the Linux packages.
 
 ### Build & run (Linux)
 

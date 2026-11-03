@@ -166,6 +166,12 @@ Windows: `pnpm tauri build --bundles nsis` produces an NSIS installer under
 Indigo/MSVC DLLs under `lib/windows-x86_64/`; `imago-worker` is not in
 `externalBin` and Imago is not packaged.
 
+The Windows build lives in `.github/actions/windows-build`: toolchain, DLL fetch,
+sidecar build, harness, smoke test and NSIS bundle. Both `ci.yml` (artifact) and
+`release.yml` (release asset) call it, so the published installer is the same
+one CI validated. A release publishes `.deb`, `.rpm`, AppImage and the Windows
+`.exe`.
+
 `scripts/build-packages.sh` serializes runs with `flock` because concurrent
 builds share the target volume and bundle directory.
 
