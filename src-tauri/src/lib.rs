@@ -31,6 +31,14 @@ fn log_dir(app: tauri::AppHandle) -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// Native runtime directory: built by `task libs` on Linux and by
+/// `scripts/fetch-windows-libs.ps1` on Windows.
+const NATIVE_LIB_DIR: &str = if cfg!(windows) {
+    "windows-x86_64"
+} else {
+    "linux-x86_64"
+};
+
 /// Remove ANSI SGR sequences (the sidecar's `tracing` output is colorized when
 /// it detects a terminal). Log files should stay readable.
 fn strip_ansi(input: &str) -> String {
@@ -131,12 +139,13 @@ pub fn run() {
             app.manage(sidecar_state.clone());
 
             // En dev: ruta absoluta desde el source tree
-            // En prod: resource_dir contiene las .so copiadas por el bundle
+            // En prod: resource_dir contiene las .so/.dll copiadas por el bundle
             #[cfg(debug_assertions)]
             let lib_path = {
                 let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
                 manifest_dir
-                    .join("lib/linux-x86_64")
+                    .join("lib")
+                    .join(NATIVE_LIB_DIR)
                     .to_string_lossy()
                     .to_string()
             };
@@ -147,19 +156,37 @@ pub fn run() {
                     .resource_dir()
                     .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
                 p.join("lib")
-                    .join("linux-x86_64")
+                    .join(NATIVE_LIB_DIR)
                     .to_string_lossy()
                     .to_string()
             };
-            println!("[chemistry-draw] LD_LIBRARY_PATH = {}", lib_path);
-            log::info!("[chemistry-draw] LD_LIBRARY_PATH = {lib_path}");
+            log::info!("[chemistry-draw] native library path = {lib_path}");
 
             let sidecar_cmd = app
                 .shell()
                 .sidecar("indigo-server")
                 .expect("Failed to create indigo-server sidecar command")
-                .env("INDIGO_PORT", port.to_string())
-                .env("LD_LIBRARY_PATH", lib_path);
+                .env("INDIGO_PORT", port.to_string());
+
+            // Windows resolves dependent DLLs from PATH; Linux uses LD_LIBRARY_PATH.
+            #[cfg(windows)]
+            let sidecar_cmd = {
+                let mut paths = vec![std::path::PathBuf::from(&lib_path)];
+                if let Some(existing) = std::env::var_os("PATH") {
+                    paths.extend(std::env::split_paths(&existing));
+                }
+                match std::env::join_paths(paths) {
+                    Ok(path) => sidecar_cmd.env("PATH", path),
+                    Err(e) => {
+                        log::warn!(
+                            "[chemistry-draw] could not prepend the native library path to PATH: {e}"
+                        );
+                        sidecar_cmd
+                    }
+                }
+            };
+            #[cfg(not(windows))]
+            let sidecar_cmd = sidecar_cmd.env("LD_LIBRARY_PATH", lib_path);
 
             tauri::async_runtime::spawn(async move {
                 match sidecar_cmd.spawn() {

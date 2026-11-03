@@ -5,6 +5,8 @@
 //! port so the host can tell the frontend where to connect. It never panics on
 //! a busy port.
 
+#[cfg(windows)]
+use std::io::IsTerminal;
 use std::net::SocketAddr;
 
 use tokio::net::TcpListener;
@@ -23,8 +25,9 @@ const PORT_SCAN_RANGE: u16 = 20;
 /// SIGKILLed the child would be orphaned and keep the port bound.
 ///
 /// The reliable signal is stdin: Tauri gives the sidecar a pipe, and the pipe
-/// closes when the parent process dies. Reparenting (ppid change) is only used
-/// as a fallback when stdin is not a pipe (e.g. a manual run from a terminal).
+/// closes when the parent process dies. On Unix, reparenting (ppid change) is
+/// used as a fallback when stdin is not a pipe (e.g. a manual run from a
+/// terminal, or `indigo-server < /dev/null`).
 ///
 /// Set `INDIGO_NO_PARENT_WATCHDOG=1` to disable it (e.g. when running the server
 /// as a standalone daemon that is supposed to outlive its launcher).
@@ -34,39 +37,53 @@ fn spawn_parent_watchdog() {
     }
 
     if stdin_is_pipe() {
-        // Parent death closes the pipe -> EOF -> we shut down.
-        std::thread::spawn(|| {
-            let mut buf = [0u8; 64];
-            let mut stdin = std::io::stdin();
-            loop {
-                match std::io::Read::read(&mut stdin, &mut buf) {
-                    Ok(0) | Err(_) => {
-                        eprintln!("stdin closed; parent exited, shutting down");
-                        std::process::exit(0);
-                    }
-                    Ok(_) => {} // Ignore any input; we only care about EOF.
-                }
+        spawn_stdin_watcher();
+    } else {
+        // Fallback for Unix runs without a piped stdin.
+        #[cfg(unix)]
+        {
+            let initial_parent = std::os::unix::process::parent_id();
+            if initial_parent == 1 {
+                return;
             }
-        });
-        return;
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let parent = std::os::unix::process::parent_id();
+                if parent != initial_parent {
+                    eprintln!(
+                        "parent process exited (ppid {initial_parent} -> {parent}); shutting down"
+                    );
+                    std::process::exit(0);
+                }
+            });
+        }
     }
+}
 
-    // Fallback for runs without a piped stdin.
-    let initial_parent = std::os::unix::process::parent_id();
-    if initial_parent == 1 {
-        return;
-    }
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(2));
-        let parent = std::os::unix::process::parent_id();
-        if parent != initial_parent {
-            eprintln!("parent process exited (ppid {initial_parent} -> {parent}); shutting down");
-            std::process::exit(0);
+/// Reads stdin until EOF; exits when the parent closes the pipe.
+fn spawn_stdin_watcher() {
+    // Parent death closes the pipe -> EOF -> we shut down.
+    std::thread::spawn(|| {
+        let mut buf = [0u8; 64];
+        let mut stdin = std::io::stdin();
+        loop {
+            match std::io::Read::read(&mut stdin, &mut buf) {
+                Ok(0) | Err(_) => {
+                    eprintln!("stdin closed; parent exited, shutting down");
+                    std::process::exit(0);
+                }
+                Ok(_) => {} // Ignore any input; we only care about EOF.
+            }
         }
     });
 }
 
-/// True when fd 0 is a FIFO/pipe (which is what Tauri hands to the sidecar).
+/// True when stdin is the pipe Tauri hands to the sidecar.
+///
+/// Unix keeps the original FIFO check: terminals, regular files and
+/// `/dev/null` must not be mistaken for a parent pipe, or a shell redirect
+/// would shut the server down immediately.
+#[cfg(unix)]
 fn stdin_is_pipe() -> bool {
     unsafe {
         let mut stat: libc::stat = std::mem::zeroed();
@@ -75,6 +92,14 @@ fn stdin_is_pipe() -> bool {
         }
         (stat.st_mode & libc::S_IFMT) == libc::S_IFIFO
     }
+}
+
+/// Windows has no `fstat`/`S_IFIFO` equivalent in `libc`; a non-terminal
+/// stdin is the pipe provided by Tauri (`IsTerminal` handles both consoles
+/// and redirected handles).
+#[cfg(windows)]
+fn stdin_is_pipe() -> bool {
+    !std::io::stdin().is_terminal()
 }
 
 async fn bind(preferred: u16) -> std::io::Result<(TcpListener, u16)> {

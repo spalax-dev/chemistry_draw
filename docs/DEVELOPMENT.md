@@ -2,6 +2,20 @@
 
 This project uses [Tauri](https://v2.tauri.app/), a Rust + Web frontend. For local development you need system libraries for GTK/WebKit/GLib. For packaging we use the Docker builder (`task packages`), so you don't need these if you only build RPM/DEB/AppImage via Docker.
 
+## Workflow
+
+Every change follows **docs → test → implement → review**:
+
+1. Update the docs (`README.md`, `docs/`) describing the behaviour.
+2. Add the failing test and confirm RED (`docs/testing.md`).
+3. Write the minimal implementation; confirm GREEN, then refactor.
+4. Review against `docs/verification.md` and `docs/CHECKPOINTS.md`.
+
+`node scripts/harness.mjs` is the gate: its block 3 runs
+`node --test scripts/lib/activity-policy.test.mjs` and validates the task
+`phase` order in `activities.json` with `scripts/lib/activity-policy.mjs`.
+Docs-only activities (`type: "docs"`) run docs → review and skip test/implement.
+
 ## Local development (`task dev` / `task run`)
 
 These are **development packages** (`-devel`/`-dev`) because `pkg-config` and headers are required to compile crates like `glib-sys`, `gtk-sys`, `webkit2gtk-sys`.
@@ -83,6 +97,41 @@ host-specific SONAME shims are required.
   `/opt/chemistry/libs/` inside the container and ship it in the package.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.
+
+## Windows 10/11 (x86_64)
+
+Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker
+builder. Imago and OpenCV are **not** built or shipped: image recognition is
+unavailable and Ketcher disables **Recognize Molecule** (`imago_versions` is an
+empty array).
+
+Prerequisites:
+
+- Visual Studio Build Tools with **Desktop development with C++** (MSVC x64 +
+  Windows SDK)
+- Rust stable MSVC toolchain, Node.js ≥ 22, pnpm and PowerShell 5.1+
+- WebView2 Runtime (included in Windows 11; the installer embeds the
+  bootstrapper for Windows 10)
+
+```powershell
+# From a VS x64 developer shell (dumpbin/lib must be on PATH):
+pwsh scripts/fetch-windows-libs.ps1
+
+$env:PATH = "$PWD\src-tauri\lib\windows-x86_64;$env:PATH"
+pnpm install
+cargo build --release -p indigo-server --bin indigo-server
+Copy-Item target\release\indigo-server.exe `
+  target\release\indigo-server-x86_64-pc-windows-msvc.exe
+node scripts/harness.mjs
+pnpm tauri build --bundles nsis
+```
+
+`scripts/fetch-windows-libs.ps1` downloads the pinned archive, verifies its
+SHA-256, extracts only the runtime DLLs into
+`src-tauri/lib/windows-x86_64/` (gitignored) and generates
+`indigo.lib` / `indigo-renderer.lib` from the exported `indigo*` C symbols.
+CI runs it under `ilammy/msvc-dev-cmd@v1`; packaging the installers is part of
+the Windows CI job.
 
 ## Supported distros
 

@@ -16,16 +16,36 @@
    (`LD_LIBRARY_PATH` must point at `src-tauri/lib/linux-x86_64`; the harness
    sets it for you).
 8. Review `docs/CHECKPOINTS.md` — mark the applicable boxes.
+9. `node --test scripts/lib/activity-policy.test.mjs` — policy tests green.
+   The harness runs the same command in block 3 and then validates
+   `activities.json` with `scripts/lib/activity-policy.mjs`, including
+   sequential status (no `in_progress`/`done` task while an earlier task is not
+   `done`).
 
 The one-shot equivalent is `pnpm run check` (typecheck + ESLint + Prettier) plus
 the Rust commands above; `node scripts/harness.mjs` runs everything.
 
 Packaging or dependency changes additionally require:
 
-9. `task packages` — builds `.deb`, `.rpm` and the AppImage.
-10. `dpkg-deb -I dist-packages/*.deb` and `rpm -qpR dist-packages/*.rpm` —
+10. `task packages` — builds `.deb`, `.rpm` and the AppImage.
+11. `dpkg-deb -I dist-packages/*.deb` and `rpm -qpR dist-packages/*.rpm` —
     dependency metadata sane.
-11. `ldd` on the sidecar inside the package — no `not found`, no `libstdc++`.
+12. `ldd` on the sidecar inside the package — no `not found`, no `libstdc++`.
+
+Windows changes are validated by the `windows` job in
+`.github/workflows/ci.yml` (there is no Windows host in local development):
+
+13. `pwsh scripts/fetch-windows-libs.ps1` succeeds and creates the five DLLs
+    plus `indigo.lib` / `indigo-renderer.lib`.
+14. `node scripts/harness.mjs` passes on Windows (ShellCheck is skipped: the
+    scripts are POSIX-only).
+15. Sidecar smoke test: `/v2/info` reports `"imago_versions": []`,
+    `/v2/health` reports `imago_worker.found = false`, and
+    `POST /v2/imago/uploads` returns 404.
+16. `pnpm tauri build --bundles nsis` produces
+    `target/release/bundle/nsis/*.exe`, uploaded by CI.
+17. `cargo check -p indigo-server --all-targets --target x86_64-pc-windows-msvc`
+    catches `cfg(windows)` mistakes without linking the DLLs.
 
 ---
 
@@ -48,7 +68,8 @@ Packaging or dependency changes additionally require:
 
 - Draw a molecule, run Layout and Clean: the structure stays valid.
 - Save as PNG/SVG: the file is produced and non-empty.
-- Recognize (Imago): upload → poll reaches `SUCCESS` or a clear error.
+- Recognize (Imago, Linux): upload → poll reaches `SUCCESS` or a clear error.
+- Windows: Recognize Molecule is disabled and `/v2/imago/uploads` is absent.
 
 ### Packaging
 
@@ -70,6 +91,10 @@ The reviewer agent must verify:
 - [ ] Rust formatting clean (`cargo fmt --all --check`)
 - [ ] Clippy clean (`cargo clippy --workspace --all-targets -- -D warnings`)
 - [ ] Sidecar tests green (`cargo test -p indigo-server`)
+- [ ] Activity tasks are phased docs → test → implement → review, in order, and
+      `node --test scripts/lib/activity-policy.test.mjs` passes
+- [ ] Sequential status: no task is `in_progress` or `done` while an earlier
+      task is not `done`
 - [ ] New behaviour has a test that would fail without the change
 - [ ] `docs/architecture.md` / `docs/conventions.md` respected
 - [ ] No debug prints, no vendored binaries, no context-less TODOs

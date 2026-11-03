@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rust backend + React/TypeScript frontend) wrapping [Ketcher](https://github.com/epam/ketcher) (© EPAM Systems, Apache License 2.0) for Linux.
+Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rust backend + React/TypeScript frontend) wrapping [Ketcher](https://github.com/epam/ketcher) (© EPAM Systems, Apache License 2.0) for Linux and Windows.
 
 > Not an official EPAM product. Community-maintained packaging without affiliation or official support.
 
@@ -14,10 +14,27 @@ Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rus
 
 - Full Ketcher editor with molecule, reaction and macromolecule drawing
 - Native Indigo backend via Rust sidecar for faster cheminformatics (replaces WASM)
-- Basic image-to-structure recognition powered by EPAM Imago v2
+- Basic image-to-structure recognition powered by EPAM Imago v2 (**Linux only**;
+  Windows builds ship without Imago and show Recognize Molecule disabled)
 - **Native file save dialog** for all formats.
 - Save as PNG / SVG with proper image rendering via the sidecar
 - Offline-first — runs entirely on your machine
+
+## Development workflow
+
+Work follows a fixed order: **docs → test → implement → review**.
+
+1. **Docs** — update `README.md` and `docs/` with the behaviour before writing
+   code.
+2. **Test** — add the failing test and confirm RED.
+3. **Implement** — minimal code to make it pass; confirm GREEN, then refactor.
+4. **Review** — verify against `docs/verification.md` and
+   `docs/CHECKPOINTS.md`.
+
+`node scripts/harness.mjs` enforces the phase order declared in
+`activities.json` and runs the policy tests. See
+[docs/testing.md](docs/testing.md) for the test-first rules and
+[docs/conventions.md](docs/conventions.md) for the task schema.
 
 ## Building from source
 
@@ -31,10 +48,10 @@ Desktop chemical structure editor built with [Tauri](https://v2.tauri.app/) (Rus
 
 #### Native library building (Indigo + Imago + OpenCV)
 
-The app bundles native libraries compiled against **glibc ≥ 2.35**. These are pre-built and committed to the repo, but you can rebuild them from source:
+The app bundles native libraries compiled against **glibc ≥ 2.36**. They are not committed; `task libs` builds them into `src-tauri/lib/linux-x86_64/` (gitignored), and you can rebuild them from source:
 
 ```bash
-task build-libs   # requires Docker (Ubuntu 22.04 image)
+task libs   # requires Docker (Debian 12 builder image)
 ```
 
 On Arch Linux, install build dependencies:
@@ -57,10 +74,63 @@ sudo apt install build-essential cmake git \
 
 #### Runtime requirements
 
-- **Linux** (x86_64) with **glibc ≥ 2.35** (Ubuntu 22.04+, Debian 12+, Arch)
+- **Linux** (x86_64) with **glibc ≥ 2.36** (Debian 12+, Ubuntu 24.04+, Arch)
 - **FUSE** required to run AppImage directly, or use `APPIMAGE_EXTRACT_AND_RUN=1`
 
-### Build & run
+### Windows 10/11 (x86_64)
+
+Windows builds use the pinned EPAM Indigo **1.46.0** DLLs. Imago and OpenCV are
+not included: image recognition is unavailable and Ketcher disables the
+**Recognize Molecule** action.
+
+#### Prerequisites
+
+- Windows 10/11 x86_64
+- [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+  with the **Desktop development with C++** workload (MSVC x64 + Windows SDK)
+- Rust stable with the MSVC toolchain (the default on Windows:
+  `x86_64-pc-windows-msvc`)
+- Node.js ≥ 22 and [pnpm](https://pnpm.io/)
+- PowerShell 5.1+ (`pwsh` or `powershell`) to run the library fetch script
+- WebView2 Runtime (preinstalled on Windows 11; the installer embeds the
+  bootstrapper for Windows 10)
+
+#### Build & run
+
+Run these commands from a **VS x64 Native Tools Command Prompt** (or any shell
+after `ilammy/msvc-dev-cmd`), because `dumpbin`/`lib` must be on `PATH`:
+
+```powershell
+# One-time: download Indigo 1.46.0, verify SHA-256, extract the DLLs and
+# generate indigo.lib / indigo-renderer.lib (all gitignored).
+pwsh scripts/fetch-windows-libs.ps1
+
+# Add the DLLs to PATH for local runs.
+$env:PATH = "$PWD\src-tauri\lib\windows-x86_64;$env:PATH"
+
+pnpm install
+cargo build --release -p indigo-server --bin indigo-server
+Copy-Item target\release\indigo-server.exe `
+  target\release\indigo-server-x86_64-pc-windows-msvc.exe
+
+# Tests and lints
+node scripts/harness.mjs
+
+# Run the app or produce the NSIS installer
+pnpm tauri dev
+pnpm tauri build --bundles nsis
+```
+
+The installer lands in
+`target/release/bundle/nsis/chemistry-draw_<version>_x64-setup.exe`. It bundles
+`indigo-server.exe` plus `indigo.dll`, `indigo-renderer.dll` and the MSVC
+runtime DLLs under `lib/windows-x86_64/`; no Imago or OpenCV is packaged.
+
+CI builds and smoke-tests this installer on `windows-latest`
+(`.github/workflows/ci.yml`); the Windows sidecar must answer `/v2/info` with an
+empty `imago_versions` array and return 404 for `/v2/imago/uploads`.
+
+### Build & run (Linux)
 
 ```bash
 # Install frontend dependencies
@@ -73,7 +143,7 @@ task dev
 task test
 
 # Build production .deb package
-task package
+task packages
 
 # Build AppImage
 task appimage
@@ -83,7 +153,7 @@ task clean
 ```
 
 _Both `.deb` and AppImage packages bundle all shared library dependencies (OpenCV, image codecs, etc.)
-so they work on Debian 12 and Ubuntu 22.04+ without extra system packages._
+so they work on Debian 12 and Ubuntu 24.04+ without extra system packages._
 
 ## License
 

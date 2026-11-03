@@ -1,0 +1,3 @@
+# Keep line endings LF on every platform: rustfmt and Prettier check them,
+# and the Windows CI harness must not fail on CRLF checkout artifacts.
+* text=auto eol=lf

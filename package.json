@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check"
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check",
+    "test:policy": "node --test scripts/lib/activity-policy.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11",

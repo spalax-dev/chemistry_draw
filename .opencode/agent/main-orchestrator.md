@@ -43,8 +43,11 @@ for coordinating complex workflows between implementer and reviewer agents.
   - Relevant context from previous phases
   - Expected output format
   - Any constraints or requirements
-  - **Test-first instruction**: every implementer writes the failing test before
-    the implementation (RED → GREEN), per `docs/testing.md`
+  - **Docs → test → implement → review instruction**: every implementer updates
+    the docs first, then writes the failing test before the implementation
+    (RED → GREEN), then reports both, per `docs/testing.md`
+  - **Phase field**: every delegated task carries `phase`
+    (`docs | test | implement | review`) and the task list is ordered
 
 ### Phase 3: Monitoring & Aggregation
 
@@ -138,15 +141,31 @@ Each activity in `activities.json` must follow this schema:
   "tasks": [
     {
       "id": "a",
-      "description": "Write the failing test in sidecar/src/tests/health.rs",
+      "phase": "docs",
+      "description": "Document GET /v2/health contract and verification steps",
       "status": "pending",
       "agent": "implementer"
     },
     {
       "id": "b",
+      "phase": "test",
+      "description": "Write the failing test in sidecar/src/tests/health.rs",
+      "status": "pending",
+      "agent": "implementer"
+    },
+    {
+      "id": "c",
+      "phase": "implement",
       "description": "Implement the handler and register the route",
       "status": "pending",
       "agent": "implementer"
+    },
+    {
+      "id": "d",
+      "phase": "review",
+      "description": "Review docs, RED→GREEN evidence and harness output",
+      "status": "pending",
+      "agent": "reviewer"
     }
   ],
   "status": "pending"
@@ -161,11 +180,14 @@ Fields:
 - `title`: human-readable title
 - `description`: brief explanation of what the activity does
 - `acceptance`: array of concrete criteria to consider the activity done
-- `tasks`: array of delegable sub-tasks (can be parallelized across agents)
+- `tasks`: array of delegable sub-tasks in execution order (can be parallelized
+  across agents only within a phase)
   - `id`: single letter (a, b, c...)
+  - `phase`: `docs` | `test` | `implement` | `review`
   - `description`: what needs to be done
   - `status`: `pending` | `in_progress` | `done` | `blocked`
-  - `agent`: which agent type should handle it (`implementer` | `reviewer`)
+  - `agent`: which agent type should handle it (`implementer` | `reviewer`;
+    `review` tasks must use `reviewer`)
 - `status`: `pending` | `in_progress` | `done` | `blocked`
 
 ## Sub-Agent Templates
@@ -177,11 +199,16 @@ When delegating, instruct sub-agents to read their role definition:
 
 ## Hard Rules
 
+- **Mandatory order: docs → test → implement → review.** Docs tasks precede
+  tests, tests precede implementation, and `review` is last. The harness
+  enforces the phase order in `activities.json`
+  (`scripts/lib/activity-policy.mjs`).
 - Only one activity at a time
 - Never declare done without a green harness (`node scripts/harness.mjs`)
-- Enforce test-first: when decomposing an activity, a tests task precedes its
-  implementation task, and implementers write the failing test before the code
-  (`docs/testing.md`)
+- Enforce the order: when decomposing an activity, create the docs task first,
+  then the tests task, then implementation; implementers update the docs and
+  write the failing test before the code (`docs/testing.md`)
+- Docs-only activities (`type: "docs"`) declare only `docs` → `review`
 - Document all work in `progress/current.md`
 - Keep `activities.json` updated
 - Read `docs/conventions.md` and `docs/architecture.md` before implementing

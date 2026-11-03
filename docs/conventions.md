@@ -26,7 +26,37 @@ One formatter and one linter per language, all enforced by
 
 ---
 
-## 1. Rust style
+## 1. Delivery order: docs → test → implement → review
+
+Every activity task declares `phase` in `activities.json`:
+
+| Phase       | Purpose                                       | Agent         |
+| ----------- | --------------------------------------------- | ------------- |
+| `docs`      | Update README/docs describing the contract    | `implementer` |
+| `test`      | Add the failing test; confirm RED             | `implementer` |
+| `implement` | Minimal code to pass; confirm GREEN; refactor | `implementer` |
+| `review`    | Verify docs, test, code and green harness     | `reviewer`    |
+
+Rules:
+
+- Phases are non-decreasing in task order:
+  `docs` (0) → `test` (1) → `implement` (2) → `review` (3). Several
+  `implement` tasks may follow each other, but a phase may not move backwards.
+- Non-`docs` activities must contain **all four** phases.
+- Docs-only activities (`type: "docs"`) contain `docs` → `review` and no
+  `test`/`implement` tasks.
+- `review` tasks use the `reviewer` agent; every other phase uses
+  `implementer`.
+- `done` activities have only `done` tasks; `in_progress` activities have
+  exactly one `in_progress` task.
+- A task may be `in_progress` or `done` only when every earlier task in the
+  activity is `done` (sequential status, not just phase order).
+- `node scripts/harness.mjs` runs `scripts/lib/activity-policy.mjs` and its
+  tests; any violation fails the harness.
+
+---
+
+## 2. Rust style
 
 - Edition 2021, formatted with `rustfmt` defaults (`cargo fmt --all`).
 - `cargo clippy --workspace --all-targets` should stay clean; do not add new
@@ -47,7 +77,7 @@ One formatter and one linter per language, all enforced by
 
 ---
 
-## 2. TypeScript style
+## 3. TypeScript style
 
 - TypeScript `strict` is on; `noUnusedLocals`/`noUnusedParameters` are errors.
 - 2-space indentation, double quotes, semicolons (as in `src/App.tsx`).
@@ -60,7 +90,7 @@ One formatter and one linter per language, all enforced by
 
 ---
 
-## 3. Naming
+## 4. Naming
 
 | Element      | Convention         | Example                            |
 | ------------ | ------------------ | ---------------------------------- |
@@ -74,7 +104,7 @@ One formatter and one linter per language, all enforced by
 
 ---
 
-## 4. Project layout
+## 5. Project layout
 
 ```text
 src/                     React + Ketcher integration, logging
@@ -100,7 +130,7 @@ Rules:
 
 ---
 
-## 5. Commits and releases
+## 6. Commits and releases
 
 - **Conventional Commits** are mandatory: `feat:`, `fix:`, `chore:`, `docs:`,
   `refactor:`, `perf:`. release-please builds the changelog and version from
@@ -111,7 +141,7 @@ Rules:
 
 ---
 
-## 6. Sidecar contracts
+## 7. Sidecar contracts
 
 - Every handler logs its route at `info`.
 - Status codes: 400 invalid input, 404 unknown id, 500 backend failure.
@@ -121,7 +151,7 @@ Rules:
 
 ---
 
-## 7. Native libraries and packaging
+## 8. Native libraries and packaging
 
 - Never vendor `.so` files. `task libs` / the Docker builder generate them.
 - Never ship `libstdc++` or `libgcc_s`.

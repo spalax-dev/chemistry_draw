@@ -2,6 +2,14 @@
 
 > What "good work" means in this project.
 
+## Delivery order
+
+Changes land as **docs → test → implement → review**: documentation defines the
+contract, a failing test proves the gap, the minimal implementation closes it,
+and the reviewer verifies the result. `node scripts/harness.mjs` enforces the
+task phases declared in `activities.json` (docs-only activities run
+docs → review).
+
 ---
 
 ## 1. Project Overview
@@ -14,15 +22,15 @@ Instead of Ketcher's WASM backend, the app ships a **native REST sidecar** that
 implements the Indigo v2 HTTP API on top of EPAM's C++ libraries. This is a
 community packaging: it is not an official EPAM product.
 
-| Piece             | Technology                                                |
-| ----------------- | --------------------------------------------------------- |
-| Desktop shell     | Tauri v2 (Rust)                                           |
-| Frontend          | React 18 + TypeScript + Vite                              |
-| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §9) |
-| Chemistry backend | `indigo-server` sidecar: Rust + axum                      |
-| Native chemistry  | `libindigo`, `libindigo-renderer`, `libimago` (FFI)       |
-| OCR worker        | `imago-worker` child process                              |
-| Packaging         | Docker builder (Debian 12) → `.deb`, `.rpm`, AppImage     |
+| Piece             | Technology                                                      |
+| ----------------- | --------------------------------------------------------------- |
+| Desktop shell     | Tauri v2 (Rust)                                                 |
+| Frontend          | React 18 + TypeScript + Vite                                    |
+| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §9)       |
+| Chemistry backend | `indigo-server` sidecar: Rust + axum                            |
+| Native chemistry  | `libindigo`, `libindigo-renderer`, `libimago` (FFI)             |
+| OCR worker        | `imago-worker` child process (Linux only)                       |
+| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS |
 
 ---
 
@@ -47,6 +55,11 @@ community packaging: it is not an official EPAM product.
 │                               │   │ molfile                      │
 └───────────────────────────────┘   └──────────────────────────────┘
 ```
+
+Imago and `imago-worker` exist in Linux builds only. On Windows the sidecar
+links just `indigo.dll` / `indigo-renderer.dll`, `ffi::imago` is a stub, the
+Imago routes are not registered and `imago_versions` is empty, so Ketcher
+disables image recognition.
 
 The Tauri host (`src-tauri/src/lib.rs`) does **no chemistry**: it picks a free
 port, spawns `indigo-server`, tracks the port it reports, forwards its logs and
@@ -105,8 +118,8 @@ Pattern rules:
 | POST   | `/v2/indigo/convert`, `aromatize`, `dearomatize`, `layout`, `clean` | Indigo                            |
 | POST   | `/v2/indigo/render`                                                 | Indigo Renderer                   |
 | POST   | `/v2/indigo/calculate`, `check`, `calculate_cip`, `automap`         | Indigo                            |
-| POST   | `/v2/imago/uploads`                                                 | Imago (creates a job)             |
-| GET    | `/v2/imago/uploads/{id}`                                            | job status                        |
+| POST   | `/v2/imago/uploads`                                                 | Imago (creates a job, Linux only) |
+| GET    | `/v2/imago/uploads/{id}`                                            | job status (Linux only)           |
 
 Errors are `AppError` → `{ "error": "..." }` with 400/404/500. Ketcher's
 upload-and-poll contract is described in `sidecar/src/job/mod.rs`.
@@ -115,23 +128,31 @@ upload-and-poll contract is described in `sidecar/src/job/mod.rs`.
 
 ## 6. Native libraries
 
-Indigo, Indigo Renderer and Imago are **not vendored in git**. They are built
-in the Docker builder and copied by `task libs` into
-`src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what packaging
-ships.
+Indigo, Indigo Renderer and Imago are **not vendored in git**.
 
-- The build uses a **minimal OpenCV** (core, imgproc, imgcodecs; PNG/JPEG only)
-  compiled into the builder.
-- `libstdc++` and `libgcc_s` are **never** shipped: the target distro runtime is
-  used.
-- The real support floor is **glibc 2.36** (`arc4random@GLIBC_2.36` in
-  `libindigo.so`): Debian 12+, Ubuntu 24.04+, current Fedora.
+- **Linux**: built in the Docker builder and copied by `task libs` into
+  `src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what
+  packaging ships. The build uses a **minimal OpenCV** (core, imgproc,
+  imgcodecs; PNG/JPEG only) compiled into the builder. `libstdc++` and
+  `libgcc_s` are **never** shipped: the target distro runtime is used. The real
+  support floor is **glibc 2.36** (`arc4random@GLIBC_2.36` in `libindigo.so`):
+  Debian 12+, Ubuntu 24.04+, current Fedora.
+- **Windows**: `scripts/fetch-windows-libs.ps1` downloads the pinned EPAM
+  Indigo **1.46.0** x86_64 archive, verifies its SHA-256, extracts
+  `indigo.dll`, `indigo-renderer.dll`, `msvcp140.dll`, `vcruntime140.dll` and
+  `vcruntime140_1.dll` into `src-tauri/lib/windows-x86_64/` (gitignored) and
+  generates the MSVC import libraries `indigo.lib` / `indigo-renderer.lib`
+  from the `indigo*` C exports. Imago and OpenCV are intentionally absent.
 
 ---
 
 ## 7. Packaging
 
-`task packages` runs everything inside `chemistry-builder` and writes to
+Platform settings live in `src-tauri/tauri.linux.conf.json` and
+`src-tauri/tauri.windows.conf.json`; `tauri.conf.json` only holds what is
+common (Tauri merges the platform file at build time).
+
+Linux: `task packages` runs everything inside `chemistry-builder` and writes to
 `dist-packages/`:
 
 - `.deb` / `.rpm`: Tauri bundler (`tauri build --bundles deb,rpm`).
@@ -139,6 +160,11 @@ ships.
   with `appimagetool`. Tauri's linuxdeploy bundler is deliberately not used
   because it copies the whole ELF closure (GTK/WebKit/Wayland), which breaks EGL
   on other distros.
+
+Windows: `pnpm tauri build --bundles nsis` produces an NSIS installer under
+`target/release/bundle/nsis/`. It bundles `indigo-server.exe` plus the five
+Indigo/MSVC DLLs under `lib/windows-x86_64/`; `imago-worker` is not in
+`externalBin` and Imago is not packaged.
 
 `scripts/build-packages.sh` serializes runs with `flock` because concurrent
 builds share the target volume and bundle directory.
@@ -177,3 +203,4 @@ published a release with the fix yet. Removal procedure:
 - Shipping prebuilt binaries in git.
 - Reimplementing Ketcher's editor UI.
 - Supporting glibc < 2.36 or webkit2gtk < 4.1.
+- Shipping Imago/OpenCV or image recognition on Windows.

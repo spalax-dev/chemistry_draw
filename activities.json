@@ -1,5 +1,123 @@
 {
   "project": "chemistry-draw",
   "description": "Tauri desktop wrapper of Ketcher with a native Indigo sidecar",
-  "activities": []
+  "activities": [
+    {
+      "id": 1,
+      "type": "feat",
+      "name": "windows-build-without-imago",
+      "title": "Add a Windows x86_64 build without Imago",
+      "description": "Build and package Chemistry Draw for Windows using native Indigo, with Imago compiled out and image recognition disabled.",
+      "acceptance": [
+        "Windows CI builds an NSIS installer on windows-latest and uploads it as an artifact",
+        "The Windows sidecar links native Indigo/Indigo Renderer DLLs and starts successfully; /v2/info returns an empty imago_versions array",
+        "Imago routes and worker are absent on Windows; /v2/imago/uploads returns 404",
+        "Linux build and harness remain green",
+        "README/docs describe Windows prerequisites, build command, and the no-Imago limitation"
+      ],
+      "tasks": [
+        {
+          "id": "a",
+          "phase": "docs",
+          "description": "Document Windows build constraints, pinned Indigo 1.46.0, no-Imago behavior and verification steps",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "b",
+          "phase": "test",
+          "description": "Add Windows-only tests for empty imago_versions, absent Imago POST/GET routes, health and stub errors; compile-check the Windows target",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "c",
+          "phase": "implement",
+          "description": "Add pinned Windows Indigo fetch/import-lib script and gitignore/lib layout",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "d",
+          "phase": "implement",
+          "description": "Make the sidecar cross-platform: target-specific build.rs, Windows Imago stub/gating, portable parent watchdog",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "e",
+          "phase": "implement",
+          "description": "Split Tauri platform configs and add Windows bundle metadata, resources, externalBin and host DLL PATH handling",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "f",
+          "phase": "implement",
+          "description": "Add Windows CI job: harness, sidecar smoke test, NSIS build and artifact upload",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "g",
+          "phase": "implement",
+          "description": "Run the Windows CI job on a pushed commit, verify the NSIS artifact and smoke tests, and fix any Windows-only failures",
+          "status": "pending",
+          "agent": "implementer"
+        },
+        {
+          "id": "h",
+          "phase": "review",
+          "description": "Final review of the Windows build and CI artifact against acceptance criteria",
+          "status": "pending",
+          "agent": "reviewer"
+        }
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": 2,
+      "type": "chore",
+      "name": "enforce-docs-test-implement",
+      "title": "Enforce docs → test → implement → review in the harness",
+      "description": "Require every activity to declare docs, test, implement and review phases in order; add policy validation and tests.",
+      "acceptance": [
+        "The harness rejects activities missing docs/test/implement/review or with phases out of order",
+        "Policy tests cover valid, missing and misordered phases",
+        "AGENTS.md, README, docs/testing.md, docs/conventions.md, docs/verification.md, docs/CHECKPOINTS.md, docs/DEVELOPMENT.md and agent prompts document the order",
+        "Harness and policy tests are green"
+      ],
+      "tasks": [
+        {
+          "id": "a",
+          "phase": "docs",
+          "description": "Update AGENTS.md, README, docs/testing.md, docs/conventions.md, docs/verification.md, docs/CHECKPOINTS.md, docs/DEVELOPMENT.md, docs/architecture.md and agent prompts for docs -> test -> implement -> review",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "b",
+          "phase": "test",
+          "description": "Add scripts/lib/activity-policy.test.mjs covering valid, missing and misordered phases; confirm RED",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "c",
+          "phase": "implement",
+          "description": "Add scripts/lib/activity-policy.mjs, integrate it into scripts/harness.mjs, and update the activity task schema",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "d",
+          "phase": "review",
+          "description": "Review the enforcement, docs and harness output against acceptance criteria",
+          "status": "in_progress",
+          "agent": "reviewer"
+        }
+      ],
+      "status": "in_progress"
+    }
+  ]
 }

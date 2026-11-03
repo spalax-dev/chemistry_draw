@@ -5,7 +5,38 @@
 
 ---
 
-## 0. Core principle: the mutation mindset
+## 0. Delivery order: docs → test → implement → review
+
+Every change follows this order; a test is never written before the docs that
+define the contract, and implementation never starts before a failing test
+exists.
+
+1. **Docs** — real work, not an afterthought: update `README.md`,
+   `docs/architecture.md`, `docs/conventions.md`, `docs/verification.md` or
+   `docs/CHECKPOINTS.md` as the change requires, and describe the expected
+   behaviour and how it will be verified.
+2. **Test** — add the failing test and confirm RED (section 2).
+3. **Implement** — write the minimal code to make it pass, confirm GREEN, then
+   refactor.
+4. **Review** — the reviewer checks the docs, the RED→GREEN evidence, the phase
+   order and the harness (`docs/verification.md`).
+
+Enforcement:
+
+- Every task in `activities.json` declares `phase`:
+  `docs | test | implement | review`.
+- `scripts/lib/activity-policy.mjs` validates the phase order
+  (non-decreasing) and the agent mapping. `node scripts/harness.mjs` runs it
+  and `scripts/lib/activity-policy.test.mjs` before allowing work to proceed.
+- **Docs-only exception**: an activity with `type: "docs"` runs `docs` →
+  `review` and must not contain `test` or `implement` tasks.
+
+The reviewer rejects work with no docs task, no failing test before the
+implementation, or phases out of order.
+
+---
+
+## 1. Core principle: the mutation mindset
 
 Before writing a test, ask: _"If this function were broken — deleted, returned
 the wrong value, or crashed on input X — would this test fail?"_
@@ -14,10 +45,10 @@ If the test would still pass, it has no value. Rewrite it or delete it.
 
 ---
 
-## 1. Test-first (Red-Green-Refactor)
+## 2. Test-first (Red-Green-Refactor)
 
-Backend behaviour is written **test-first**. The test is the contract; the code
-is what makes it pass.
+Backend behaviour is written **test-first**, after the docs task. The test is
+the contract; the code is what makes it pass.
 
 1. **Write the test** in `src-tauri/sidecar/src/tests/` — it must fail on the
    current code (or fail to compile because the symbol does not exist yet).
@@ -29,13 +60,14 @@ is what makes it pass.
 
 Enforcement:
 
-- A task is `in_progress` only after its tests exist.
+- A task may be `in_progress` or `done` only when every earlier task in the
+  activity is `done` (docs → test → implement → review).
 - The reviewer asks: _"would this test have failed before the implementation?"_
   If not, the test was not written first (or is too weak) — reject.
 
 ---
 
-## 2. Structure
+## 3. Structure
 
 - **AAA**: Arrange (build the request/state) → Act (call once) → Assert (verify
   the observable outcome).
@@ -45,7 +77,7 @@ Enforcement:
 
 ---
 
-## 3. Sidecar test patterns
+## 4. Sidecar test patterns
 
 Tests live in `src-tauri/sidecar/src/tests/`, one module per domain, registered
 in `tests/mod.rs`.
@@ -75,11 +107,15 @@ Rules:
   that is the point.
 - Imago integration tests may need fixtures; keep them deterministic and skip
   cleanly when no fixture is available.
+- Platform-specific behaviour is tested with `#[cfg(windows)]` modules
+  (`tests/windows_no_imago.rs` asserts the empty `imago_versions` list and the
+  absent Imago routes). They compile locally via cross-target `cargo check` but
+  only run in Windows CI.
 - Never test private state (`obj.field`); test behaviour.
 
 ---
 
-## 4. Frontend
+## 5. Frontend
 
 There is no JS test runner configured yet. Frontend correctness is currently
 verified by `pnpm exec tsc --noEmit`, `pnpm build`, and the manual checklist in
@@ -90,7 +126,7 @@ it to the harness before writing tests that depend on it.
 
 ---
 
-## 5. Assertion quality
+## 6. Assertion quality
 
 ### Strong assertions
 
@@ -113,7 +149,7 @@ it to the harness before writing tests that depend on it.
 
 ---
 
-## 6. Commands
+## 7. Commands
 
 ```bash
 # Full harness (typecheck, lint, format, build, clippy, tests)

@@ -1,3 +1,16 @@
+//! One-shot Imago OCR worker: reads an image path, writes a molfile to stdout.
+//!
+//! On Windows there is no Imago/OpenCV, so this binary is a stub that exits
+//! with a clear error. It is never bundled or listed in `externalBin` there;
+//! the stub only exists so `cargo build --all-targets` keeps working.
+
+#[cfg(windows)]
+fn main() {
+    eprintln!("imago-worker is not available in the Windows build: Imago is disabled");
+    std::process::exit(1);
+}
+
+#[cfg(not(windows))]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {

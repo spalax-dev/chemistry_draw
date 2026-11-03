@@ -6,12 +6,15 @@ mod calculate;
 mod check;
 mod convert;
 mod health;
+#[cfg(not(windows))]
 mod imago_integration;
 mod info;
 mod layout_clean;
 mod render;
 mod stereochemistry;
 mod structural_errors;
+#[cfg(windows)]
+mod windows_no_imago;
 
 use axum::{
     body::Body,

@@ -7,7 +7,9 @@
 ## C1 — Harness is Complete
 
 - [ ] Base files exist: `AGENTS.md`, `scripts/harness.mjs`,
-      `scripts/build-harness.mjs`, `activities.json`, `progress/current.md`.
+      `scripts/build-harness.mjs`, `scripts/lib/activity-policy.mjs`,
+      `scripts/lib/activity-policy.test.mjs`, `activities.json`,
+      `progress/current.md`.
 - [ ] Docs exist: `docs/architecture.md`, `docs/conventions.md`,
       `docs/verification.md`, `docs/testing.md`.
 - [ ] `node scripts/harness.mjs` exits with code 0.
@@ -15,6 +17,14 @@
 ## C2 — State is Coherent
 
 - [ ] At most one activity in `in_progress` in `activities.json`.
+- [ ] Every task declares a valid `phase` (`docs`, `test`, `implement`,
+      `review`) and phases are non-decreasing in task order.
+- [ ] Non-`docs` activities contain docs, test, implement and review phases;
+      `docs` activities contain docs + review and no test/implement tasks.
+- [ ] `review` tasks use the `reviewer` agent; docs/test/implement use
+      `implementer`.
+- [ ] Every `done` activity has all tasks done; every `in_progress` activity
+      has exactly one `in_progress` task.
 - [ ] Every `done` activity has associated passing tests (or, for docs/chore,
       the relevant harness blocks).
 - [ ] `progress/current.md` is empty or describes the active session (no
@@ -45,8 +55,34 @@
 - [ ] `progress/history.md` has an entry for the last session.
 - [ ] The last worked activity reflects its correct state.
 
+## C6 — Windows Build Without Imago
+
+- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.46.0, verifies SHA-256 and
+      never vendors DLLs/`.lib` files.
+- [ ] Windows CI (`windows` job) builds and smoke-tests the sidecar: empty
+      `imago_versions`, `imago_worker.found = false`, `/v2/imago/uploads` 404.
+- [ ] NSIS installer is uploaded as an artifact.
+- [ ] Windows docs state the no-Imago limitation and the build commands.
+- [ ] Linux harness and packaging metadata remain green.
+
+## C7 — Docs → Test → Implement → Review
+
+- [ ] Every activity task carries a `phase` in
+      `docs | test | implement | review`.
+- [ ] Non-`docs` activities declare docs → test → implement → review in that
+      order; `docs` activities declare docs → review only.
+- [ ] New behaviour has a failing-test (RED) evidence path before its
+      implementation, per `docs/testing.md`.
+- [ ] No task is `in_progress` or `done` while an earlier task is not `done`
+      (sequential status enforcement).
+- [ ] `node --test scripts/lib/activity-policy.test.mjs` passes, including
+      missing-phase, wrong-order, docs-only, sequential-status and status
+      cases.
+- [ ] The harness block 3 runs the policy tests and rejects an invalid
+      `activities.json`.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C5 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C7 remain empty.

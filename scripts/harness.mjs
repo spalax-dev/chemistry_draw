@@ -7,7 +7,9 @@
  * Checks, in order:
  *  1. Environment (rustc/cargo, node/pnpm)
  *  2. Base harness files exist (AGENTS.md, activities.json, progress/, docs/)
- *  3. activities.json is valid (statuses, types, one in_progress at most)
+ *  3. Activity policy: run scripts/lib/activity-policy.test.mjs, then validate
+ *     activities.json (phases docs → test → implement → review, statuses,
+ *     agents, one in_progress at most)
  *  4. Native Indigo/Imago libraries are present (`task libs` generates them)
  *  5. TypeScript typecheck (`pnpm exec tsc --noEmit`)
  *  6. ESLint (`pnpm run lint`)
@@ -27,8 +29,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { validateActivities } from "./lib/activity-policy.mjs";
+
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const LIB_DIR = path.join(PROJECT_ROOT, "src-tauri", "lib", "linux-x86_64");
+const IS_WINDOWS = process.platform === "win32";
+const LIB_DIR_NAME = IS_WINDOWS ? "windows-x86_64" : "linux-x86_64";
+const LIB_DIR = path.join(PROJECT_ROOT, "src-tauri", "lib", LIB_DIR_NAME);
 
 const RED = "\x1b[0;31m";
 const GREEN = "\x1b[0;32m";
@@ -49,6 +55,8 @@ function run(cmd, args, env) {
   return spawnSync(cmd, args, {
     cwd: PROJECT_ROOT,
     stdio: "inherit",
+    // Windows resolves pnpm/node shims through cmd.exe.
+    shell: IS_WINDOWS,
     env: env ?? process.env,
   });
 }
@@ -59,6 +67,7 @@ function capture(cmd, args) {
     cwd: PROJECT_ROOT,
     encoding: "utf8",
     timeout: 30_000,
+    shell: IS_WINDOWS,
   });
 }
 
@@ -67,6 +76,27 @@ function versionOf(cmd, args) {
   const result = capture(cmd, args);
   const text = (result.stdout || result.stderr || "").trim();
   return text.split("\n")[0] || "(version unavailable)";
+}
+
+/**
+ * Prepend a directory to PATH without creating a duplicate key.
+ *
+ * Windows environment blocks are case-insensitive, but a spread of
+ * `process.env` can contain `Path`; assigning `env.PATH` would add a second
+ * key and the child process might pick the wrong one. Set the existing key
+ * and drop any case variants.
+ */
+function prependToPath(env, dir) {
+  const key = Object.keys(env).find((name) => name.toUpperCase() === "PATH");
+  if (!key) {
+    env.PATH = dir;
+    return env;
+  }
+  env[key] = env[key] ? `${dir}${path.delimiter}${env[key]}` : dir;
+  for (const other of Object.keys(env)) {
+    if (other !== key && other.toUpperCase() === "PATH") delete env[other];
+  }
+  return env;
 }
 
 function commandExists(cmd) {
@@ -100,6 +130,8 @@ console.log("\n── 2. Base Harness Files ────────────
 
 const baseFiles = [
   "AGENTS.md",
+  "scripts/harness.mjs",
+  "scripts/build-harness.mjs",
   "activities.json",
   "progress/current.md",
   "progress/history.md",
@@ -108,6 +140,8 @@ const baseFiles = [
   "docs/verification.md",
   "docs/CHECKPOINTS.md",
   "docs/testing.md",
+  "scripts/lib/activity-policy.mjs",
+  "scripts/lib/activity-policy.test.mjs",
 ];
 
 for (const file of baseFiles) {
@@ -118,63 +152,27 @@ for (const file of baseFiles) {
   }
 }
 
-console.log("\n── 3. Validating activities.json ─────────────────────");
+console.log("\n── 3. Activity Policy & activities.json ──────────────");
+
+if (run("node", ["--test", "scripts/lib/activity-policy.test.mjs"]).status === 0) {
+  ok("Activity policy tests pass");
+} else {
+  fail("Activity policy tests failed");
+}
 
 try {
   const data = JSON.parse(readFileSync(path.join(PROJECT_ROOT, "activities.json"), "utf8"));
-  const activities = Array.isArray(data) ? data : (data.activities ?? []);
-  const validStatuses = new Set(["pending", "in_progress", "done", "blocked"]);
-  const validTypes = new Set(["fix", "feat", "chore", "docs"]);
-  const validAgents = new Set(["implementer", "reviewer"]);
+  const { errors, warnings } = validateActivities(data);
 
-  const inProgress = activities.filter((a) => a.status === "in_progress");
-  if (inProgress.length > 1) {
-    fail(`Found ${inProgress.length} activities in in_progress (max 1)`);
+  for (const message of warnings) {
+    warn(message);
+  }
+  for (const message of errors) {
+    fail(message);
   }
 
-  let invalid = false;
-  for (const activity of activities) {
-    const id = activity.id ?? "?";
-    if (!validStatuses.has(activity.status)) {
-      fail(`Invalid status in activity ${id}: ${activity.status}`);
-      invalid = true;
-    }
-    if (activity.type && !validTypes.has(activity.type)) {
-      fail(
-        `Invalid type in activity ${id}: ${activity.type} ` + "(must be fix, feat, chore or docs)",
-      );
-      invalid = true;
-    }
-    if (activity.status === "done" && activity.tasks?.some((t) => t.status !== "done")) {
-      warn(`Activity ${id} is done but has tasks not done`);
-    }
-    if (
-      activity.status === "in_progress" &&
-      activity.tasks?.length &&
-      !activity.tasks.some((t) => t.status === "in_progress")
-    ) {
-      warn(`Activity ${id} is in_progress but no task is in_progress`);
-    }
-    for (const task of activity.tasks ?? []) {
-      if (!task.id || !task.description) {
-        fail(`Task missing id or description in activity ${id}`);
-        invalid = true;
-      }
-      if (task.status && !validStatuses.has(task.status)) {
-        fail(`Invalid task status in activity ${id}: ${task.status}`);
-        invalid = true;
-      }
-      if (task.agent && !validAgents.has(task.agent)) {
-        fail(
-          `Invalid task agent in activity ${id}: ${task.agent} ` +
-            "(must be implementer or reviewer)",
-        );
-        invalid = true;
-      }
-    }
-  }
-
-  if (!invalid) {
+  if (errors.length === 0) {
+    const activities = Array.isArray(data) ? data : (data.activities ?? []);
     ok(`activities.json valid (${activities.length} activities)`);
   }
 } catch (error) {
@@ -182,10 +180,22 @@ try {
 }
 
 console.log("\n── 4. Native Libraries ───────────────────────────────");
-// Indigo/Imago are linked at build time and loaded at run time. They are not
-// vendored: `task libs` builds them in the Docker builder.
+// Linux: `task libs` builds Indigo/Imago/OpenCV in the Docker builder.
+// Windows: `scripts/fetch-windows-libs.ps1` downloads Indigo 1.46.0 and
+// generates the MSVC import libraries. Imago is intentionally absent there.
 
-const requiredLibs = ["libindigo.so", "libindigo-renderer.so", "libimago.so"];
+const requiredLibs = IS_WINDOWS
+  ? [
+      "indigo.dll",
+      "indigo-renderer.dll",
+      "msvcp140.dll",
+      "vcruntime140.dll",
+      "vcruntime140_1.dll",
+      "indigo.lib",
+      "indigo-renderer.lib",
+    ]
+  : ["libindigo.so", "libindigo-renderer.so", "libimago.so"];
+const libExtension = IS_WINDOWS ? ".dll" : ".so";
 const missing = requiredLibs.filter((lib) => !existsSync(path.join(LIB_DIR, lib)));
 let haveLibs = false;
 
@@ -193,11 +203,15 @@ if (missing.length > 0) {
   fail(
     `Missing native libraries in ${path.relative(PROJECT_ROOT, LIB_DIR)}: ` + missing.join(", "),
   );
-  warn("Run `task libs` (needs Docker) to generate them.");
-  warn("Blocks 7 and 9 will be skipped until they exist.");
+  if (IS_WINDOWS) {
+    warn("Run `pwsh scripts/fetch-windows-libs.ps1` from a VS x64 developer shell.");
+  } else {
+    warn("Run `task libs` (needs Docker) to generate them.");
+  }
+  warn("Blocks 10 and 11 will be skipped until they exist.");
 } else {
-  const count = readdirSync(LIB_DIR).filter((f) => f.includes(".so")).length;
-  ok(`Native libraries present (${count} files)`);
+  const count = readdirSync(LIB_DIR).filter((f) => f.endsWith(libExtension)).length;
+  ok(`Native libraries present (${count} ${libExtension} files)`);
   haveLibs = true;
 }
 
@@ -267,7 +281,12 @@ console.log("\n── 11. Sidecar Tests ─────────────�
 
 if (haveLibs) {
   const env = { ...process.env };
-  env.LD_LIBRARY_PATH = env.LD_LIBRARY_PATH ? `${LIB_DIR}:${env.LD_LIBRARY_PATH}` : LIB_DIR;
+  if (IS_WINDOWS) {
+    // Windows resolves the bundled DLLs through PATH.
+    prependToPath(env, LIB_DIR);
+  } else {
+    env.LD_LIBRARY_PATH = env.LD_LIBRARY_PATH ? `${LIB_DIR}:${env.LD_LIBRARY_PATH}` : LIB_DIR;
+  }
 
   if (run("cargo", ["test", "-p", "indigo-server"], env).status === 0) {
     ok("All sidecar tests pass");
@@ -284,7 +303,9 @@ const shellScripts = readdirSync(path.join(PROJECT_ROOT, "scripts"))
   .filter((file) => file.endsWith(".sh"))
   .map((file) => path.join("scripts", file));
 
-if (!commandExists("shellcheck")) {
+if (IS_WINDOWS) {
+  warn("Skipped on Windows: the shell scripts are POSIX-only (CI runs ShellCheck on Linux)");
+} else if (!commandExists("shellcheck")) {
   warn("shellcheck is not installed (optional; CI installs it)");
 } else if (run("shellcheck", ["--severity=warning", ...shellScripts]).status === 0) {
   ok(`ShellCheck clean (${shellScripts.length} scripts)`);

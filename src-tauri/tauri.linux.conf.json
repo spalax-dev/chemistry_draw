@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "rpm"],
+    "externalBin": ["../target/release/indigo-server", "../target/release/imago-worker"],
+    "resources": {
+      "lib/linux-x86_64/**/*": "lib/linux-x86_64/"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libgl1", "libstdc++6"]
+      }
+    }
+  }
+}

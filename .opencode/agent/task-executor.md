@@ -60,22 +60,31 @@ Before starting any task, you MUST:
 
 1. Read `docs/conventions.md` for coding standards
 2. Read `docs/architecture.md` for project patterns and layer rules
-3. Read `docs/testing.md` for the testing policy (test-first)
+3. Read `docs/testing.md` for the testing policy (docs → test → implement →
+   review)
 4. Understand the activity requirements from the task assignment
 
-## Test-First Workflow (TDD)
+## Docs → Test → Implement → Review Workflow
 
-You implement **test-first**. The test is the contract; never write
-implementation before its failing test exists.
+Every task follows the project order. Never write implementation before its
+docs and its failing test exist.
 
-1. **Write the test** for the new behavior in `src-tauri/sidecar/src/tests/`
-2. **Confirm RED**: `cargo test -p indigo-server <name>` must fail (compile
+1. **Docs first** — update `README.md` / `docs/` (or confirm the docs task is
+   already done) so the expected behaviour and verification are written down.
+2. **Write the test** for the new behaviour in
+   `src-tauri/sidecar/src/tests/` (see `docs/testing.md`).
+3. **Confirm RED**: `cargo test -p indigo-server <name>` must fail (compile
    error or assertion). If it passes before any implementation exists, the test
    asserts nothing meaningful — rewrite it.
-3. **Implement** the minimal code to make it pass
-4. **Confirm GREEN**
-5. **Refactor** — keep it green
-6. Report both the test and the implementation to the leader
+4. **Implement** the minimal code to make it pass.
+5. **Confirm GREEN**.
+6. **Refactor** — keep it green.
+7. **Report** the docs change, the RED evidence and the implementation to the
+   leader.
+
+Phases and agents: `docs`, `test` and `implement` tasks belong to the
+`implementer`; `review` belongs to the `reviewer`. Docs-only activities
+(`type: "docs"`) skip test/implement.
 
 Frontend-only changes have no test runner yet; verify with
 `pnpm exec tsc --noEmit` and `pnpm build`, and state that explicitly.
@@ -101,7 +110,7 @@ minimal tokens.
 ## Hard Rules
 
 - Follow `docs/conventions.md` exactly
-- Follow `docs/testing.md` — test-first, mutation mindset
+- Follow `docs/testing.md` — docs → test → implement → review, mutation mindset
 - Never skip tests
 - Leave no TODOs without context
 - Never commit `.so` files, `target/`, `dist/` or `dist-packages/`

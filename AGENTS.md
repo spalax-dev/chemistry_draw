@@ -2,11 +2,29 @@
 
 > Agent navigation map. Read only what you need (progressive disclosure).
 
+## Workflow order (mandatory): docs → test → implement → review
+
+Every activity declares tasks with a `phase` field and executes them in this
+order. `node scripts/harness.mjs` rejects activities missing a phase or with
+phases out of order.
+
+1. **docs** — update the documentation first (`README.md`, `docs/`): it defines
+   the contract before code exists.
+2. **test** — add the failing test and confirm RED.
+3. **implement** — minimal code to make it pass, confirm GREEN, then refactor.
+4. **review** — the reviewer verifies docs, test, implementation and the green
+   harness.
+
+Docs-only activities (`type: "docs"`) may run just `docs` → `review`; they must
+not contain `test` or `implement` tasks.
+
 ## Before start
 
 1. `node scripts/harness.mjs` — must end green. If it fails, **STOP** and
    resolve the environment first.
-2. If it reports missing files, run `node scripts/build-harness.mjs`.
+2. If it reports missing files, run `node scripts/build-harness.mjs` — it
+   recreates the tracking files (`activities.json`, `progress/`), not docs.
+   Missing docs are restored from git.
 3. Read `progress/current.md` (session state) and `activities.json` (pending
    activities/tasks).
 4. Read `docs/architecture.md` before implementing and `docs/conventions.md`
@@ -25,6 +43,8 @@
 | `docs/testing.md`                             | before writing tests      |
 | `docs/verification.md`, `docs/CHECKPOINTS.md` | before declaring done     |
 | `scripts/harness.mjs`                         | verification gate         |
+| `scripts/lib/activity-policy.mjs`             | activity/phase validator  |
+| `scripts/lib/activity-policy.test.mjs`        | phase-policy tests        |
 | `src/`, `src-tauri/src/`                      | frontend / Tauri host     |
 | `src-tauri/sidecar/`                          | Indigo/Imago HTTP sidecar |
 | `scripts/`                                    | native libs + packaging   |
@@ -33,6 +53,9 @@
 
 ## Hard rules
 
+- **docs → test → implement → review** — no implementation before its failing
+  test, and no test before its docs. The harness enforces the task phases
+  (`scripts/lib/activity-policy.mjs`).
 - **One task at a time**; don't mix activities. Parallel tasks only within one
   activity.
 - **No `done` without green harness** — `node scripts/harness.mjs` all green
@@ -51,6 +74,10 @@
 - Types: `fix` (bug), `feat` (feature), `chore` (refactor/config/deps), `docs`.
 - Schema (see `.opencode/agent/main-orchestrator.md`):
   `{id, type, name, title, description, acceptance[], tasks[], status}`.
+- Each task is `{id, phase, description, status, agent}`, where `phase` is
+  `docs | test | implement | review`. The policy validator enforces the phase
+  order and the agent mapping (`review` → `reviewer`, the rest →
+  `implementer`).
 
 ## Delegation
 

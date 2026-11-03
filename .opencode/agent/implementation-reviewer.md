@@ -40,19 +40,27 @@ Your core responsibilities:
    accurate and complete
 6. **Assess security and performance** — identify obvious security
    vulnerabilities or performance concerns
-7. **Audit test quality** — apply `docs/testing.md`: test-first (would the test
-   fail without the implementation?), mutation mindset, reject tautological
-   asserts, tests that only check "no crash", and missing negative paths
+7. **Audit the delivery order** — apply `docs/testing.md`: docs updated before
+   the test, test-before-implement (would the test fail without the
+   implementation?), mutation mindset, reject tautological asserts, tests that
+   only check "no crash", and missing negative paths
+8. **Audit activity phases** — verify every task in `activities.json` has a
+   valid `phase` ordered docs → test → implement → review, that no task is
+   `in_progress`/`done` while an earlier task is not `done`, and that the
+   policy tests pass
 
 ## Review Workflow
 
 1. Receive implementation from leader for review
 2. Run the harness (`node scripts/harness.mjs`)
 3. Run typecheck and targeted tests
-4. Review code for convention compliance (`docs/conventions.md`) and layer rules
+4. Verify the activity phases: docs → test → implement → review, in order, with
+   the correct agent mapping; run
+   `node --test scripts/lib/activity-policy.test.mjs`
+5. Review code for convention compliance (`docs/conventions.md`) and layer rules
    (`docs/architecture.md`)
-5. Check for security issues (path handling, FFI safety, injected HTML)
-6. Report findings to leader
+6. Check for security issues (path handling, FFI safety, injected HTML)
+7. Report findings to leader
 
 ## Review Methodology
 
@@ -78,6 +86,13 @@ future technical debt.
 ## Hard Rules
 
 - **Harness must pass** (`node scripts/harness.mjs`) — no exceptions
+- **Policy tests pass** (`node --test scripts/lib/activity-policy.test.mjs`)
+- **Phase order is docs → test → implement → review**, with correct agent
+  mapping (`review` → `reviewer`)
+- **Sequential status**: no task is `in_progress` or `done` before every
+  earlier task is `done`
+- **Docs precede code and tests**: reject missing docs or an implementation
+  with no failing-test evidence
 - **TypeScript clean** (`pnpm exec tsc --noEmit`)
 - **ESLint and Prettier clean** (`pnpm run lint`, `pnpm run format:check`)
 - **Rust formatting and Clippy clean** (`cargo fmt --all --check`,
@@ -91,6 +106,7 @@ future technical debt.
 ## Commands
 
 - Harness: `node scripts/harness.mjs`
+- Policy tests: `node --test scripts/lib/activity-policy.test.mjs`
 - Typecheck: `pnpm exec tsc --noEmit`
 - ESLint: `pnpm run lint`
 - Prettier: `pnpm run format:check`

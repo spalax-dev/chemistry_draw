@@ -13,9 +13,15 @@ use crate::state::AppState;
 pub async fn get_health(State(state): State<AppState>) -> Json<serde_json::Value> {
     tracing::info!("GET /v2/health");
 
+    // Windows builds ship no Imago worker; report its absence explicitly
+    // instead of dangling a path that will never exist.
+    #[cfg(not(windows))]
     let worker_path = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("imago-worker")));
+    #[cfg(windows)]
+    let worker_path: Option<std::path::PathBuf> = None;
+
     let worker_found = worker_path.as_ref().map(|p| p.exists()).unwrap_or(false);
 
     Json(json!({
