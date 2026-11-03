@@ -14,6 +14,25 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
+## [0.1.4](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.3...chemistry-draw-v0.1.4) (2026-11-03)
+
+
+### Features
+
+* **windows:** add a Windows NSIS build without Imago ([e9c6982](https://github.com/spalax-dev/chemistry_draw/commit/e9c698217f816b04621bedf85a765b8a49645aba))
+
+
+### Bug Fixes
+
+* **build:** align tauri-plugin-log with its npm package ([10d4527](https://github.com/spalax-dev/chemistry_draw/commit/10d45273f55eb0b075273d9bba1eef35cc71c0f3))
+* **build:** align the Tauri JS packages with the tauri 2.12 crate ([5462ef9](https://github.com/spalax-dev/chemistry_draw/commit/5462ef9d8e9f8d6ca5dcac8f14f94f15f0ebb700))
+* **build:** sync Cargo.lock with tauri-plugin-log 2.10.1 ([d131fb0](https://github.com/spalax-dev/chemistry_draw/commit/d131fb0e3a21faa9d0d13471e9f132ae7837c76b))
+
+
+### Documentation
+
+* record Windows CI evidence and close activities ([0a37aac](https://github.com/spalax-dev/chemistry_draw/commit/0a37aac313f909092fdcd6966030b8916022ad61))
+
 ## [0.1.3](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.2...chemistry-draw-v0.1.3) (2026-11-03)
 
 
