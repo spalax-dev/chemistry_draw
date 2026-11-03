@@ -16,5 +16,8 @@ pnpm-lock.yaml
 Cargo.lock
 CHANGELOG.md
 
+# release-please rewrites this file when bumping the version
+src-tauri/tauri.conf.json
+
 # Agent tooling
 .opencode/
