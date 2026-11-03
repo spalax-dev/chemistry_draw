@@ -62,18 +62,18 @@
           "id": "g",
           "phase": "implement",
           "description": "Run the Windows CI job on a pushed commit, verify the NSIS artifact and smoke tests, and fix any Windows-only failures",
-          "status": "pending",
+          "status": "done",
           "agent": "implementer"
         },
         {
           "id": "h",
           "phase": "review",
           "description": "Final review of the Windows build and CI artifact against acceptance criteria",
-          "status": "pending",
+          "status": "done",
           "agent": "reviewer"
         }
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": 2,
