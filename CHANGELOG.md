@@ -14,6 +14,25 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
+## [0.1.3](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.2...chemistry-draw-v0.1.3) (2026-11-03)
+
+
+### Features
+
+* **observability:** log frontend and sidecar to rotating files, add /v2/health ([2fa7adc](https://github.com/spalax-dev/chemistry_draw/commit/2fa7adccedfe52255983d6fe92b80dd6c89150b3))
+
+
+### Miscellaneous
+
+* **quality:** add a harness with formatters and linters for every language ([e2593a6](https://github.com/spalax-dev/chemistry_draw/commit/e2593a6e28078571ca08aa917c3ff8fa115fa198))
+* sync Cargo.lock with 0.1.1 version bump ([3d67256](https://github.com/spalax-dev/chemistry_draw/commit/3d67256eb64e36fe48564e8aba45907ee5cf8388))
+* sync workspace Cargo.lock and drop the stale src-tauri one ([7c71e43](https://github.com/spalax-dev/chemistry_draw/commit/7c71e43fab359f466a3610492f3cda6920c06706))
+
+
+### Documentation
+
+* **ketcher:** record upstream fix (epam/ketcher[#12552](https://github.com/spalax-dev/chemistry_draw/issues/12552)) and why the patch stays ([c9435d9](https://github.com/spalax-dev/chemistry_draw/commit/c9435d9eab08a53070e521143442ee27920f68c3))
+
 ## [0.1.2](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.1...chemistry-draw-v0.1.2) (2026-10-31)
 
 
