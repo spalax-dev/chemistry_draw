@@ -14,20 +14,6 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
-## [0.1.7](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.6...chemistry-draw-v0.1.7) (2026-11-04)
-
-
-### Bug Fixes
-
-* **windows:** bundle the WebView2 offline installer ([9252651](https://github.com/spalax-dev/chemistry_draw/commit/925265150d89283ecd62e32bf7c80250508e4ee4))
-
-## [0.1.6](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.5...chemistry-draw-v0.1.6) (2026-11-03)
-
-
-### Bug Fixes
-
-* **windows:** install per-machine so WebView2 is visible to every user ([c78ecc4](https://github.com/spalax-dev/chemistry_draw/commit/c78ecc49859d9a752c32c24ee67fd7a41c5fc748))
-
 ## [0.1.5](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.4...chemistry-draw-v0.1.5) (2026-11-03)
 
 
