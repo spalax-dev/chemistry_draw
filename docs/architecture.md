@@ -172,11 +172,10 @@ sidecar build, harness, smoke test and NSIS bundle. Both `ci.yml` (artifact) and
 one CI validated. A release publishes `.deb`, `.rpm`, AppImage and the Windows
 `.exe`.
 
-The NSIS bundle uses `installMode: "perMachine"` so the WebView2 Runtime is
-installed for every account (the default per-user install leaves it scoped to the
-installing user, which surfaces as "Could not find the WebView2 Runtime"). It
-also embeds the full WebView2 offline installer (`offlineInstaller`): no network
-is needed at install time, at the cost of roughly 127 MB.
+The NSIS bundle keeps Tauri's default per-user install and embeds only the
+WebView2 bootstrapper (`embedBootstrapper`). WebView2 is part of normal Windows
+10/11 installations; systems where Edge/WebView2 was removed are not supported.
+Bundling the offline runtime (~215 MB) was tried and rejected as too large.
 
 `scripts/build-packages.sh` serializes runs with `flock` because concurrent
 builds share the target volume and bundle directory.

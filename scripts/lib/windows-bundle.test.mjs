@@ -1,9 +1,9 @@
 // Contract tests for the Windows bundle configuration.
 //
-// The WebView2 runtime is only visible to the account it was installed for.
-// A per-user NSIS install therefore surfaces "Could not find the WebView2
-// Runtime" when the app runs under another account, so the installer must be
-// per-machine. These tests pin that decision and the Imago-free bundle.
+// WebView2 ships with normal Windows 10/11 installations, so the bundle stays
+// small: Tauri's default per-user install plus the embedded bootstrapper. The
+// offline runtime (~215 MB) and the per-machine installer were tried and
+// reverted; systems with Edge/WebView2 removed are unsupported.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -16,37 +16,20 @@ const config = JSON.parse(
   readFileSync(path.join(ROOT, "src-tauri/tauri.windows.conf.json"), "utf8"),
 );
 
-test("the Windows installer is per-machine", () => {
+test("the Windows installer keeps Tauri's default per-user mode", () => {
   assert.equal(
     config.bundle?.windows?.nsis?.installMode,
-    "perMachine",
-    "the default per-user install hides the WebView2 runtime from other accounts",
+    undefined,
+    "do not require administrator privileges; the default per-user install is intentional",
   );
 });
 
-test("the bundle uses a supported WebView2 install mode", () => {
+test("the bundle embeds only the WebView2 bootstrapper", () => {
   const mode = config.bundle?.windows?.webviewInstallMode;
-  assert.ok(mode, "webviewInstallMode must be explicit");
-  assert.ok(
-    ["embedBootstrapper", "offlineInstaller", "downloadBootstrapper", "fixedRuntime"].includes(
-      mode.type,
-    ),
-    `unexpected webviewInstallMode: ${mode.type}`,
-  );
-  if (mode.type === "embedBootstrapper" || mode.type === "downloadBootstrapper") {
-    assert.equal(
-      typeof mode.silent,
-      "boolean",
-      "bootstrapper modes must declare whether the installer runs silently",
-    );
-  }
-});
-
-test("the bundle embeds the WebView2 offline installer", () => {
-  assert.equal(
-    config.bundle?.windows?.webviewInstallMode?.type,
-    "offlineInstaller",
-    "the bootstrapper downloads WebView2 at install time, which fails on offline/locked-down machines",
+  assert.deepEqual(
+    mode,
+    { type: "embedBootstrapper", silent: true },
+    "WebView2 is expected from Windows; do not bundle the ~215 MB offline installer",
   );
 });
 

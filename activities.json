@@ -251,6 +251,50 @@
         }
       ],
       "status": "done"
+    },
+    {
+      "id": 6,
+      "type": "fix",
+      "name": "revert-webview2-bundling",
+      "title": "Revert to the 0.1.5 WebView2 behaviour",
+      "description": "Bundling WebView2 and switching to a per-machine install was a mistake: WebView2 ships with normal Windows 10/11 installations. Restore the 0.1.5 configuration (per-user install, embedded bootstrapper) and document that machines with Edge/WebView2 removed are unsupported.",
+      "acceptance": [
+        "tauri.windows.conf.json matches the 0.1.5 bundle configuration",
+        "The Windows bundle test pins the embedded bootstrapper and the default install mode",
+        "README and docs/architecture no longer claim per-machine or offline WebView2",
+        "Harness and tests stay green"
+      ],
+      "tasks": [
+        {
+          "id": "a",
+          "phase": "docs",
+          "description": "Document that WebView2 comes from Windows and unsupported systems",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "b",
+          "phase": "test",
+          "description": "Update the Windows bundle test to pin the 0.1.5 behaviour",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "c",
+          "phase": "implement",
+          "description": "Restore tauri.windows.conf.json from chemistry-draw-v0.1.5",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "d",
+          "phase": "review",
+          "description": "Review the revert and run the harness",
+          "status": "done",
+          "agent": "reviewer"
+        }
+      ],
+      "status": "done"
     }
   ]
 }

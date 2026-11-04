@@ -77,3 +77,14 @@
   install time; the installer grows to roughly 140 MB.
 - `scripts/lib/windows-bundle.test.mjs` pins `offlineInstaller` + `perMachine`.
   Harness green with 41 tests.
+
+## 2026-11-03 — Activity 6: revert WebView2 bundling
+
+- Bundling WebView2 and switching to a per-machine install were mistakes:
+  WebView2 ships with normal Windows 10/11 installations, and the offline
+  runtime grew the installer to 217 MB.
+- `src-tauri/tauri.windows.conf.json` restored to the 0.1.5 content (default
+  per-user install, `embedBootstrapper` + silent).
+- `scripts/lib/windows-bundle.test.mjs` now pins those choices so they are not
+  changed again by accident.
+- README/docs note that systems with Edge/WebView2 removed are unsupported.

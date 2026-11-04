@@ -149,10 +149,10 @@ CI builds and smoke-tests this installer on `windows-latest`
 `/v2/imago/uploads`. `release.yml` runs the same action on a release and attaches
 the installer to the GitHub release next to the Linux packages.
 
-The installer is **per-machine** (`bundle.windows.nsis.installMode`), so it asks
-for Administrator privileges and installs WebView2 for every user. It bundles
-the **WebView2 offline installer** (`webviewInstallMode: offlineInstaller`):
-installation needs no network and grows the installer to roughly 140 MB.
+The installer relies on the **WebView2 Runtime that ships with Windows 10/11**
+(and with Microsoft Edge). It embeds only the small WebView2 bootstrapper, which
+can install the runtime when it is missing and the machine is online. Systems
+with Edge/WebView2 removed are not supported.
 
 ### Build & run (Linux)
 
