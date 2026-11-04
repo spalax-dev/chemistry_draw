@@ -42,6 +42,14 @@ test("the bundle uses a supported WebView2 install mode", () => {
   }
 });
 
+test("the bundle embeds the WebView2 offline installer", () => {
+  assert.equal(
+    config.bundle?.windows?.webviewInstallMode?.type,
+    "offlineInstaller",
+    "the bootstrapper downloads WebView2 at install time, which fails on offline/locked-down machines",
+  );
+});
+
 test("the Windows bundle ships Indigo without Imago", () => {
   assert.deepEqual(config.bundle?.externalBin, ["../target/release/indigo-server"]);
   assert.ok(

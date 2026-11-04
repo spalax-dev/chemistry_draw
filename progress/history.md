@@ -66,3 +66,14 @@
   `offlineInstaller` (+127 MB).
 - Added `scripts/lib/windows-bundle.test.mjs` (install mode, WebView2 mode,
   Imago-free bundle). Harness green with 40 tests.
+
+## 2026-11-03 — Activity 5: WebView2 offline installer
+
+- Per-machine install alone did not fix "Could not find the WebView2 Runtime":
+  bootstrapper-based modes download WebView2 during installation and can fail
+  silently (offline, proxy, policy).
+- `tauri.windows.conf.json` now uses `webviewInstallMode: offlineInstaller`,
+  embedding the full Evergreen installer (~127 MB). No network is needed at
+  install time; the installer grows to roughly 140 MB.
+- `scripts/lib/windows-bundle.test.mjs` pins `offlineInstaller` + `perMachine`.
+  Harness green with 41 tests.

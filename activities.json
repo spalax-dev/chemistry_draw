@@ -207,6 +207,50 @@
         }
       ],
       "status": "done"
+    },
+    {
+      "id": 5,
+      "type": "fix",
+      "name": "bundle-webview2-offline-installer",
+      "title": "Bundle the WebView2 offline installer",
+      "description": "Bootstrapper-based installs still fail on the user's machine even with a per-machine install. Embed the full WebView2 Evergreen offline installer so installation needs no network and cannot silently fail on a download.",
+      "acceptance": [
+        "tauri.windows.conf.json uses webviewInstallMode offlineInstaller and nsis.installMode perMachine",
+        "The Windows bundle test asserts the offline installer mode",
+        "README and docs/architecture document the larger installer and the no-network guarantee",
+        "CI produces the new installer and the harness stays green"
+      ],
+      "tasks": [
+        {
+          "id": "a",
+          "phase": "docs",
+          "description": "Document the offline WebView2 installer and size",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "b",
+          "phase": "test",
+          "description": "Require offlineInstaller in the Windows bundle test; confirm RED",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "c",
+          "phase": "implement",
+          "description": "Switch tauri.windows.conf.json to offlineInstaller",
+          "status": "done",
+          "agent": "implementer"
+        },
+        {
+          "id": "d",
+          "phase": "review",
+          "description": "Review config, docs, tests and the CI artifact",
+          "status": "done",
+          "agent": "reviewer"
+        }
+      ],
+      "status": "done"
     }
   ]
 }

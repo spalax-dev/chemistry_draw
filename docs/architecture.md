@@ -174,9 +174,9 @@ one CI validated. A release publishes `.deb`, `.rpm`, AppImage and the Windows
 
 The NSIS bundle uses `installMode: "perMachine"` so the WebView2 Runtime is
 installed for every account (the default per-user install leaves it scoped to the
-installing user, which surfaces as "Could not find the WebView2 Runtime"). The
-embedded bootstrapper needs network access; use `offlineInstaller` for offline
-targets at the cost of ~127 MB.
+installing user, which surfaces as "Could not find the WebView2 Runtime"). It
+also embeds the full WebView2 offline installer (`offlineInstaller`): no network
+is needed at install time, at the cost of roughly 127 MB.
 
 `scripts/build-packages.sh` serializes runs with `flock` because concurrent
 builds share the target volume and bundle directory.

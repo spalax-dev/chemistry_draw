@@ -150,10 +150,9 @@ CI builds and smoke-tests this installer on `windows-latest`
 the installer to the GitHub release next to the Linux packages.
 
 The installer is **per-machine** (`bundle.windows.nsis.installMode`), so it asks
-for Administrator privileges and installs the WebView2 Runtime for every user.
-The embedded bootstrapper still downloads WebView2 during installation; for
-offline machines set `bundle.windows.webviewInstallMode` to `offlineInstaller`
-(adds ~127 MB to the installer).
+for Administrator privileges and installs WebView2 for every user. It bundles
+the **WebView2 offline installer** (`webviewInstallMode: offlineInstaller`):
+installation needs no network and grows the installer to roughly 140 MB.
 
 ### Build & run (Linux)
 
