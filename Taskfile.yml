@@ -14,7 +14,7 @@ tasks:
       - cargo test
 
   harness:
-    desc: Verification gate (env, harness files, typecheck, build, check, tests)
+    desc: Verification gate (full); use `node scripts/harness.mjs --fast` for iteration
     cmds:
       - node scripts/harness.mjs
 

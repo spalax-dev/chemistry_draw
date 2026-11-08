@@ -2,7 +2,16 @@
 /**
  * Verification harness for the chemistry-draw project.
  *
- * Run with: node scripts/harness.mjs
+ * Run with: node scripts/harness.mjs [options]
+ *
+ *   (default)         Full verification (all blocks).
+ *   --fast            Iteration mode: skip frontend build, use `cargo check`
+ *                     instead of Clippy, and skip sidecar tests.
+ *   --skip-build      Skip block 8 (frontend build).
+ *   --skip-clippy     Use `cargo check` instead of Clippy in block 10.
+ *   --skip-tests      Skip block 11 (sidecar tests).
+ *   --explain         Print the resolved mode and run the checks.
+ *   --help            Show this help.
  *
  * Checks, in order:
  *  1. Environment (rustc/cargo, node/pnpm, Tauri plugin version parity)
@@ -14,14 +23,14 @@
  *  5. TypeScript typecheck (`pnpm exec tsc --noEmit`)
  *  6. ESLint (`pnpm run lint`)
  *  7. Prettier formatting (`pnpm run format:check`)
- *  8. Frontend build (`pnpm build`)
+ *  8. Frontend build (`pnpm build`) [skipped by --fast/--skip-build]
  *  9. Rust formatting (`cargo fmt --all --check`)
- * 10. Rust lint (`cargo clippy -- -D warnings`)
- * 11. Sidecar tests (`cargo test -p indigo-server`)
+ * 10. Rust lint (`cargo clippy -- -D warnings`; `cargo check` with --fast/--skip-clippy)
+ * 11. Sidecar tests (`cargo test -p indigo-server`) [skipped by --fast/--skip-tests]
  * 12. ShellCheck (shell scripts, warnings and above)
  * 13. Summary
  *
- * Exit code 0 only when every block passes.
+ * Exit code 0 only when every executed block passes.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -43,12 +52,49 @@ const NC = "\x1b[0m";
 
 let exitCode = 0;
 
+const argv = process.argv.slice(2);
+const hasFlag = (flag) => argv.includes(flag);
+const HELP = hasFlag("--help");
+const FAST = hasFlag("--fast");
+const EXPLAIN = hasFlag("--explain");
+const SKIP_BUILD = FAST || hasFlag("--skip-build");
+const SKIP_CLIPPY = FAST || hasFlag("--skip-clippy");
+const SKIP_TESTS = FAST || hasFlag("--skip-tests");
+
+function printHelp() {
+  console.log(`Usage: node scripts/harness.mjs [options]
+
+  (default)         Full verification (all blocks).
+  --fast            Iteration mode: skip frontend build, use cargo check
+                    instead of Clippy, and skip sidecar tests.
+  --skip-build      Skip block 8 (frontend build).
+  --skip-clippy     Use cargo check instead of Clippy in block 10.
+  --skip-tests      Skip block 11 (sidecar tests).
+  --explain         Print the resolved mode and run the checks.
+  --help            Show this help.`);
+}
+
+if (HELP) {
+  printHelp();
+  process.exit(0);
+}
+
 const ok = (msg) => console.log(`${GREEN}[OK]${NC}    ${msg}`);
 const warn = (msg) => console.log(`${YELLOW}[WARN]${NC}  ${msg}`);
 const fail = (msg) => {
   console.log(`${RED}[FAIL]${NC}  ${msg}`);
   exitCode = 1;
 };
+
+if (EXPLAIN || FAST || SKIP_BUILD || SKIP_CLIPPY || SKIP_TESTS) {
+  const mode = [
+    `fast=${FAST}`,
+    `skipBuild=${SKIP_BUILD}`,
+    `skipClippy=${SKIP_CLIPPY}`,
+    `skipTests=${SKIP_TESTS}`,
+  ].join(", ");
+  console.log(`${YELLOW}[MODE]${NC}  ${mode}`);
+}
 
 /** Run a command in the project root with inherited stdio. */
 function run(cmd, args, env) {
@@ -298,7 +344,9 @@ if (run("pnpm", ["run", "format:check"]).status === 0) {
 
 console.log("\n── 8. Frontend Build ─────────────────────────────────");
 
-if (run("pnpm", ["build"]).status === 0) {
+if (SKIP_BUILD) {
+  warn("Skipped (--fast/--skip-build): frontend build not run");
+} else if (run("pnpm", ["build"]).status === 0) {
   ok("Frontend build succeeded");
 } else {
   fail("Frontend build failed");
@@ -318,6 +366,13 @@ console.log("\n── 10. Rust Lint ──────────────�
 
 if (!haveLibs) {
   warn("Skipped: native libraries are missing");
+} else if (SKIP_CLIPPY) {
+  warn("Using cargo check (--fast/--skip-clippy); Clippy not run");
+  if (run("cargo", ["check", "--workspace", "--all-targets"]).status === 0) {
+    ok("cargo check passed");
+  } else {
+    fail("cargo check failed");
+  }
 } else if (capture("cargo", ["clippy", "--version"]).status !== 0) {
   warn("clippy is not installed (run `rustup component add clippy`)");
   warn("Falling back to `cargo check`");
@@ -336,7 +391,9 @@ if (!haveLibs) {
 
 console.log("\n── 11. Sidecar Tests ─────────────────────────────────");
 
-if (haveLibs) {
+if (SKIP_TESTS) {
+  warn("Skipped (--fast/--skip-tests): sidecar tests not run");
+} else if (haveLibs) {
   const env = { ...process.env };
   if (IS_WINDOWS) {
     // Windows resolves the bundled DLLs through PATH.

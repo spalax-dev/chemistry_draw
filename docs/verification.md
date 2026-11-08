@@ -6,7 +6,10 @@
 
 ## 1. Before declaring a task `done`
 
-1. Run `node scripts/harness.mjs` — all blocks must pass (exit code 0).
+1. Run `node scripts/harness.mjs` — all blocks must pass (exit code 0). For a
+   faster iteration loop (skips frontend build, uses `cargo check` instead of
+   Clippy, and skips sidecar tests), use `node scripts/harness.mjs --fast`; the
+   full run is still required before closing a task.
 2. `pnpm exec tsc --noEmit` — no type errors.
 3. `pnpm run lint` — ESLint clean.
 4. `pnpm run format:check` — Prettier clean.

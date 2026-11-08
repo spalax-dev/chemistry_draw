@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions / ideas
+    url: https://github.com/spalax-dev/chemistry_draw/issues
+    about: Open an issue to ask a question or discuss an idea.
