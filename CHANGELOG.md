@@ -14,6 +14,13 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
+## [0.1.7](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.6...chemistry-draw-v0.1.7) (2026-11-08)
+
+
+### Bug Fixes
+
+* **ci:** stop running agent harness in GitHub Actions ([8bf254e](https://github.com/spalax-dev/chemistry_draw/commit/8bf254e33a0b958181c4a5af975a8beeebc6c84b))
+
 ## [0.1.6](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.5...chemistry-draw-v0.1.6) (2026-11-04)
 
 
