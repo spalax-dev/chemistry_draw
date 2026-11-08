@@ -60,9 +60,11 @@ ShellCheck as configured by the project.
 
 - Follow [docs/conventions.md](docs/conventions.md) for style, layout, and
   project rules.
-- Use **[Conventional Commits](https://www.conventionalcommits.org/)** (e.g.
-  `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`). Releases/changelog are
-  managed by release tooling.
+- Use **[Conventional Commits](https://www.conventionalcommits.org/)** and the
+  project's **[commit policy](docs/commit-policy.md)**. `feat`/`fix` are for
+  **product changes** that affect Chemistry Draw users and appear in
+  releases/changelog; CI, Actions, agent harness, and repo tooling use
+  `chore(ci)`, `build`, `docs`, etc.
 - Keep commits focused; explain _why_ in the message.
 - Do not commit generated/binary artifacts such as `src-tauri/lib/`, `target/`,
   `dist/`, or `dist-packages/`.

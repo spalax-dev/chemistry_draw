@@ -57,9 +57,17 @@ runs:
         Copy-Item target\release\indigo-server.exe `
           target\release\indigo-server-x86_64-pc-windows-msvc.exe
 
-    - name: Run harness (Windows tests + lint)
+    - name: Run CI checks (Windows)
       shell: pwsh
-      run: node scripts/harness.mjs
+      run: |
+        $ErrorActionPreference = "Stop"
+        node --test scripts/lib/activity-policy.test.mjs scripts/lib/release-workflow.test.mjs scripts/lib/windows-bundle.test.mjs
+        pnpm exec tsc --noEmit
+        pnpm run lint
+        pnpm run format:check
+        cargo fmt --all --check
+        cargo clippy --workspace --all-targets -- -D warnings
+        cargo test -p indigo-server
 
     - name: Smoke-test the sidecar
       shell: pwsh

@@ -132,9 +132,14 @@ Rules:
 
 ## 6. Commits and releases
 
-- **Conventional Commits** are mandatory: `feat:`, `fix:`, `chore:`, `docs:`,
-  `refactor:`, `perf:`. release-please builds the changelog and version from
-  them.
+- **Conventional Commits** are mandatory. See
+  **[commit-policy.md](commit-policy.md)** for the full rule.
+- Use `feat`/`fix` (and breaking markers) **only for product changes** that
+  affect Chemistry Draw users and belong in the changelog. CI, Actions, release
+  config, agent harness, templates, and internal tooling use `chore(ci)`,
+  `build`, `docs`, `refactor`, etc.
+- release-please is configured to drive releases from `feat`/`fix` (and breaking
+  changes), not from `chore`/`docs`/`refactor`/`perf`.
 - One logical change per commit; the message explains _why_.
 - Do not hand-edit `CHANGELOG.md` (release-please owns it).
 - Update `docs/` in the same commit when behaviour changes.
