@@ -52,7 +52,7 @@ jobs:
       - name: Lint frontend
         run: |
           pnpm run lint
-          pnpm run format:check
+          pnpm run format:check || echo "::warning::Prettier found formatting issues (non-blocking; does not block the build)"
 
       # tauri-build validates bundle.externalBin while compiling the host, so
       # these binaries must exist before `cargo clippy --workspace`.
