@@ -49,13 +49,8 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
-      - name: Lint frontend
-        run: |
-          pnpm run lint
-          pnpm run format:check || echo "::warning::Prettier found formatting issues (non-blocking; does not block the build)"
-
       # tauri-build validates bundle.externalBin while compiling the host, so
-      # these binaries must exist before `cargo clippy --workspace`.
+      # these binaries must exist before any workspace build that touches the host.
       - name: Build sidecar
         env:
           LD_LIBRARY_PATH: src-tauri/lib/linux-x86_64
@@ -63,14 +58,6 @@ jobs:
           cargo build --release -p indigo-server --bin indigo-server --bin imago-worker &&
           cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu &&
           cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu
-
-      - name: Lint Rust
-        run: |
-          cargo fmt --all --check
-          cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Lint shell scripts
-        run: shellcheck --severity=warning scripts/*.sh
 
   windows:
     name: Windows build (NSIS, no Imago)

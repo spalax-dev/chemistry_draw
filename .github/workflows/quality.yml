@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - main
   pull_request:
     branches:
       - develop
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint, format, typecheck, build
+    name: Style and static checks (informational)
     runs-on: ubuntu-latest
 
     steps:
@@ -36,7 +37,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Install system tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
@@ -55,9 +56,6 @@ jobs:
 
       - name: Prettier
         run: pnpm run format:check
-
-      - name: Frontend build
-        run: pnpm run build
 
       - name: Rust formatting
         run: cargo fmt --all --check
