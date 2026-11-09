@@ -37,12 +37,12 @@
 Get the latest version from the
 [**Releases** page](https://github.com/spalax-dev/chemistry_draw/releases).
 
-| Platform             | Download                                        | Notes                                                                      |
-| -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------- |
-| Debian / Ubuntu      | `.deb`                                          | x86_64, glibc ≥ 2.36                                                       |
-| Fedora / RHEL        | `.rpm`                                          | x86_64, glibc ≥ 2.36                                                       |
-| Other Linux          | `.AppImage`                                     | x86_64, glibc ≥ 2.36                                                       |
-| Windows 10/11 x86_64 | `.exe` (NSIS)                   | Requires the Microsoft Edge WebView2 runtime |
+| Platform             | Download      | Notes                                        |
+| -------------------- | ------------- | -------------------------------------------- |
+| Debian / Ubuntu      | `.deb`        | x86_64, glibc ≥ 2.36                         |
+| Fedora / RHEL        | `.rpm`        | x86_64, glibc ≥ 2.36                         |
+| Other Linux          | `.AppImage`   | x86_64, glibc ≥ 2.36                         |
+| Windows 10/11 x86_64 | `.exe` (NSIS) | Requires the Microsoft Edge WebView2 runtime |
 
 **Linux notes:** supported on distros with glibc ≥ 2.36 (e.g. Debian 12+,
 Ubuntu 24.04+, Arch). To run an AppImage directly you may need FUSE; otherwise
