@@ -1,9 +1,10 @@
 // Structural tests for the Windows release pipeline.
 //
 // GitHub Actions cannot be executed here, so these tests assert the contract
-// the workflows must satisfy: one shared composite action builds and validates
-// the installer, CI uploads it as an artifact, and the release workflow
-// attaches it to the GitHub release exactly like the Linux packages.
+// the workflows must satisfy: one shared composite action runs tests and builds
+// the installer, CI uploads it as an artifact, and the release workflow attaches
+// it to the GitHub release exactly like the Linux packages. Style/static checks
+// run in a separate informational workflow and must not block builds.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
@@ -38,13 +39,18 @@ test("the shared action builds, tests and bundles the installer", () => {
     steps.some((step) => step.run.includes("fetch-windows-libs.ps1")),
     "must fetch the pinned Indigo DLLs",
   );
-  assert.ok(
-    steps.some((step) => step.run.includes("harness.mjs")),
-    "must run the harness before bundling",
+  const testStep = steps.find(
+    (step) => step.run.includes("node --test") && step.run.includes("cargo test -p indigo-server"),
   );
-  assert.ok(
-    steps.some((step) => step.run.includes("tauri build --bundles nsis")),
-    "must build the NSIS installer",
+  assert.ok(testStep, "must run tests before bundling");
+  const testIndex = steps.indexOf(testStep);
+  const bundleIndex = steps.findIndex((step) => step.run.includes("tauri build --bundles nsis"));
+  assert.ok(bundleIndex >= 0, "must build the NSIS installer");
+  assert.ok(testIndex < bundleIndex, "tests must run before bundling");
+  assert.equal(
+    steps.some((step) => step.run.includes("harness.mjs")),
+    false,
+    "must not run the full harness (style/static checks live in a separate workflow)",
   );
   assert.ok(
     steps.some((step) => step.run.includes("indigo-server.exe") && step.run.includes("Copy-Item")),
