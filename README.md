@@ -26,9 +26,8 @@
 - **Native performance** — uses a Rust sidecar with native
   [Indigo](https://github.com/epam/Indigo) for cheminformatics (instead of
   WebAssembly).
-- **Image-to-structure (Linux)** — basic structure recognition powered by EPAM
-  Imago v2. On Windows this feature is not included, so _Recognize Molecule_ is
-  disabled.
+- **Image-to-structure (Only Linux)** — basic structure recognition powered by EPAM
+  Imago v2.
 - **Native file dialogs** — save in the formats you need, including PNG and SVG
   rendered by the sidecar.
 - **Offline-first** — runs entirely on your machine.
@@ -43,7 +42,7 @@ Get the latest version from the
 | Debian / Ubuntu      | `.deb`                                          | x86_64, glibc ≥ 2.36                                                       |
 | Fedora / RHEL        | `.rpm`                                          | x86_64, glibc ≥ 2.36                                                       |
 | Other Linux          | `.AppImage`                                     | x86_64, glibc ≥ 2.36                                                       |
-| Windows 10/11 x86_64 | `chemistry-draw_<version>_x64-setup.exe` (NSIS) | Requires the Microsoft Edge WebView2 runtime (included with Windows 10/11) |
+| Windows 10/11 x86_64 | `.exe` (NSIS)                   | Requires the Microsoft Edge WebView2 runtime |
 
 **Linux notes:** supported on distros with glibc ≥ 2.36 (e.g. Debian 12+,
 Ubuntu 24.04+, Arch). To run an AppImage directly you may need FUSE; otherwise
@@ -51,13 +50,13 @@ use `APPIMAGE_EXTRACT_AND_RUN=1`.
 
 **Windows notes:** image recognition (Imago/OpenCV) is not included in Windows
 builds. The app requires the Microsoft Edge WebView2 runtime, which is normally
-included with Windows 10/11. Systems without WebView2 are not supported.
+included with Windows 10/11.
 
 ## Contributing
 
 Contributions are welcome — bug reports, ideas, docs, and code.
 
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved.
+- Read [docs/CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved.
 - Building from source or working on the codebase? See
   [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
