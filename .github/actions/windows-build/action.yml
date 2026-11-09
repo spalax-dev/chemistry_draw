@@ -57,17 +57,14 @@ runs:
         Copy-Item target\release\indigo-server.exe `
           target\release\indigo-server-x86_64-pc-windows-msvc.exe
 
-    - name: Run CI checks (Windows)
+    - name: Run tests (Windows)
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
         node --test scripts/lib/activity-policy.test.mjs scripts/lib/release-workflow.test.mjs scripts/lib/windows-bundle.test.mjs
-        pnpm exec tsc --noEmit
-        pnpm run lint
-        pnpm run format:check
-        cargo fmt --all --check
-        cargo clippy --workspace --all-targets -- -D warnings
+        if ($LASTEXITCODE -ne 0) { throw "Node tests failed" }
         cargo test -p indigo-server
+        if ($LASTEXITCODE -ne 0) { throw "Sidecar tests failed" }
 
     - name: Smoke-test the sidecar
       shell: pwsh

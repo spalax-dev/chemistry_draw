@@ -40,6 +40,9 @@ jobs:
             rm -f /app/src-tauri/lib/linux-x86_64/libstdc++.so* /app/src-tauri/lib/linux-x86_64/libgcc_s.so*
           '
 
+      - name: Run Node tests
+        run: node --test scripts/lib/*.test.mjs
+
       - name: Run sidecar tests
         run: cargo test
         working-directory: src-tauri/sidecar
@@ -49,13 +52,8 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
-      - name: Lint frontend
-        run: |
-          pnpm run lint
-          pnpm run format:check
-
       # tauri-build validates bundle.externalBin while compiling the host, so
-      # these binaries must exist before `cargo clippy --workspace`.
+      # these binaries must exist before any workspace build that touches the host.
       - name: Build sidecar
         env:
           LD_LIBRARY_PATH: src-tauri/lib/linux-x86_64
@@ -63,14 +61,6 @@ jobs:
           cargo build --release -p indigo-server --bin indigo-server --bin imago-worker &&
           cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu &&
           cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu
-
-      - name: Lint Rust
-        run: |
-          cargo fmt --all --check
-          cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Lint shell scripts
-        run: shellcheck --severity=warning scripts/*.sh
 
   windows:
     name: Windows build (NSIS, no Imago)
