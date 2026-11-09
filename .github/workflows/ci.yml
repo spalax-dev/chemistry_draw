@@ -40,6 +40,9 @@ jobs:
             rm -f /app/src-tauri/lib/linux-x86_64/libstdc++.so* /app/src-tauri/lib/linux-x86_64/libgcc_s.so*
           '
 
+      - name: Run Node tests
+        run: node --test scripts/lib/*.test.mjs
+
       - name: Run sidecar tests
         run: cargo test
         working-directory: src-tauri/sidecar
