@@ -26,8 +26,6 @@
 - **Native performance** — uses a Rust sidecar with native
   [Indigo](https://github.com/epam/Indigo) for cheminformatics (instead of
   WebAssembly).
-- **Image-to-structure (Only Linux)** — basic structure recognition powered by EPAM
-  Imago v2.
 - **Native file dialogs** — save in the formats you need, including PNG and SVG
   rendered by the sidecar.
 - **Offline-first** — runs entirely on your machine.
@@ -48,9 +46,8 @@ Get the latest version from the
 Ubuntu 24.04+, Arch). To run an AppImage directly you may need FUSE; otherwise
 use `APPIMAGE_EXTRACT_AND_RUN=1`.
 
-**Windows notes:** image recognition (Imago/OpenCV) is not included in Windows
-builds. The app requires the Microsoft Edge WebView2 runtime, which is normally
-included with Windows 10/11.
+**Windows notes:** the app requires the Microsoft Edge WebView2 runtime, which
+is normally included with Windows 10/11.
 
 ## Contributing
 

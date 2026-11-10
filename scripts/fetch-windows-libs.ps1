@@ -9,7 +9,8 @@
     extracts only the runtime DLLs into src-tauri/lib/windows-x86_64/ and
     builds indigo.lib / indigo-renderer.lib from the DLL exports.
 
-    Imago is intentionally absent: the Windows build has no OCR support.
+    Only the Indigo runtime DLLs are needed: the app has no image-recognition
+    support.
 
     Requires dumpbin.exe and lib.exe from a Visual Studio x64 developer
     environment. In CI, ilammy/msvc-dev-cmd sets that up.

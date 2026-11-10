@@ -6,15 +6,12 @@ mod calculate;
 mod check;
 mod convert;
 mod health;
-#[cfg(not(windows))]
-mod imago_integration;
+mod imago_absent;
 mod info;
 mod layout_clean;
 mod render;
 mod stereochemistry;
 mod structural_errors;
-#[cfg(windows)]
-mod windows_no_imago;
 
 use axum::{
     body::Body,
@@ -26,7 +23,7 @@ use serde_json::{json, Value};
 use std::sync::Once;
 use tower::ServiceExt;
 
-use crate::{build_router, AppState, ImagoJobStore};
+use crate::{build_router, AppState};
 
 static INIT: Once = Once::new();
 
@@ -45,7 +42,6 @@ pub fn test_app() -> axum::Router {
     let state = AppState {
         port: 9321,
         started_at: std::time::Instant::now(),
-        imago_store: ImagoJobStore::new(),
     };
     build_router(state)
 }

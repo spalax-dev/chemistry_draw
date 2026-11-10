@@ -31,11 +31,6 @@ sudo dnf install -y \
   openssl-devel \
   libayatana-appindicator-gtk3-devel \
   librsvg2-devel \
-  opencv \
-  opencv-devel \
-  opencv-imgcodecs \
-  lapack \
-  openblas \
   patchelf \
   fuse3 \
   fuse3-devel
@@ -52,9 +47,6 @@ sudo apt install -y \
   libssl-dev \
   libayatana-appindicator3-dev \
   librsvg2-dev \
-  libopencv-dev \
-  liblapack3 \
-  libopenblas0 \
   patchelf \
   fuse3 \
   libfuse2
@@ -71,16 +63,13 @@ sudo pacman -S --needed \
   openssl \
   libayatana-appindicator \
   librsvg \
-  opencv \
-  lapack \
-  openblas \
   patchelf \
   fuse3
 ```
 
-## Native libraries (Indigo / Imago)
+## Native libraries (Indigo)
 
-The `indigo-server` sidecar links against prebuilt Indigo/Imago/OpenCV libraries.
+The `indigo-server` sidecar links against prebuilt Indigo libraries.
 
 - They are **not committed** (they are binaries). Generate them with:
 
@@ -89,21 +78,37 @@ task libs
 ```
 
 That builds the Docker builder image and copies the runtime libraries into
-`src-tauri/lib/linux-x86_64/`, which is gitignored. It includes the minimal
-OpenCV that Imago needs (`libopencv_*.so.406`) plus `libpng`/`libjpeg`, so no
-host-specific SONAME shims are required.
+`src-tauri/lib/linux-x86_64/`, which is gitignored. `task libs` wipes that
+directory before copying, so it only ever holds what the builder image
+produces — no accumulated host leftovers.
 
 - Packaging builds (`.deb`/`.rpm`/AppImage) copy the same set from
-  `/opt/chemistry/libs/` inside the container and ship it in the package.
+  `/opt/chemistry/libs/` inside the container and ship it in the package. That
+  set is Indigo-only (`libindigo.so`, `libindigo-renderer.so` and their runtime
+  dependencies). The copy goes into the bind-mounted
+  `src-tauri/lib/linux-x86_64/`, so each packaging script snapshots that
+  directory first and restores it with an `EXIT` trap: a dev checkout is never
+  left mutated by packaging, and only builder-image libraries are bundled.
+- Packaging refuses forbidden native libs:
+  `scripts/check-native-libs.sh [--allowlist <source-dir>] <dir...>` exits
+  non-zero when it finds `*imago*` or `*opencv*` files. With `--allowlist`, it
+  also rejects any file in the target directory that does not exist by basename
+  in `<source-dir>` ("not provided by the builder image"), so host leftovers
+  cannot leak into a package. It prints the offending paths and the fix. Every
+  packaging script runs it right after copying `/opt/chemistry/libs/*.so*` into
+  the bundled lib dir, with `--allowlist /opt/chemistry/libs`.
+- When `scripts/build-libs.sh` changes (dependencies added or removed), rebuild
+  the builder image with `task builder-image -- --no-cache` (same as
+  `bash scripts/build-image.sh --no-cache`). Packaging with a stale image now
+  fails fast instead of silently bundling old libraries.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.
 
 ## Windows 10/11 (x86_64)
 
 Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker
-builder. Imago and OpenCV are **not** built or shipped: image recognition is
-unavailable and Ketcher disables **Recognize Molecule** (`imago_versions` is an
-empty array).
+builder. It runs the same Indigo-only sidecar as Linux; Recognize Molecule is
+hidden on every platform until the DECIMER pipeline (Phase B) lands.
 
 Prerequisites:
 
@@ -135,7 +140,7 @@ the Windows CI job.
 
 ## Supported distros
 
-The packages are built in a Debian 12 container, and the native Indigo/Imago
+The packages are built in a Debian 12 container, and the native Indigo
 libraries use symbols from its C library (`arc4random@GLIBC_2.36`), so the real
 floor is **glibc 2.36**:
 
@@ -151,7 +156,7 @@ GTK3 and the `webkit2gtk-4.1` runtime are required too, which Debian 11 does not
 provide. CI runs on `ubuntu-24.04` for the same reason: linking a test binary
 against the libraries fails on an older glibc.
 
-Lowering the floor would mean building Indigo/Imago _and_ the Tauri app on
+Lowering the floor would mean building Indigo _and_ the Tauri app on
 Debian 11, which is not possible today because Tauri v2 needs
 `webkit2gtk-4.1` (Debian 12+).
 
@@ -194,8 +199,7 @@ await window.__TAURI_INTERNALS__.invoke("log_dir");
 ### Health endpoint
 
 The sidecar exposes `GET /v2/health` for support/diagnostics (Ketcher does not
-use it). It reports uptime, PID, port, versions and whether the `imago-worker`
-binary was found next to the sidecar:
+use it). It reports uptime, PID, port and Indigo versions:
 
 ```bash
 curl -s http://127.0.0.1:9321/v2/health | jq

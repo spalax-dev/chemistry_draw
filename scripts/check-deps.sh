@@ -14,7 +14,6 @@ RESET=$'\033[0m'
 
 MISSING_PKG=()
 MISSING_CMD=()
-MISSING_LIB=()
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
@@ -43,32 +42,6 @@ check_cmd() {
   fi
 }
 
-check_lib() {
-  local name="$1"
-  local dir found=0
-
-  # 1) ldconfig cache (fast path)
-  if ldconfig -p 2>/dev/null | grep -qF "$name"; then
-    found=1
-  else
-    # 2) filesystem fallback: some distros ship variants that ldconfig does not
-    # index or name differently (e.g. Fedora: libopenblaso.so.0 for openblas).
-    for dir in /usr/lib64 /usr/lib /lib64 /lib /usr/local/lib64 /usr/local/lib; do
-      [[ -d "$dir" ]] || continue
-      if compgen -G "$dir/${name}*" >/dev/null; then
-        found=1
-        break
-      fi
-    done
-  fi
-
-  if [[ $found -eq 1 ]]; then
-    printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$name"
-  else
-    MISSING_LIB+=("$name")
-    printf '  %s✗%s %s\n' "$RED" "$RESET" "$name"
-  fi
-}
 
 # ---------------------------------------------------------------- distro hint
 detect_distro() {
@@ -123,25 +96,13 @@ if [[ -z "${APPIND_OK:-}" ]]; then
 fi
 echo
 
-echo "${BOLD}### BLAS/LAPACK (needed by OpenCV/Imago)${RESET}"
-check_lib "libopenblas"
-check_lib "liblapack"
-check_lib "libblas"
-echo
-
-echo "${BOLD}### OpenCV (Imago)${RESET}"
-check_lib "libopencv_core"
-check_lib "libopencv_imgproc"
-check_lib "libopencv_imgcodecs"
-echo
-
 echo "${BOLD}### Runtime helpers${RESET}"
 check_cmd patchelf "patchelf" "patchelf"
 check_cmd docker   "docker (packaging only)" "docker"
 echo
 
 # --------------------------------------------------------------- summary
-if [[ ${#MISSING_PKG[@]} -eq 0 && ${#MISSING_CMD[@]} -eq 0 && ${#MISSING_LIB[@]} -eq 0 ]]; then
+if [[ ${#MISSING_PKG[@]} -eq 0 && ${#MISSING_CMD[@]} -eq 0 ]]; then
   echo "${GREEN}${BOLD}All checks passed.${RESET}"
   echo
   exit 0
@@ -158,14 +119,6 @@ if [[ ${#MISSING_CMD[@]} -gt 0 ]]; then
   echo
 fi
 
-if [[ ${#MISSING_LIB[@]} -gt 0 ]]; then
-  echo "Shared libraries:"
-  for lib in "${MISSING_LIB[@]}"; do
-    echo "  - $lib"
-  done
-  echo
-fi
-
 if [[ ${#MISSING_PKG[@]} -gt 0 ]]; then
   echo "Install with:"
   case "$FAMILY" in
@@ -173,27 +126,25 @@ if [[ ${#MISSING_PKG[@]} -gt 0 ]]; then
       echo "  sudo dnf install -y \\"
       echo "    glib2-devel gtk3-devel webkit2gtk4.1-devel pkgconf-pkg-config \\"
       echo "    openssl-devel libayatana-appindicator-gtk3-devel librsvg2-devel \\"
-      echo "    opencv opencv-devel opencv-imgcodecs lapack openblas \\"
       echo "    patchelf fuse3 fuse3-devel"
       ;;
     debian)
       echo "  sudo apt install -y \\"
       echo "    libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config \\"
       echo "    libssl-dev libayatana-appindicator3-dev librsvg2-dev \\"
-      echo "    libopencv-dev liblapack3 libopenblas0 \\"
       echo "    patchelf fuse3 libfuse2"
       ;;
     arch)
       echo "  sudo pacman -S --needed \\"
       echo "    glib2 gtk3 webkit2gtk-4.1 pkgconf openssl \\"
-      echo "    libayatana-appindicator librsvg opencv lapack openblas \\"
+      echo "    libayatana-appindicator librsvg \\"
       echo "    patchelf fuse3"
       ;;
     suse)
       echo "  sudo zypper install -y \\"
       echo "    glib2-devel gtk3-devel webkit2gtk4.1-devel pkg-config \\"
       echo "    libopenssl-devel libayatana-appindicator3-devel librsvg-devel \\"
-      echo "    opencv-devel lapack-devel openblas-devel patchelf"
+      echo "    patchelf"
       ;;
     *)
       echo "  Unknown distro. See docs/DEVELOPMENT.md for the package list."
@@ -202,6 +153,6 @@ if [[ ${#MISSING_PKG[@]} -gt 0 ]]; then
   echo
 fi
 
-echo "See docs/DEVELOPMENT.md for details (including OpenCV SONAME symlinks)."
+echo "See docs/DEVELOPMENT.md for details."
 echo
 exit 1

@@ -94,9 +94,9 @@ Rules:
 
 | Element      | Convention         | Example                            |
 | ------------ | ------------------ | ---------------------------------- |
-| Rust module  | `snake_case`       | `imago_ops.rs`, `indigo_ops.rs`    |
-| Rust type    | `PascalCase`       | `AppState`, `ImagoJobStore`        |
-| Rust fn      | `snake_case`       | `post_upload`, `get_health`        |
+| Rust module  | `snake_case`       | `indigo_ops.rs`, `health.rs`       |
+| Rust type    | `PascalCase`       | `AppState`, `IndigoRequest`        |
+| Rust fn      | `snake_case`       | `post_render`, `get_health`        |
 | TS component | `PascalCase`       | `App`                              |
 | TS function  | `camelCase`        | `resolveApiBase`, `initLogging`    |
 | Constant     | `UPPER_SNAKE_CASE` | `PORT_SCAN_RANGE`, `SIMPLE_ERRORS` |
@@ -113,7 +113,6 @@ src-tauri/sidecar/src/   indigo-server crate
   transport/             axum handlers
   service/               orchestration
   ffi/                   native bindings
-  job/                   Imago job store
   tests/                 sidecar integration tests
 scripts/                 harness, packaging, libs
 docs/                    architecture, conventions, testing, verification
@@ -151,8 +150,7 @@ Rules:
 - Every handler logs its route at `info`.
 - Status codes: 400 invalid input, 404 unknown id, 500 backend failure.
 - `/v2/info` must report the **actual bound port** in `api_path`.
-- Imago jobs are in-memory only; restarting the sidecar loses them.
-- Keep the sidecar stateless except for the job store.
+- Keep the sidecar stateless.
 
 ---
 

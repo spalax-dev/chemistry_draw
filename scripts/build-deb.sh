@@ -28,27 +28,35 @@ docker run --rm \
   chemistry-builder bash -e -c '
   cd /app
 
-  mkdir -p src-tauri/lib/linux-x86_64/
-  cp /opt/chemistry/libs/*.so* src-tauri/lib/linux-x86_64/
+  # The libs are copied into the bind-mounted source tree, so snapshot the host
+  # state first and restore it on exit: packaging never mutates the checkout
+  # and never bundles host leftovers.
+  LIB_DIR=/app/src-tauri/lib/linux-x86_64
+  LIB_SNAPSHOT=$(mktemp -d)
+  if [ -d "$LIB_DIR" ]; then cp -a "$LIB_DIR/." "$LIB_SNAPSHOT/"; fi
+  restore_libs() {
+    find "$LIB_DIR" -mindepth 1 -maxdepth 1 -delete 2>/dev/null || true
+    mkdir -p "$LIB_DIR"
+    cp -a "$LIB_SNAPSHOT/." "$LIB_DIR/" 2>/dev/null || true
+  }
+  trap restore_libs EXIT
+
+  mkdir -p "$LIB_DIR"
+  find "$LIB_DIR" -mindepth 1 -maxdepth 1 -delete
+  cp /opt/chemistry/libs/*.so* "$LIB_DIR/"
+  bash scripts/check-native-libs.sh --allowlist /opt/chemistry/libs /opt/chemistry/libs "$LIB_DIR"
 
   # Never ship the C++ runtime: use the target distro libstdc++ instead
   # (newer and backward compatible).
   rm -f src-tauri/lib/linux-x86_64/libstdc++.so* \
         src-tauri/lib/linux-x86_64/libgcc_s.so*
 
-  cargo build --release -p indigo-server --bin indigo-server --bin imago-worker
+  cargo build --release -p indigo-server --bin indigo-server
   cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu
-  cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu
 
   pnpm install --frozen-lockfile --prefer-offline
   rm -rf target/release/bundle
   NO_STRIP=1 pnpm tauri build --bundles deb
-
-  # The libs above were copied into the bind-mounted source tree; keep only the
-  # tracked ones so the host checkout stays clean.
-  find src-tauri/lib/linux-x86_64 -maxdepth 1 \( -type f -o -type l \) \
-    ! -name 'libimago.so' ! -name 'libindigo.so' ! -name 'libindigo-renderer.so' \
-    -delete
 
   mkdir -p /app/dist-packages
   cp -v target/release/bundle/deb/*.deb /app/dist-packages/ 2>/dev/null || true

@@ -33,7 +33,7 @@
     ],
     "category": "Education",
     "shortDescription": "Desktop chemical structure editor",
-    "longDescription": "Chemistry Draw is an unofficial desktop wrapper of Ketcher (Apache 2.0, EPAM Systems). Draw molecules, reactions and macromolecules offline.\n\nBuilt with Tauri (Rust + React/TypeScript) on top of native Indigo cheminformatics. Image-to-structure recognition (Imago) is available in Linux builds only; Windows builds ship without it.",
+    "longDescription": "Chemistry Draw is an unofficial desktop wrapper of Ketcher (Apache 2.0, EPAM Systems). Draw molecules, reactions and macromolecules offline.\n\nBuilt with Tauri (Rust + React/TypeScript) on top of native Indigo cheminformatics.",
     "licenseFile": "../LICENSE"
   }
 }

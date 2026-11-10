@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Bundles all transitive .so dependencies for the sidecar into lib/linux-x86_64/
-# so .deb and AppImage packages work on Debian 12 / Ubuntu 22.04+ without system OpenCV.
+# so .deb and AppImage packages work on Debian 12 / Ubuntu 22.04+ without extra
+# system libraries.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -73,10 +74,9 @@ copy_recursive() {
 
 echo "==> Bundling shared library dependencies into $LIB_DIR"
 
-# Start from our own libs and imago
+# Start from our own libs
 copy_recursive "$LIB_DIR/libindigo.so"
 copy_recursive "$LIB_DIR/libindigo-renderer.so"
-copy_recursive "$LIB_DIR/libimago.so"
 
 # Set RPATH para que linuxdeploy resuelva dependencias entre .so
 echo "==> Setting RPATH on bundled libraries..."

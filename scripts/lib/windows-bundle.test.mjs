@@ -33,7 +33,7 @@ test("the bundle embeds only the WebView2 bootstrapper", () => {
   );
 });
 
-test("the Windows bundle ships Indigo without Imago", () => {
+test("the Windows bundle ships the Indigo sidecar and DLLs", () => {
   assert.deepEqual(config.bundle?.externalBin, ["../target/release/indigo-server"]);
   assert.ok(
     config.bundle?.resources?.["lib/windows-x86_64/*.dll"],

@@ -129,6 +129,8 @@ function App() {
         <Editor
           staticResourcesUrl={"."}
           structServiceProvider={provider}
+          // Recognize Molecule returns with the DECIMER pipeline (Phase B).
+          buttons={{ recognize: { hidden: true } }}
           errorHandler={handleError}
           onInit={handleInit}
         />

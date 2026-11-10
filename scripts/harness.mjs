@@ -19,7 +19,7 @@
  *  3. Activity policy: run scripts/lib/activity-policy.test.mjs, then validate
  *     activities.json (phases docs → test → implement → review, statuses,
  *     agents, one in_progress at most)
- *  4. Native Indigo/Imago libraries are present (`task libs` generates them)
+ *  4. Native Indigo libraries are present (`task libs` generates them)
  *  5. TypeScript typecheck (`pnpm exec tsc --noEmit`)
  *  6. ESLint (`pnpm run lint`)
  *  7. Prettier formatting (`pnpm run format:check`)
@@ -283,9 +283,9 @@ try {
 }
 
 console.log("\n── 4. Native Libraries ───────────────────────────────");
-// Linux: `task libs` builds Indigo/Imago/OpenCV in the Docker builder.
+// Linux: `task libs` builds Indigo in the Docker builder.
 // Windows: `scripts/fetch-windows-libs.ps1` downloads Indigo 1.46.0 and
-// generates the MSVC import libraries. Imago is intentionally absent there.
+// generates the MSVC import libraries.
 
 const requiredLibs = IS_WINDOWS
   ? [
@@ -297,7 +297,7 @@ const requiredLibs = IS_WINDOWS
       "indigo.lib",
       "indigo-renderer.lib",
     ]
-  : ["libindigo.so", "libindigo-renderer.so", "libimago.so"];
+  : ["libindigo.so", "libindigo-renderer.so"];
 const libExtension = IS_WINDOWS ? ".dll" : ".so";
 const missing = requiredLibs.filter((lib) => !existsSync(path.join(LIB_DIR, lib)));
 let haveLibs = false;

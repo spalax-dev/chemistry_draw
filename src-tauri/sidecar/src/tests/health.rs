@@ -26,10 +26,6 @@ async fn health_reports_status_and_port() {
         body["uptime_seconds"].as_u64().is_some(),
         "health must report uptime"
     );
-    assert!(
-        body["imago_worker"]["found"].as_bool().is_some(),
-        "health must report whether the Imago worker was found"
-    );
 }
 
 #[tokio::test]

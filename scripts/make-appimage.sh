@@ -8,7 +8,7 @@
 #     Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...
 #
 # Tauri's AppImageConfig has no exclude list, so we build a minimal AppDir with
-# only our binary, the sidecars and our own libraries. GTK/WebKit/EGL come from
+# only our binary, the sidecar and our own libraries. GTK/WebKit/EGL come from
 # the host, exactly like the .deb and .rpm.
 #
 # Runs inside the builder container (needs $APPIMAGETOOL).
@@ -31,7 +31,6 @@ mkdir -p "$APPDIR/usr/bin" \
 
 install -m755 target/release/chemistry-draw "$APPDIR/usr/bin/"
 install -m755 target/release/indigo-server "$APPDIR/usr/bin/"
-install -m755 target/release/imago-worker "$APPDIR/usr/bin/"
 
 cp -a src-tauri/lib/linux-x86_64/. \
       "$APPDIR/usr/lib/chemistry-draw/lib/linux-x86_64/"

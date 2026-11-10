@@ -14,6 +14,8 @@ dist-ssr
 .pnpm-store/
 # locally built .deb/.rpm/.AppImage
 dist-packages/
+# AppImage payload extraction (docs/verification.md)
+squashfs-root/
 
 # Editor directories and files
 .vscode/*
@@ -26,7 +28,6 @@ dist-packages/
 *.sln
 *.sw?
 sidecar/target/
-Imago/
 test_*.png
 *_result.mol
 
@@ -34,7 +35,7 @@ test_*.png
 build-library/
 build-libs/
 
-# Native Indigo/Imago libs are built, not vendored: `task libs` (or the Docker
+# Native Indigo libs are built, not vendored: `task libs` (or the Docker
 # builder) generates them. Packages ship them; they are never committed.
 src-tauri/lib/linux-x86_64/
 

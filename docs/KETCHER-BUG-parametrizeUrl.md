@@ -1,11 +1,14 @@
 # Ketcher bug: `parametrizeUrl` consumes the URL port
 
-Status: **confirmed upstream** (Ketcher team reproduced it and is landing a fix).
+> **Historical.** Imago was removed in Phase A; see [ROADMAP](ROADMAP.md). This
+> document records the upstream Ketcher `parametrizeUrl` bug and its patch.
+
+Status: **confirmed upstream** (Ketcher team reproduced it and landed a fix).
 Local workaround: `patches/ketcher-core@3.18.0.patch` (see [Removing the patch](#removing-the-patch)).
 
 ## Symptom
 
-In the desktop app, image recognition (Imago) fails with:
+In the desktop app, image recognition (Imago) used to fail with:
 
 ```
 [Error] Failed to load resource: Error resolving "127.0.0.1undefined": Name or service not known
@@ -14,15 +17,15 @@ In the desktop app, image recognition (Imago) fails with:
 
 and the app shows the generic "The chemistry server is not responding..." dialog.
 
-Nothing else is affected: drawing, layout, cleaning, calculations and the image
-upload itself all work. Only **Recognize** breaks.
+Nothing else was affected: drawing, layout, cleaning, calculations and the image
+upload itself all worked. Only **Recognize** broke.
 
-The `indigo-server` sidecar is healthy the whole time:
+The `indigo-server` sidecar was healthy the whole time:
 
-- it logs `indigo-server listening on http://127.0.0.1:9321`
-- `GET /v2/info` returns `200`
-- `POST /v2/imago/uploads` is accepted
-- it keeps answering `200` after an upload (verified in isolation)
+- it logged `indigo-server listening on http://127.0.0.1:9321`
+- `GET /v2/info` returned `200`
+- `POST /v2/imago/uploads` was accepted
+- it kept answering `200` after an upload (verified in isolation)
 
 ## Root cause
 
@@ -145,14 +148,20 @@ As soon as a published `ketcher-core` includes the upstream fix:
 1. Bump `ketcher-core` / `ketcher-react` to that version.
 2. Delete `patches/ketcher-core@3.18.0.patch`.
 3. Remove the `patchedDependencies` entry from `pnpm-workspace.yaml`.
-4. `pnpm install` and verify the Imago flow still works.
+4. `pnpm install` and run `node scripts/harness.mjs`.
+
+No recognition backend ships today: Imago was removed in Phase A and
+_Recognize Molecule_ is hidden. Recognition returns with the DECIMER pipeline in
+Phase B, and the patch stays applied only until Phase C ships the fixed Ketcher
+release.
 
 ## Verification
 
 - `tsc --noEmit` passes.
 - Sidecar isolation test: upload → `GET /v2/info` → `200`, process alive.
-- In-app flow after the patch: `POST /v2/imago/uploads` → `Imago job ... -> SUCCESS`
-  with no `Failed to load resource` and no `TypeError: Load failed`.
+- In-app flow after the patch (while Imago was still shipped) returned
+  `Imago job ... -> SUCCESS` for `POST /v2/imago/uploads`, with no
+  `Failed to load resource` and no `TypeError: Load failed`.
 
 ## Upstream
 

@@ -48,7 +48,6 @@ extern "C" {
     fn indigoAddCIPStereoDescriptors(handle: i32) -> i32;
     fn indigoVersion() -> *const c_char;
     fn indigoSetOption(name: *const c_char, value: *const c_char) -> i32;
-    fn indigoSetOptionBool(name: *const c_char, value: i32) -> i32;
     fn indigoGetLastError() -> *const c_char;
     fn indigoToBuffer(handle: i32, buf: *mut *mut c_char, size: *mut i32) -> i32;
     fn indigoFree(handle: i32) -> i32;
@@ -71,12 +70,6 @@ pub fn init_session() -> anyhow::Result<u64> {
     }
     INDIGO_SESSION.with(|s| *s.lock().unwrap() = sid);
     Ok(sid)
-}
-
-/// Sets a boolean Indigo option for the current session.
-pub fn set_option_bool(name: &str, value: i32) -> i32 {
-    let c_name = CString::new(name).unwrap();
-    unsafe { indigoSetOptionBool(c_name.as_ptr(), value) }
 }
 
 /// Loads a molecule or reaction from a string (SMILES, molfile, etc.).

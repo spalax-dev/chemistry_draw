@@ -42,8 +42,6 @@ runs:
         libssl-dev libgtk-3-dev
         libayatana-appindicator3-dev
         librsvg2-dev patchelf libfuse2
-        libopencv-dev libblas-dev
-        liblapack-dev libgfortran5
         shellcheck
 
     - name: Install pnpm deps

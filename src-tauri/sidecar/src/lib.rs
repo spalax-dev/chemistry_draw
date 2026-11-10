@@ -1,8 +1,7 @@
 //! HTTP sidecar replacing Ketcher's WASM Indigo backend.
 //!
-//! Spawned by the Tauri app, this sidecar serves the Indigo REST v2 API
-//! using native Indigo on every platform, plus Imago (image recognition) on
-//! Linux. Windows builds compile Imago out and do not register its routes.
+//! Spawned by the Tauri app, this sidecar serves the Indigo REST v2 API using
+//! native Indigo on every platform. It has no image-recognition backend.
 //!
 //! # Architecture
 //!
@@ -10,9 +9,8 @@
 //! transport/     axum handlers, one module per domain
 //! service/       business logic, orchestrates FFI
 //! ffi/           extern "C" bindings to native libraries
-//! job/           in-memory job store for async Imago jobs
 //! error.rs       AppError → HTTP status code mapping
-//! state.rs       shared app state (port, job store)
+//! state.rs       shared app state (port)
 //! ```
 //!
 //! # Endpoints
@@ -24,12 +22,9 @@
 //! | POST   | `/v2/indigo/convert`            | Indigo   |
 //! | POST   | `/v2/indigo/aromatize`          | Indigo   |
 //! | POST   | `/v2/indigo/layout`             | Indigo   |
-//! | POST   | `/v2/imago/uploads`             | Imago (Linux only) |
-//! | GET    | `/v2/imago/uploads/{id}`        |          |
 
 pub mod error;
 pub mod ffi;
-pub mod job;
 pub mod service;
 pub mod state;
 pub mod transport;
@@ -37,22 +32,13 @@ pub mod transport;
 #[cfg(test)]
 mod tests;
 
-pub use job::ImagoJobStore;
 pub use state::AppState;
 
 /// Builds the full [`axum::Router`] with all routes.
-///
-/// Imago routes are only registered on non-Windows builds: Windows has no OCR
-/// backend and Ketcher disables recognition when `imago_versions` is empty.
 pub fn build_router(state: AppState) -> axum::Router {
     use axum::{routing::get, routing::post, Router};
 
-    #[cfg(not(windows))]
-    let imago_routes = Router::new()
-        .route("/", post(transport::imago::post_upload))
-        .route("/:id", get(transport::imago::get_status));
-
-    let router = Router::new()
+    Router::new()
         .route("/v2/info", get(transport::info::get_info))
         .route("/v2/health", get(transport::health::get_health))
         .route("/v2/indigo/info", get(transport::indigo::get_indigo_info))
@@ -77,10 +63,6 @@ pub fn build_router(state: AppState) -> axum::Router {
             "/v2/indigo/calculate_cip",
             post(transport::indigo::post_calculate_cip),
         )
-        .route("/v2/indigo/automap", post(transport::indigo::post_automap));
-
-    #[cfg(not(windows))]
-    let router = router.nest("/v2/imago/uploads", imago_routes);
-
-    router.with_state(state)
+        .route("/v2/indigo/automap", post(transport::indigo::post_automap))
+        .with_state(state)
 }

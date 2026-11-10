@@ -34,20 +34,20 @@ not contain `test` or `implement` tasks.
 
 ## Repo map
 
-| Path                                          | When read                 |
-| --------------------------------------------- | ------------------------- |
-| `activities.json`, `progress/current.md`      | always, at start          |
-| `progress/history.md`                         | need past context         |
-| `docs/architecture.md`                        | before implement          |
-| `docs/conventions.md`                         | before write code         |
-| `docs/testing.md`                             | before writing tests      |
-| `docs/verification.md`, `docs/CHECKPOINTS.md` | before declaring done     |
-| `scripts/harness.mjs`                         | verification gate         |
-| `scripts/lib/activity-policy.mjs`             | activity/phase validator  |
-| `scripts/lib/activity-policy.test.mjs`        | phase-policy tests        |
-| `src/`, `src-tauri/src/`                      | frontend / Tauri host     |
-| `src-tauri/sidecar/`                          | Indigo/Imago HTTP sidecar |
-| `scripts/`                                    | native libs + packaging   |
+| Path                                          | When read                |
+| --------------------------------------------- | ------------------------ |
+| `activities.json`, `progress/current.md`      | always, at start         |
+| `progress/history.md`                         | need past context        |
+| `docs/architecture.md`                        | before implement         |
+| `docs/conventions.md`                         | before write code        |
+| `docs/testing.md`                             | before writing tests     |
+| `docs/verification.md`, `docs/CHECKPOINTS.md` | before declaring done    |
+| `scripts/harness.mjs`                         | verification gate        |
+| `scripts/lib/activity-policy.mjs`             | activity/phase validator |
+| `scripts/lib/activity-policy.test.mjs`        | phase-policy tests       |
+| `src/`, `src-tauri/src/`                      | frontend / Tauri host    |
+| `src-tauri/sidecar/`                          | Indigo HTTP sidecar      |
+| `scripts/`                                    | native libs + packaging  |
 
 - All paths relative to repo root. No absolute paths, no `../`.
 
@@ -67,8 +67,7 @@ not contain `test` or `implement` tasks.
   `progress/current.md` and stop — no workarounds.
 - Never commit `src-tauri/lib/`, `target/`, `dist/`, `dist-packages/` or any
   `.so` file.
-- Native Indigo/Imago are generated with `task libs` (Docker). They are never
-  vendored.
+- Native Indigo is generated with `task libs` (Docker). It is never vendored.
 
 ## Activities
 

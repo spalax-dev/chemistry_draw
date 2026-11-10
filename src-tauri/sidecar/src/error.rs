@@ -13,7 +13,7 @@ use serde::Serialize;
 /// | Variant | HTTP | Meaning |
 /// |---------|------|---------|
 /// | `BadRequest` | 400 | Invalid input (bad SMILES, etc.) |
-/// | `NotFound` | 404 | Resource not found (unknown upload_id) |
+/// | `NotFound` | 404 | Resource not found |
 /// | `Internal` | 500 | Native library error, I/O error, etc. |
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -33,9 +33,6 @@ pub enum AppError {
 impl AppError {
     pub fn bad_request(e: impl std::fmt::Display) -> Self {
         Self::BadRequest(e.to_string())
-    }
-    pub fn not_found(msg: impl Into<String>) -> Self {
-        Self::NotFound(msg.into())
     }
     pub fn internal(e: impl std::fmt::Display) -> Self {
         Self::Internal(e.to_string())

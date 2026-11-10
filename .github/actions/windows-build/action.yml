@@ -1,7 +1,6 @@
 name: Build Windows installer
 description: >-
-  Build and validate the Windows x86_64 sidecar and NSIS installer. Imago is
-  compiled out, so image recognition is unavailable in this build.
+  Build and validate the Windows x86_64 sidecar and NSIS installer.
 
 runs:
   using: composite
@@ -112,17 +111,18 @@ runs:
             }
           }
           if (-not $info) { throw "/v2/info did not become reachable on port $port" }
-          if ($info.Content -notmatch '"imago_versions"\s*:\s*\[\s*\]') {
-            throw "/v2/info did not report an empty imago_versions array: $($info.Content)"
+          $infoText = [string]$info.Content
+          if ($infoText -match "imago_versions") {
+            throw "/v2/info still exposes imago_versions: $infoText"
           }
 
           $health = Invoke-WebRequest -Uri "$base/health"
           $healthJson = $health.Content | ConvertFrom-Json
-          if ($healthJson.imago_worker.found -ne $false) {
-            throw "/v2/health reported imago_worker.found = $($healthJson.imago_worker.found)"
+          if ($null -ne $healthJson.imago_worker) {
+            throw "/v2/health still exposes imago_worker"
           }
-          if ($health.Content -notmatch '"imago_versions"\s*:\s*\[\s*\]') {
-            throw "/v2/health did not report an empty imago_versions array: $($health.Content)"
+          if ([string]$health.Content -match "imago_versions") {
+            throw "/v2/health still exposes imago_versions"
           }
 
           $upload = Invoke-WebRequest -Method POST -Uri "$base/imago/uploads" `
@@ -131,7 +131,7 @@ runs:
             throw "/v2/imago/uploads returned $($upload.StatusCode), expected 404"
           }
 
-          Write-Host "Sidecar smoke test passed on port $port (no Imago)"
+          Write-Host "Sidecar smoke test passed on port $port"
         }
         finally {
           if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }

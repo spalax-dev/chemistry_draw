@@ -14,12 +14,9 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=indigo");
     println!("cargo:rustc-link-lib=dylib=indigo-renderer");
 
-    // Imago (and therefore OpenCV) is Linux-only: the Windows build ships a
-    // stub and never links libimago.
+    // RPATH para que linuxdeploy/ldd encuentre libindigo.so al empaquetar AppImage
+    // En AppDir: usr/bin/indigo-server → $ORIGIN/../lib = usr/lib/
     if target_os != "windows" {
-        println!("cargo:rustc-link-lib=dylib=imago");
-        // RPATH para que linuxdeploy/ldd encuentre libindigo.so al empaquetar AppImage
-        // En AppDir: usr/bin/indigo-server → $ORIGIN/../lib = usr/lib/
         println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
     }
 

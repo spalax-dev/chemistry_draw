@@ -55,14 +55,23 @@
 - [ ] `progress/history.md` has an entry for the last session.
 - [ ] The last worked activity reflects its correct state.
 
-## C6 — Windows Build Without Imago
+## C6 — No Imago Anywhere
 
 - [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.46.0, verifies SHA-256 and
       never vendors DLLs/`.lib` files.
-- [ ] Windows CI (`windows` job) builds and smoke-tests the sidecar: empty
-      `imago_versions`, `imago_worker.found = false`, `/v2/imago/uploads` 404.
+- [ ] No Imago code, route, worker binary, native library or packaging
+      reference remains (outside `CHANGELOG.md`, `progress/history.md`, the
+      roadmap and the checks that assert its absence).
+- [ ] `src-tauri/sidecar/src/tests/imago_absent.rs` runs on every platform:
+      `/v2/info` and `/v2/health` expose no `imago_versions` / `imago_worker`,
+      and `/v2/imago/*` returns 404.
+- [ ] The packaging contract test asserts `externalBin` never lists
+      `imago-worker`.
+- [ ] Rebuilt artifacts contain no imago-worker/libimago/OpenCV (deb/rpm/AppImage
+      inspected).
 - [ ] NSIS installer is uploaded as an artifact.
-- [ ] Windows docs state the no-Imago limitation and the build commands.
+- [ ] Docs state that Recognize Molecule is hidden until the DECIMER pipeline
+      (Phase B) and list the Windows build commands.
 - [ ] Linux harness and packaging metadata remain green.
 
 ## C7 — Docs → Test → Implement → Review

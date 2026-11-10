@@ -139,7 +139,7 @@ Each activity in `activities.json` must follow this schema:
   "title": "Add a diagnostics health endpoint",
   "description": "Expose GET /v2/health with uptime, port and library versions.",
   "acceptance": [
-    "GET /v2/health returns 200 with status, port, uptime and imago worker presence",
+    "GET /v2/health returns 200 with status, port, uptime and Indigo versions",
     "tests cover the success path",
     "Harness green"
   ],

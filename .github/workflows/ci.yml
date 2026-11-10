@@ -58,12 +58,11 @@ jobs:
         env:
           LD_LIBRARY_PATH: src-tauri/lib/linux-x86_64
         run: >
-          cargo build --release -p indigo-server --bin indigo-server --bin imago-worker &&
-          cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu &&
-          cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu
+          cargo build --release -p indigo-server --bin indigo-server &&
+          cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu
 
   windows:
-    name: Windows build (NSIS, no Imago)
+    name: Windows build (NSIS)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

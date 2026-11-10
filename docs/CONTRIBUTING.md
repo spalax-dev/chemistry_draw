@@ -27,7 +27,7 @@ Quick start (Linux):
 
 ```bash
 pnpm install
-task libs   # builds Indigo/Imago libs via Docker; required for the sidecar
+task libs   # builds Indigo libs via Docker; required for the sidecar
 task dev
 ```
 

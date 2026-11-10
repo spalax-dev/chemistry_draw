@@ -42,9 +42,11 @@ Windows changes are validated by the `windows` job in
     plus `indigo.lib` / `indigo-renderer.lib`.
 14. `node scripts/harness.mjs` passes on Windows (ShellCheck is skipped: the
     scripts are POSIX-only).
-15. Sidecar smoke test: `/v2/info` reports `"imago_versions": []`,
-    `/v2/health` reports `imago_worker.found = false`, and
-    `POST /v2/imago/uploads` returns 404.
+15. Sidecar smoke test (Windows job only): the absence contract lives in
+    `.github/actions/windows-build/action.yml` — `/v2/info` and `/v2/health`
+    contain no `imago_versions` / `imago_worker` fields, and
+    `POST /v2/imago/uploads` returns 404. Linux covers the same contract through
+    `cargo test` (`tests/imago_absent.rs`).
 16. `pnpm tauri build --bundles nsis` produces
     `target/release/bundle/nsis/*.exe`, uploaded by CI.
 17. `cargo check -p indigo-server --all-targets --target x86_64-pc-windows-msvc`
@@ -71,8 +73,8 @@ Windows changes are validated by the `windows` job in
 
 - Draw a molecule, run Layout and Clean: the structure stays valid.
 - Save as PNG/SVG: the file is produced and non-empty.
-- Recognize (Imago, Linux): upload → poll reaches `SUCCESS` or a clear error.
-- Windows: Recognize Molecule is disabled and `/v2/imago/uploads` is absent.
+- Recognize Molecule is hidden on all platforms until the DECIMER pipeline
+  (Phase B) lands.
 
 ### Packaging
 
@@ -80,6 +82,32 @@ Windows changes are validated by the `windows` job in
   Wayland.
 - `.deb`/`.rpm` install into `/usr/bin` and `/usr/lib/chemistry-draw`.
 - No `libstdc++`/`libgcc_s` inside any artifact.
+- Artifact payload inspection shows no `imago-worker`, `libimago.so` or
+  `libopencv*`. `dist-packages/` may hold older generations, so target the
+  version under test with explicit paths (never a glob over two generations).
+  Each absence command must print nothing, and each non-vacuity check must
+  succeed — otherwise the inspection proves nothing:
+
+  ```bash
+  V=0.1.6
+  DEB=dist-packages/chemistry-draw_${V}_amd64.deb
+  RPM=dist-packages/chemistry-draw-${V}-1.x86_64.rpm
+  APPIMAGE=dist-packages/chemistry-draw_${V}_amd64.AppImage
+
+  # Non-vacuity: the payload really contains the sidecar.
+  ar p "$DEB" data.tar.gz | tar -tz | grep usr/bin/indigo-server >/dev/null
+  rpm -qlp "$RPM" | grep usr/bin/indigo-server >/dev/null
+  "$APPIMAGE" --appimage-extract >/dev/null
+  test -x squashfs-root/usr/bin/indigo-server
+
+  # Absence: each command must print nothing.
+  ar p "$DEB" data.tar.gz | tar -tz | grep -Ei 'imago|opencv'
+  rpm -qlp "$RPM" | grep -Ei 'imago|opencv'
+  find squashfs-root \( -iname '*imago*' -o -iname '*opencv*' \)
+  ```
+
+- The packaged sidecar answers `GET /v2/info` without an `imago_versions` field
+  and `POST /v2/imago/uploads` returns 404.
 
 ---
 

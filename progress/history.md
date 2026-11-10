@@ -88,3 +88,76 @@
 - `scripts/lib/windows-bundle.test.mjs` now pins those choices so they are not
   changed again by accident.
 - README/docs note that systems with Edge/WebView2 removed are unsupported.
+
+## 2026-11-10 — Activity 1: remove Imago (Phase A)
+
+- Activity 1 (`feat: remove-imago`) removed Imago end to end, following
+  docs → test → implement → review.
+- Docs: `architecture.md`, `verification.md`, `CHECKPOINTS.md` (C6 "No Imago
+  Anywhere"), `conventions.md`, `testing.md`, `DEVELOPMENT.md`, `README.md`,
+  `NOTICE`, `AGENTS.md`, `.gitignore`, `.opencode/agent/main-orchestrator.md`
+  and the historical `KETCHER-BUG-parametrizeUrl.md` now describe an Indigo-only
+  app; the contract is that Ketcher's _Recognize Molecule_ control is hidden
+  until the DECIMER pipeline (Phase B) and that `/v2/info` + `/v2/health` expose
+  no Imago fields, while `/v2/imago/*` does not exist.
+- Tests: new cross-platform `src-tauri/sidecar/src/tests/imago_absent.rs`
+  (5 tests: no `imago_versions` in `/v2/info` + `/v2/indigo/info`, no
+  `imago_versions`/`imago_worker` in `/v2/health`, both Imago routes → 404) and
+  `scripts/lib/no-imago-packaging.test.mjs` (11 tests pinning `externalBin`,
+  sidecar bins/deps and build/packaging scripts). RED was confirmed first
+  (5 failing Rust tests, 11 failing Node tests).
+- Sidecar: deleted `ffi/imago*.rs`, `job/`, `service/imago_ops.rs`,
+  `transport/imago.rs`, `bin/imago-worker.rs`; `AppState` is now
+  `{ port, started_at }`; `build.rs` keeps the RPATH and drops `-limago`;
+  `Cargo.toml` drops the worker bin and `uuid`; `tests/mod.rs` no longer builds
+  a job store.
+- Build/packaging/CI: `build-libs.sh` (no OpenCV/Imago), `Dockerfile`,
+  `check-libs.sh`, `bundle-libs.sh`, `check-deps.sh`, all packaging scripts,
+  `Taskfile.yml`, `tauri.linux.conf.json` (`externalBin` = `indigo-server`),
+  `tauri.conf.json`, `ci.yml`, `release.yml`, `windows-build/setup` actions
+  (smoke test now asserts absence) and `harness.mjs` `requiredLibs`.
+- Frontend: `<Editor buttons={{ recognize: { hidden: true } }}>` in
+  `src/App.tsx`; Ketcher only reads `options.buttons` from this prop, so hiding
+  here leaves no dead (disabled) button.
+- Review: `implementation-reviewer` requested docs fixes (historical banner for
+  the Ketcher bug doc, roadmap current-state line, stale lapack/openblas
+  packages, Windows-only smoke-test wording, examples); all fixed and
+  re-reviewed as APPROVED.
+- `node scripts/harness.mjs` green (exit 0): typecheck, ESLint, Prettier,
+  frontend build, rustfmt, Clippy, 87 sidecar tests, ShellCheck.
+- Roadmap Phase A marked complete; release builds and package-size comparison
+  remain for the next release cut.
+
+## 2026-11-10 — Activity 2: purge Imago from the builder image and artifacts
+
+- The local `chemistry-builder` image (Oct 31) still carried `libimago.so` and
+  OpenCV 4.6 under `/opt/chemistry/libs`, and packaging copied every `.so` from
+  there into `src-tauri/lib`, so a rebuild would have re-shipped Imago.
+- Rebuilt the image with `--no-cache` from the patched `build-libs.sh`:
+  `/opt/chemistry/libs` went from 36 to **21 files**, zero imago/opencv.
+- New `scripts/check-native-libs.sh`: fails on `*imago*`/`*opencv*` names and,
+  with `--allowlist <source>`, on any library the builder image does not
+  provide. Wired into `build-deb.sh`, `build-rpm.sh`, `build-appimage.sh` and
+  `build-packages.sh` right after the native-lib copy.
+- Packaging now snapshots `src-tauri/lib/linux-x86_64`, wipes it, copies only
+  builder libs, and restores the checkout in an EXIT trap; `task libs` also
+  wipes before copying. The Imago-era `libjpeg` trio that had been leaking into
+  the payload from the dev dir is gone.
+- Rebuilt artifacts (0.1.6, Imago-free): payloads bundle exactly the 21 builder
+  libraries, no `imago-worker`, `libimago`, `libopencv` or `libjpeg`.
+  Sizes vs the 0.1.0 Imago-era builds:
+  - deb 34,340,202 → 19,829,342 B (−14.51 MB, −42.26%)
+  - rpm 34,345,311 → 19,829,798 B (−14.52 MB, −42.26%)
+  - AppImage 21,645,816 → 16,955,896 B (−4.69 MB, −21.67%)
+    Removed payload: `imago-worker` (382,648 B), `libimago.so` (1,937,560 B) and
+    the OpenCV trio (14.2 MB deduplicated, 38.1 MB as shipped with symlinks).
+- Runtime check of the packaged sidecar: `/v2/info` and `/v2/health` expose no
+  Imago fields; `/v2/imago/*` → 404; `/v2/indigo/render` still returns PNG.
+- Docs: artifact payload verification is version-scoped and non-vacuous
+  (`docs/verification.md`), C6 gained the artifact checkbox, `DEVELOPMENT.md`
+  documents the guard/snapshot rules, and `ROADMAP.md` records the sizes.
+- Review: implementation-reviewer rejected the first artifact build (host
+  `libjpeg` leak + broken verification commands), all findings fixed, packages
+  rebuilt and re-reviewed as APPROVED.
+- Gates: `node --test scripts/lib/*.test.mjs` 65/65, ShellCheck clean,
+  `node scripts/harness.mjs` green.

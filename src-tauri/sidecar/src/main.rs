@@ -14,7 +14,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
-use indigo_server::{build_router, AppState, ImagoJobStore};
+use indigo_server::{build_router, AppState};
 
 /// Ports to try starting from `preferred` before falling back to an ephemeral one.
 const PORT_SCAN_RANGE: u16 = 20;
@@ -166,7 +166,6 @@ async fn main() {
     let state = AppState {
         port,
         started_at: std::time::Instant::now(),
-        imago_store: ImagoJobStore::new(),
     };
 
     let cors = CorsLayer::new()

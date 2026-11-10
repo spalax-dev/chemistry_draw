@@ -102,15 +102,20 @@ Rules:
 - Use `test_app()` (full router) for endpoint tests; no sockets, no ports.
 - Assert both the **status code** and the meaningful body fields.
 - Include the negative path: malformed JSON (422/400), invalid molecule (400),
-  unknown upload id (404).
-- No real network. Native Indigo/Imago are linked, so chemistry tests are real —
-  that is the point.
-- Imago integration tests may need fixtures; keep them deterministic and skip
-  cleanly when no fixture is available.
-- Platform-specific behaviour is tested with `#[cfg(windows)]` modules
-  (`tests/windows_no_imago.rs` asserts the empty `imago_versions` list and the
-  absent Imago routes). They compile locally via cross-target `cargo check` but
-  only run in Windows CI.
+  unknown route (404).
+- No real network. Native Indigo is linked, so chemistry tests are real — that
+  is the point.
+- Absence is tested cross-platform in `tests/imago_absent.rs`: `/v2/info` and
+  `/v2/health` expose no `imago_versions` / `imago_worker`, and `/v2/imago/*`
+  returns 404. The same module runs on Linux and Windows CI, so no
+  `#[cfg(windows)]` variant is needed.
+- The packaging contract tests (`scripts/lib/*.test.mjs`) assert `externalBin`
+  never lists `imago-worker`, and that `scripts/check-native-libs.sh` fails on a
+  directory holding `libimago*`/`*opencv*` files (case-insensitively, including
+  broken symlinks) and passes silently on a clean one. They also cover the
+  `--allowlist <source-dir>` mode: a bundled file absent from the builder image
+  fails with "not provided by the builder image", while a missing target
+  directory only warns on stderr.
 - Never test private state (`obj.field`); test behaviour.
 
 ---

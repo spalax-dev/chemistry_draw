@@ -28,8 +28,7 @@ community packaging: it is not an official EPAM product.
 | Frontend          | React 18 + TypeScript + Vite                                    |
 | Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §9)       |
 | Chemistry backend | `indigo-server` sidecar: Rust + axum                            |
-| Native chemistry  | `libindigo`, `libindigo-renderer`, `libimago` (FFI)             |
-| OCR worker        | `imago-worker` child process (Linux only)                       |
+| Native chemistry  | `libindigo`, `libindigo-renderer` (FFI)                         |
 | Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS |
 
 ---
@@ -46,20 +45,18 @@ community packaging: it is not an official EPAM product.
 ┌─────────────────────────────▼───────────────────────────────────┐
 │  indigo-server (axum, spawned and supervised by the Tauri host)  │
 │  transport/ → service/ → ffi/                                    │
-│  job/ (in-memory Imago jobs)                                     │
-└───────────────┬──────────────────────────────┬──────────────────┘
-                │ FFI                          │ spawn per upload
-┌───────────────▼──────────────┐   ┌───────────▼──────────────────┐
-│ libindigo / libindigo-renderer│   │ imago-worker (one-shot)      │
-│ libimago                      │   │ stdin: image path → stdout:  │
-│                               │   │ molfile                      │
-└───────────────────────────────┘   └──────────────────────────────┘
+└───────────────────────────────┬──────────────────────────────────┘
+                                │ FFI
+┌───────────────────────────────▼──────────────────────────────────┐
+│ libindigo / libindigo-renderer                                   │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-Imago and `imago-worker` exist in Linux builds only. On Windows the sidecar
-links just `indigo.dll` / `indigo-renderer.dll`, `ffi::imago` is a stub, the
-Imago routes are not registered and `imago_versions` is empty, so Ketcher
-disables image recognition.
+The sidecar links Indigo and Indigo Renderer only, on every platform. It
+exposes no Imago fields: `/v2/info` and `/v2/health` report the Indigo versions
+only, and `/v2/imago/*` does not exist. Ketcher's **Recognize Molecule** control
+is hidden until the DECIMER pipeline (Phase B) lands, so the removed capability
+leaves no dead button.
 
 The Tauri host (`src-tauri/src/lib.rs`) does **no chemistry**: it picks a free
 port, spawns `indigo-server`, tracks the port it reports, forwards its logs and
@@ -73,7 +70,6 @@ Dependencies point one way only:
 
 ```text
 frontend (src/)  →  HTTP  →  transport/  →  service/  →  ffi/
-                                   ↘  job/
 ```
 
 | Layer                | Responsibility                                        | May not                 |
@@ -82,8 +78,7 @@ frontend (src/)  →  HTTP  →  transport/  →  service/  →  ffi/
 | `src-tauri/src/`     | App lifecycle: port, sidecar spawn/kill, commands     | contain cheminformatics |
 | `sidecar/transport/` | HTTP parsing, status codes, JSON                      | call `ffi::` directly   |
 | `sidecar/service/`   | Orchestration and domain errors                       | know about HTTP         |
-| `sidecar/ffi/`       | `extern "C"` bindings, session handling               | know about HTTP or jobs |
-| `sidecar/job/`       | In-memory job store                                   | perform recognition     |
+| `sidecar/ffi/`       | `extern "C"` bindings, session handling               | know about HTTP         |
 
 Pattern rules:
 
@@ -118,31 +113,29 @@ Pattern rules:
 | POST   | `/v2/indigo/convert`, `aromatize`, `dearomatize`, `layout`, `clean` | Indigo                            |
 | POST   | `/v2/indigo/render`                                                 | Indigo Renderer                   |
 | POST   | `/v2/indigo/calculate`, `check`, `calculate_cip`, `automap`         | Indigo                            |
-| POST   | `/v2/imago/uploads`                                                 | Imago (creates a job, Linux only) |
-| GET    | `/v2/imago/uploads/{id}`                                            | job status (Linux only)           |
 
-Errors are `AppError` → `{ "error": "..." }` with 400/404/500. Ketcher's
-upload-and-poll contract is described in `sidecar/src/job/mod.rs`.
+Errors are `AppError` → `{ "error": "..." }` with 400/404/500. `/v2/info` and
+`/v2/health` expose Indigo versions only; there is no `/v2/imago/*` surface and
+no image upload/polling contract.
 
 ---
 
 ## 6. Native libraries
 
-Indigo, Indigo Renderer and Imago are **not vendored in git**.
+Indigo and Indigo Renderer are **not vendored in git**.
 
 - **Linux**: built in the Docker builder and copied by `task libs` into
   `src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what
-  packaging ships. The build uses a **minimal OpenCV** (core, imgproc,
-  imgcodecs; PNG/JPEG only) compiled into the builder. `libstdc++` and
-  `libgcc_s` are **never** shipped: the target distro runtime is used. The real
-  support floor is **glibc 2.36** (`arc4random@GLIBC_2.36` in `libindigo.so`):
-  Debian 12+, Ubuntu 24.04+, current Fedora.
+  packaging ships. `libstdc++` and `libgcc_s` are **never** shipped: the target
+  distro runtime is used. The real support floor is **glibc 2.36**
+  (`arc4random@GLIBC_2.36` in `libindigo.so`): Debian 12+, Ubuntu 24.04+,
+  current Fedora.
 - **Windows**: `scripts/fetch-windows-libs.ps1` downloads the pinned EPAM
   Indigo **1.46.0** x86_64 archive, verifies its SHA-256, extracts
   `indigo.dll`, `indigo-renderer.dll`, `msvcp140.dll`, `vcruntime140.dll` and
   `vcruntime140_1.dll` into `src-tauri/lib/windows-x86_64/` (gitignored) and
   generates the MSVC import libraries `indigo.lib` / `indigo-renderer.lib`
-  from the `indigo*` C exports. Imago and OpenCV are intentionally absent.
+  from the `indigo*` C exports.
 
 ---
 
@@ -163,8 +156,8 @@ Linux: `task packages` runs everything inside `chemistry-builder` and writes to
 
 Windows: `pnpm tauri build --bundles nsis` produces an NSIS installer under
 `target/release/bundle/nsis/`. It bundles `indigo-server.exe` plus the five
-Indigo/MSVC DLLs under `lib/windows-x86_64/`; `imago-worker` is not in
-`externalBin` and Imago is not packaged.
+Indigo/MSVC DLLs under `lib/windows-x86_64/`; `externalBin` lists only
+`indigo-server`.
 
 The Windows build lives in `.github/actions/windows-build`: toolchain, DLL fetch,
 sidecar build, harness, smoke test and NSIS bundle. Both `ci.yml` (artifact) and
@@ -191,8 +184,8 @@ Version bumps are driven by release-please and must stay in sync across
 - Rust host + frontend + sidecar output go to a rotating file via
   `tauri-plugin-log` (stdout + app log dir, 2 MB × 5 files).
 - The sidecar's stdout/stderr is forwarded line by line with ANSI stripped.
-- `GET /v2/health` exposes uptime, PID, port, versions and whether
-  `imago-worker` was found. It is for support, not for Ketcher.
+- `GET /v2/health` exposes uptime, PID, port and Indigo versions. It is for
+  support, not for Ketcher.
 - Panics are logged with location.
 
 ---
@@ -214,4 +207,5 @@ published a release with the fix yet. Removal procedure:
 - Shipping prebuilt binaries in git.
 - Reimplementing Ketcher's editor UI.
 - Supporting glibc < 2.36 or webkit2gtk < 4.1.
-- Shipping Imago/OpenCV or image recognition on Windows.
+- Shipping Imago or OpenCV; image recognition returns in Phase B through the
+  DECIMER pipeline.

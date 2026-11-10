@@ -11,7 +11,7 @@ NEW="$1"
 OLD="$2"
 HAS_ERROR=0
 
-LIBS=(libindigo.so libindigo-renderer.so libimago.so)
+LIBS=(libindigo.so libindigo-renderer.so)
 
 for f in "${LIBS[@]}"; do
   if [ ! -f "$NEW/$f" ]; then

@@ -6,7 +6,7 @@ vars:
 
 tasks:
   test:
-    desc: Run tests for Indigo + Imago
+    desc: Run tests for Indigo
     dir: "{{.SIDECAR_DIR}}"
     env:
       LD_LIBRARY_PATH: "../../{{.LIB_PATH}}:$LD_LIBRARY_PATH"
@@ -55,17 +55,16 @@ tasks:
       LD_LIBRARY_PATH: "{{.LIB_PATH}}:$LD_LIBRARY_PATH"
     cmds:
       - cargo build --release -p indigo-server --bin indigo-server
-      - cargo build --release -p indigo-server --bin imago-worker
       - cp target/release/indigo-server target/release/indigo-server-x86_64-unknown-linux-gnu
-      - cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu 2>/dev/null || cp target/release/imago-worker target/release/imago-worker-x86_64-unknown-linux-gnu
 
   libs:
-    desc: Build the native Indigo/Imago libs in Docker and copy them into src-tauri/lib (needed for dev and CI)
+    desc: Build the native Indigo libs in Docker and copy them into src-tauri/lib (needed for dev and CI)
     deps:
       - task: builder-image
     cmds:
       - |
         mkdir -p src-tauri/lib/linux-x86_64
+        find src-tauri/lib/linux-x86_64 -mindepth 1 -maxdepth 1 -delete
         docker run --rm -v "$(pwd):/app" chemistry-builder bash -c '
           cp /opt/chemistry/libs/*.so* /app/src-tauri/lib/linux-x86_64/
           rm -f /app/src-tauri/lib/linux-x86_64/libstdc++.so* \
