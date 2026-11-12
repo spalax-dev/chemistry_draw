@@ -6,3 +6,11 @@ This product includes software developed by EPAM Systems (https://www.epam.com/)
 This product includes:
 - Ketcher (https://github.com/epam/ketcher) - Apache License 2.0
 - Indigo (https://github.com/epam/Indigo) - Apache License 2.0
+- DECIMER Image Classifier (https://github.com/Iagea/DECIMER-Image-Classifier) - MIT License
+  ONNX artifacts derived from DECIMER models are downloaded at runtime, not bundled;
+  see https://huggingface.co/spalax-dev/chemistry-draw-ocsr for provenance.
+- ONNX Runtime (https://github.com/microsoft/onnxruntime) - MIT License
+  Loaded dynamically at runtime by developers/tests in B1; the runtime library is
+  not bundled with the application. Shipping it is a separate follow-up activity.
+- ort (https://github.com/pykeio/ort) - MIT License OR Apache License 2.0
+  Rust bindings used to load and drive ONNX Runtime.

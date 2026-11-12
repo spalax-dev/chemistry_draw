@@ -1,13 +1,15 @@
 //! HTTP sidecar replacing Ketcher's WASM Indigo backend.
 //!
 //! Spawned by the Tauri app, this sidecar serves the Indigo REST v2 API using
-//! native Indigo on every platform. It has no image-recognition backend.
+//! native Indigo on every platform. Phase B1 adds an ONNX Runtime image
+//! classifier that gates non-structure images; OCSR is not implemented yet.
 //!
 //! # Architecture
 //!
 //! ```text
 //! transport/     axum handlers, one module per domain
-//! service/       business logic, orchestrates FFI
+//! service/       business logic, orchestrates FFI and ML inference
+//! service/ml/    ONNX runtime, model registry, preprocessing, classifier
 //! ffi/           extern "C" bindings to native libraries
 //! error.rs       AppError → HTTP status code mapping
 //! state.rs       shared app state (port)
@@ -15,13 +17,14 @@
 //!
 //! # Endpoints
 //!
-//! | Method | Path                            | Backend  |
-//! |--------|----------------------------------|----------|
-//! | GET    | `/v2/info`                      |          |
-//! | GET    | `/v2/health`                    |          |
-//! | POST   | `/v2/indigo/convert`            | Indigo   |
-//! | POST   | `/v2/indigo/aromatize`          | Indigo   |
-//! | POST   | `/v2/indigo/layout`             | Indigo   |
+//! | Method | Path                            | Backend      |
+//! |--------|----------------------------------|--------------|
+//! | GET    | `/v2/info`                      |              |
+//! | GET    | `/v2/health`                    |              |
+//! | POST   | `/v2/indigo/convert`            | Indigo       |
+//! | POST   | `/v2/indigo/aromatize`          | Indigo       |
+//! | POST   | `/v2/indigo/layout`             | Indigo       |
+//! | POST   | `/v2/filter/classify`           | ONNX Runtime |
 
 pub mod error;
 pub mod ffi;
@@ -64,5 +67,6 @@ pub fn build_router(state: AppState) -> axum::Router {
             post(transport::indigo::post_calculate_cip),
         )
         .route("/v2/indigo/automap", post(transport::indigo::post_automap))
+        .route("/v2/filter/classify", transport::filter::route())
         .with_state(state)
 }

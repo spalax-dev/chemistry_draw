@@ -125,6 +125,30 @@ async fn bind(preferred: u16) -> std::io::Result<(TcpListener, u16)> {
     Ok((listener, port))
 }
 
+/// Resolves the model root.
+///
+/// `CHEMISTRY_MODELS_DIR` always wins. Debug builds default to the gitignored
+/// `<repo>/models` next to the workspace; release builds fall back to `models`
+/// in the working directory.
+fn resolve_models_dir() -> std::path::PathBuf {
+    if let Some(dir) = std::env::var_os("CHEMISTRY_MODELS_DIR") {
+        return std::path::PathBuf::from(dir);
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .map(|repo| repo.join("models"))
+            .unwrap_or_else(|| std::path::PathBuf::from("models"))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        std::path::PathBuf::from("models")
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Panics would otherwise vanish into the sidecar's stderr, which the host
@@ -163,10 +187,9 @@ async fn main() {
     println!("INDIGO_PORT={port}");
     info!("indigo-server listening on http://127.0.0.1:{port}");
 
-    let state = AppState {
-        port,
-        started_at: std::time::Instant::now(),
-    };
+    let models_dir = resolve_models_dir();
+    info!("model root: {}", models_dir.display());
+    let state = AppState::new(port, models_dir);
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -174,7 +197,7 @@ async fn main() {
         .allow_headers(Any);
 
     let app = build_router(state)
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().on_failure(()))
         .layer(cors);
 
     if let Err(e) = axum::serve(listener, app).await {

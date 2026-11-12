@@ -4,4 +4,5 @@
 //! [`AppError`](crate::error::AppError).
 
 pub mod indigo_ops;
+pub mod ml;
 pub mod types;

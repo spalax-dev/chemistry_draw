@@ -104,11 +104,31 @@ produces — no accumulated host leftovers.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.
 
+## ONNX Runtime (local inference)
+
+The sidecar loads ONNX Runtime **dynamically**; B1 does not link or bundle it.
+Fetch the pinned 1.31.0 Linux x86_64 shared build (checksummed, idempotent, no
+models) before running model-gated tests or trying the classifier locally:
+
+```bash
+scripts/fetch-onnxruntime.sh
+```
+
+It extracts `lib/libonnxruntime.so*` into the gitignored
+`.ort/linux-x86_64/`. `node scripts/harness.mjs` sets `ORT_DYLIB_PATH` when the
+file exists, and the debug Tauri host does the same for the sidecar. Without the
+runtime, Indigo keeps working and `POST /v2/filter/classify` answers `503` with
+an actionable message.
+
+Windows: place the pinned `onnxruntime.dll` under `.ort/windows-x86_64/` and set
+`ORT_DYLIB_PATH` to it. Shipping the runtime with the installers is a follow-up
+activity (see `docs/ROADMAP.md`).
+
 ## Windows 10/11 (x86_64)
 
 Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker
-builder. It runs the same Indigo-only sidecar as Linux; Recognize Molecule is
-hidden on every platform until the DECIMER pipeline (Phase B) lands.
+builder. It runs the same sidecar as Linux; Recognize Molecule is hidden on
+every platform until B2 wires OCSR.
 
 Prerequisites:
 
@@ -166,8 +186,10 @@ Debian 11, which is not possible today because Tauri v2 needs
 # Check pkg-config deps
 pkg-config --exists glib-2.0 gtk+-3.0 webkit2gtk-4.1 && echo "GTK/WebKit OK"
 
-# Check missing runtime deps for the sidecar
+# Check missing runtime deps for the sidecar (libonnxruntime is loaded
+# dynamically and must not appear here)
 ldd target/debug/indigo-server 2>/dev/null | grep "not found"
+ldd target/debug/indigo-server 2>/dev/null | grep -c "libonnxruntime" # must print 0
 ```
 
 ## Logs and diagnostics
@@ -199,7 +221,8 @@ await window.__TAURI_INTERNALS__.invoke("log_dir");
 ### Health endpoint
 
 The sidecar exposes `GET /v2/health` for support/diagnostics (Ketcher does not
-use it). It reports uptime, PID, port and Indigo versions:
+use it). It reports uptime, PID, port, the Indigo version, the targeted ONNX
+Runtime API generation and the model ids whose artifacts are on disk:
 
 ```bash
 curl -s http://127.0.0.1:9321/v2/health | jq

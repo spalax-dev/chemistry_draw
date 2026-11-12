@@ -5,6 +5,7 @@ mod aromatize;
 mod calculate;
 mod check;
 mod convert;
+mod filter;
 mod health;
 mod imago_absent;
 mod info;
@@ -36,13 +37,36 @@ fn init_tracing() {
     });
 }
 
-/// Builds a test app with all routes, no CORS.
+/// Root of the optional ONNX model store.
+///
+/// `CHEMISTRY_MODELS_DIR` wins when set (the harness points it at the checkout's
+/// gitignored `models/`); otherwise the default is `<repo>/models`. The
+/// directory may not exist: a checkout without models must still build and pass
+/// the non-gated suite.
+pub fn models_dir() -> std::path::PathBuf {
+    if let Some(dir) = std::env::var_os("CHEMISTRY_MODELS_DIR") {
+        return std::path::PathBuf::from(dir);
+    }
+
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("the sidecar crate lives at <repo>/src-tauri/sidecar")
+        .join("models")
+}
+
+/// Builds a test app with all routes, no CORS, using the default model root.
 pub fn test_app() -> axum::Router {
+    test_app_with_models(models_dir())
+}
+
+/// Builds a test app whose classifier resolves models from `models_dir`.
+///
+/// Use an explicit directory to exercise the missing-model (503) path without
+/// depending on the developer's checkout.
+pub fn test_app_with_models(models_dir: std::path::PathBuf) -> axum::Router {
     init_tracing();
-    let state = AppState {
-        port: 9321,
-        started_at: std::time::Instant::now(),
-    };
+    let state = AppState::new(9321, models_dir);
     build_router(state)
 }
 
@@ -52,6 +76,31 @@ pub async fn post_json(app: &axum::Router, path: &str, body: Value) -> (StatusCo
         .uri(path)
         .header("Content-Type", "application/json")
         .body(Body::from(body.to_string()))
+        .unwrap();
+
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = if body_bytes.is_empty() {
+        json!({})
+    } else {
+        serde_json::from_slice(&body_bytes).unwrap_or(Value::Null)
+    };
+    (status, body)
+}
+
+/// Sends a raw body (image bytes) with an explicit `Content-Type`.
+pub async fn post_bytes(
+    app: &axum::Router,
+    path: &str,
+    content_type: &str,
+    body: Vec<u8>,
+) -> (StatusCode, Value) {
+    let req = Request::builder()
+        .method(http::Method::POST)
+        .uri(path)
+        .header("Content-Type", content_type)
+        .body(Body::from(body))
         .unwrap();
 
     let resp = app.clone().oneshot(req).await.unwrap();

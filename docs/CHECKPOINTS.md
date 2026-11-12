@@ -70,8 +70,8 @@
 - [ ] Rebuilt artifacts contain no imago-worker/libimago/OpenCV (deb/rpm/AppImage
       inspected).
 - [ ] NSIS installer is uploaded as an artifact.
-- [ ] Docs state that Recognize Molecule is hidden until the DECIMER pipeline
-      (Phase B) and list the Windows build commands.
+- [ ] Docs state that Recognize Molecule is hidden until B2 wires OCSR and list
+      the Windows build commands.
 - [ ] Linux harness and packaging metadata remain green.
 
 ## C7 — Docs → Test → Implement → Review
@@ -90,8 +90,45 @@
 - [ ] The harness block 3 runs the policy tests and rejects an invalid
       `activities.json`.
 
+## C8 — ONNX Foundation Contract
+
+- [ ] `models/` and `.ort/` are gitignored; no ONNX artifact, model weight or
+      `libonnxruntime` file is committed or bundled in B1. The runtime is loaded
+      dynamically (`ort` `load-dynamic`, `ORT_DYLIB_PATH`) and the sidecar has
+      no `DT_NEEDED libonnxruntime` or `OrtGetApiBase` symbol.
+- [ ] `scripts/fetch-onnxruntime.sh` pins ONNX Runtime 1.31.0, verifies its
+      SHA-256 and extracts only `lib/libonnxruntime.so*` into
+      `.ort/linux-x86_64/`; it is idempotent and ShellCheck-clean.
+- [ ] `models/manifest.json` records the artifact path, `artifact_sha256`,
+      provenance id and the exact tensor contract; loading validates names,
+      shapes, dtype and checksum.
+- [ ] The classifier contract holds: `input_2` float32 `[1, 224, 224, 3]`,
+      `45214:0` and `45216:0` fed zeros as float32 `[1, 1, 1, 3]`, output
+      `Identity:0` float32 `[1, 1]`; `score = sigmoid(logit)` and `structure`
+      when `score <= 0.000089`, else `no-structure`.
+- [ ] Contract validation accepts dynamic `-1` only on axis 0 (batch); dynamic
+      width/height/channels and static mismatches are errors, with pure unit
+      tests.
+- [ ] Preprocessing follows DECIMER `runtime_default` and never auto-inverts,
+      histogram-equalizes, sharpens or autocontrasts in the default path.
+      Decoding is bounded (12,000 px per side, 128 MiB) and over-limit input is
+      `400`.
+- [ ] The sidecar starts without models and without the runtime; a missing,
+      corrupt or contract-mismatched model returns 503 with an actionable
+      message naming the manifest path and `CHEMISTRY_MODELS_DIR`, never a panic
+      or a fallback. The 503 is logged at WARN, not as an internal error.
+- [ ] `/v2/health` reports the targeted ONNX Runtime API generation and only
+      model ids whose artifact exists on disk; `/v2/info` is unchanged.
+- [ ] Non-gated temp-dir tests cover wrong checksum, missing artifact,
+      unsupported schema, a manifest without `image-classifier` and a
+      preprocessing mismatch; a model-gated test covers a graph/manifest shape
+      mismatch. Body-cap tests cover exactly 10,485,760 bytes (`400`) and one
+      byte more (`413`). WebP is covered by a fixture test.
+- [ ] Model-gated tests (`--include-ignored`, `models/` and the runtime present)
+      pass, and the suite stays green without them.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C7 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C8 remain empty.

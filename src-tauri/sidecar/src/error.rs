@@ -12,8 +12,9 @@ use serde::Serialize;
 ///
 /// | Variant | HTTP | Meaning |
 /// |---------|------|---------|
-/// | `BadRequest` | 400 | Invalid input (bad SMILES, etc.) |
+/// | `BadRequest` | 400 | Invalid input (bad SMILES, undecodable image, etc.) |
 /// | `NotFound` | 404 | Resource not found |
+/// | `ServiceUnavailable` | 503 | Model missing, corrupt or contract mismatch |
 /// | `Internal` | 500 | Native library error, I/O error, etc. |
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -25,6 +26,13 @@ pub enum AppError {
     #[error("not found: {0}")]
     NotFound(String),
 
+    /// The inference model is not usable: missing, corrupt or incompatible.
+    ///
+    /// This is a configuration problem, not an internal failure, so it is not
+    /// logged at `error!` level and keeps the actionable cause in the body.
+    #[error("service unavailable: {0}")]
+    ServiceUnavailable(String),
+
     /// Unexpected backend failure. Logged at `error!` level.
     #[error("internal error: {0}")]
     Internal(String),
@@ -33,6 +41,9 @@ pub enum AppError {
 impl AppError {
     pub fn bad_request(e: impl std::fmt::Display) -> Self {
         Self::BadRequest(e.to_string())
+    }
+    pub fn service_unavailable(e: impl std::fmt::Display) -> Self {
+        Self::ServiceUnavailable(e.to_string())
     }
     pub fn internal(e: impl std::fmt::Display) -> Self {
         Self::Internal(e.to_string())
@@ -49,10 +60,16 @@ impl IntoResponse for AppError {
         let (status, msg) = match &self {
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
+            AppError::ServiceUnavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m.clone()),
             AppError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m.clone()),
         };
-        if matches!(self, AppError::Internal(_)) {
-            tracing::error!("{self}");
+        match &self {
+            // A missing/corrupt model is an operator configuration problem, not
+            // an internal failure: WARN with the actionable cause, so the log
+            // names the manifest path and CHEMISTRY_MODELS_DIR like the body.
+            AppError::ServiceUnavailable(_) => tracing::warn!("{self}"),
+            AppError::Internal(_) => tracing::error!("{self}"),
+            AppError::BadRequest(_) | AppError::NotFound(_) => {}
         }
         (status, Json(ErrorBody { error: msg })).into_response()
     }

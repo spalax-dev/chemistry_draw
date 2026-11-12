@@ -120,7 +120,109 @@ Rules:
 
 ---
 
-## 5. Frontend
+## 5. Model-gated ML tests
+
+ONNX models and ONNX Runtime are gitignored and absent in CI, so the ML suite
+splits in two:
+
+- **Always run** (no model, no runtime): preprocessing units, the tensor-contract
+  comparator, the 400/413/503 error paths and anything that does not open a real
+  session.
+- **Model-gated**: real inference, the tensor-contract guard and the
+  contract-mismatch path are marked `#[ignore = "requires local ONNX model"]` and
+  run only when the model root exists. They also need a loadable ONNX Runtime
+  (`ORT_DYLIB_PATH`).
+
+`node scripts/harness.mjs` sets `CHEMISTRY_MODELS_DIR` (honouring an existing
+value, else `<repo>/models`) and `ORT_DYLIB_PATH` (honouring an existing value,
+else `<repo>/.ort/<platform>/libonnxruntime.so` or `onnxruntime.dll`). It passes
+`--include-ignored` only when **both** `models/manifest.json` and the runtime
+dylib exist; otherwise it prints which one is missing and the suite stays green
+without them. Fetch the dev runtime with:
+
+```bash
+scripts/fetch-onnxruntime.sh
+```
+
+The manual command is:
+
+```bash
+LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
+  ORT_DYLIB_PATH=$PWD/.ort/linux-x86_64/libonnxruntime.so \
+  CHEMISTRY_MODELS_DIR=$PWD/models \
+  cargo test -p indigo-server -- --include-ignored
+```
+
+`tests/mod.rs::models_dir()` honours `CHEMISTRY_MODELS_DIR` when set and
+otherwise falls back to `<repo>/models`, so tests, harness and `main.rs` agree on
+the model root.
+
+### Tensor-contract guard
+
+`classifier_model_contract_matches_manifest` opens the artifact through the
+registry and asserts the graph matches the manifest: inputs `input_2` float32
+`[1, 224, 224, 3]`, `45214:0` and `45216:0` float32 `[1, 1, 1, 3]`, output
+`Identity:0` float32 `[1, 1]`. It fails on artifact, manifest or loader drift
+before any inference runs.
+
+`validate_tensor_shape` is a pure comparator with unit tests: a dynamic `-1` is
+accepted **only on axis 0** (batch); a dynamic width, height or channel axis and
+any static mismatch are contract errors. A model-gated test copies the real
+artifact into a temp root with a manifest declaring `112x112` and expects `503`.
+
+### Invalid-model tests (no model)
+
+Temp-dir tests cover each configuration failure with an actionable `503` naming
+the manifest path and `CHEMISTRY_MODELS_DIR`: wrong checksum, missing artifact,
+unsupported schema, a manifest without `image-classifier`, and an unsupported
+preprocessing name. `health_hides_models_whose_artifact_is_missing` pins the
+health rule: ids appear only when the artifact file exists.
+
+### Fixtures
+
+Fixtures are MIT-licensed images from the upstream DECIMER Image Classifier
+repository. They are small enough to be committed under
+`src-tauri/sidecar/fixtures/` (attribution stays in `NOTICE`); only the ONNX
+models themselves are gitignored. The fixtures are used exclusively by
+model-gated runs. `caffeine.webp` is a WebP re-encode of `caffeine.png`.
+
+| Fixture                         | Bytes  | Expected category |
+| ------------------------------- | ------ | ----------------- |
+| `caffeine.png`                  | 24,609 | `structure`       |
+| `caffeine.webp`                 | 8,752  | `structure`       |
+| `chinese_character.jpg`         | 1,962  | `no-structure`    |
+| `random_scatter_plot_64933.png` | 37,999 | `no-structure`    |
+
+The fixture tests assert status 200, `contains_molecule`, `category`,
+`threshold == 0.000089` and `model == "image-classifier@Iagea/d21f4cb"`. They
+also assert that `logit` is a number and `score == sigmoid(logit)` within
+`1e-6`, which pins the post-processing without pinning a machine-dependent
+score. They do not assert a fixed logit value: it varies across ONNX Runtime
+builds and CPUs and would make the suite brittle.
+
+### Request-cap tests
+
+`filter_rejects_oversized_body` sends 10,485,761 bytes and expects `413`;
+`filter_decodes_bodies_at_exactly_ten_megabytes` sends exactly 10,485,760 bytes
+and expects `400` (the cap is inclusive). `filter_accepts_bodies_under_the_ten_megabyte_cap`
+proves axum's 2 MiB default is not in effect.
+
+### Preprocessing tests (no model)
+
+- RGBA input is composited on white, not black.
+- A grayscale image becomes three identical RGB channels; pure red
+  `(255, 0, 0)` must produce the exact Rec.601 luma `76`.
+- A wide or tall image keeps its aspect ratio after resize (longest side 224).
+- The shorter side is centered on a white canvas (padding pixels are 255).
+- Tensor values stay in `0..255` and the layout is NHWC `[1, 224, 224, 3]`.
+- WebP bytes decode and preprocess.
+- An image wider than 12,000 px is rejected with the decoder size-limit error
+  (the cap is 12,000 px per side and 128 MiB of decoder allocations; the
+  endpoint maps it to `400`).
+
+---
+
+## 6. Frontend
 
 There is no JS test runner configured yet. Frontend correctness is currently
 verified by `pnpm exec tsc --noEmit`, `pnpm build`, and the manual checklist in
@@ -131,7 +233,7 @@ it to the harness before writing tests that depend on it.
 
 ---
 
-## 6. Assertion quality
+## 7. Assertion quality
 
 ### Strong assertions
 
@@ -154,7 +256,7 @@ it to the harness before writing tests that depend on it.
 
 ---
 
-## 7. Commands
+## 8. Commands
 
 ```bash
 # Full harness (typecheck, lint, format, build, clippy, tests)
@@ -172,6 +274,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 # Sidecar tests (harness sets LD_LIBRARY_PATH; manually:)
 LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 cargo test -p indigo-server
+
+# Model-gated inference tests (requires models/ and a loadable ONNX Runtime)
+LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
+  ORT_DYLIB_PATH=$PWD/.ort/linux-x86_64/libonnxruntime.so \
+  CHEMISTRY_MODELS_DIR=$PWD/models \
+  cargo test -p indigo-server -- --include-ignored
 
 # One test
 LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \

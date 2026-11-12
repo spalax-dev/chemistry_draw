@@ -151,9 +151,9 @@ As soon as a published `ketcher-core` includes the upstream fix:
 4. `pnpm install` and run `node scripts/harness.mjs`.
 
 No recognition backend ships today: Imago was removed in Phase A and
-_Recognize Molecule_ is hidden. Recognition returns with the DECIMER pipeline in
-Phase B, and the patch stays applied only until Phase C ships the fixed Ketcher
-release.
+_Recognize Molecule_ is hidden. Recognition returns with the two Phase B models
+(filter + OCSR), and the patch stays applied only until Phase C ships the fixed
+Ketcher release.
 
 ## Verification
 

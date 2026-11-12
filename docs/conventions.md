@@ -112,6 +112,7 @@ src-tauri/src/           Tauri host: lifecycle, commands
 src-tauri/sidecar/src/   indigo-server crate
   transport/             axum handlers
   service/               orchestration
+    ml/                  ONNX runtime, model registry, preprocessing
   ffi/                   native bindings
   tests/                 sidecar integration tests
 scripts/                 harness, packaging, libs
@@ -124,6 +125,8 @@ Rules:
 - New endpoint → `transport/<domain>.rs` + route in `lib.rs`; logic in
   `service/`.
 - New native call → `ffi/` only.
+- New inference code → `service/ml/`; handlers only validate input and map
+  errors.
 - New packaging behaviour → a script under `scripts/`, never inline in CI YAML.
 - Do not commit `src-tauri/lib/`, `target/`, `dist/`, `dist-packages/`.
 
@@ -148,9 +151,12 @@ Rules:
 ## 7. Sidecar contracts
 
 - Every handler logs its route at `info`.
-- Status codes: 400 invalid input, 404 unknown id, 500 backend failure.
+- Status codes: 400 invalid input, 404 unknown id, 413 payload too large, 500
+  backend failure, 503 model unavailable (missing, corrupt or contract
+  mismatch).
 - `/v2/info` must report the **actual bound port** in `api_path`.
-- Keep the sidecar stateless.
+- Keep the sidecar stateless: a process-lifetime inference-session cache is an
+  accelerator, never request state.
 
 ---
 
@@ -161,3 +167,35 @@ Rules:
 - Test packaging changes with `task packages` before declaring done.
 - The AppImage is assembled by `scripts/make-appimage.sh`; do not reintroduce
   Tauri's linuxdeploy AppImage path.
+
+---
+
+## 9. ML models and inference
+
+- Models are **never** committed or bundled. `models/` is gitignored; the model
+  root comes from `CHEMISTRY_MODELS_DIR` (debug default: `<repo>/models`).
+- A model is usable only when `manifest.json` verifies: artifact path,
+  `artifact_sha256`, provenance id, input/output names, shapes and dtype.
+  Validation failure is `AppError::ServiceUnavailable` (503), never a fallback
+  and never a panic.
+- Sessions load lazily and are cached for the process lifetime. The sidecar must
+  start and serve Indigo with no models present.
+- CPU execution provider only, one intra-op thread. No GPU paths.
+- No `unsafe` in `service/ml/`; the `ort` crate owns the FFI boundary.
+- Preprocessing changes require a measured evaluation delta, not a visual
+  preference. Never auto-invert, histogram-equalize, sharpen or autocontrast in
+  the default path.
+- Do not change the classifier threshold (`0.000089`) or the score direction
+  without recording the calibration evidence in the manifest and docs.
+- Keep preprocessing byte-compatible with DECIMER `runtime_default`; parity is
+  the contract, not an implementation detail.
+- `libonnxruntime` is loaded **dynamically** (`ort` feature `load-dynamic`); the
+  sidecar must never link it. `default-features = false` plus `std`, `api-31` and
+  `load-dynamic`; no `download-binaries`, `copy-dylibs`, GPU providers or
+  `ndarray`. The dev runtime is fetched by `scripts/fetch-onnxruntime.sh` into
+  gitignored `.ort/<platform>/` and selected with `ORT_DYLIB_PATH`.
+- `libonnxruntime` packaging is its own activity. B1 may use the developer's
+  runtime but must not bundle it or any model file; release packaging stays
+  runtime-free until that activity lands.
+- Bound image decoding (`image::Limits`) before trusting dimensions: 12,000 px
+  per side and 128 MiB of decoder allocations. Over-limit input is `400`.

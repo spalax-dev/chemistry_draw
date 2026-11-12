@@ -43,6 +43,15 @@ src-tauri/lib/linux-x86_64/
 # 1.46.0). DLLs and generated MSVC import libraries are never vendored.
 src-tauri/lib/windows-x86_64/
 
+# ONNX models are downloaded, not vendored. Developers and tests place them
+# under models/ (see docs/architecture.md); the directory is never committed.
+models/
+
+# ONNX Runtime shared library for local inference (dev/test only). Fetched by
+# scripts/fetch-onnxruntime.sh; the sidecar loads it dynamically and packages
+# never include it. Shipping the runtime is a separate follow-up activity.
+.ort/
+
 # Local session state (kept on disk, not tracked)
 activities.json
 progress/current.md

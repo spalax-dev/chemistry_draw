@@ -161,3 +161,52 @@
   rebuilt and re-reviewed as APPROVED.
 - Gates: `node --test scripts/lib/*.test.mjs` 65/65, ShellCheck clean,
   `node scripts/harness.mjs` green.
+
+---
+
+## Activity 3 — phase-b1-onnx-filter (feat, complete 2026-11-11)
+
+ONNX Runtime foundation plus the DECIMER binary image classifier for the Phase B
+image-recognition replacement.
+
+- Delivery order: docs (contract, manifest schema, preprocessing invariants,
+  binary limitation) → failing tests (RED) → runtime foundation → classifier
+  endpoint → fix task → two reviews.
+- Runtime: `ort` 2.0.0-rc.15, CPU, one intra-op thread, lazy cached sessions,
+  **dynamic loading** (`load-dynamic`, `ort::init_from`) so the sidecar has no
+  link-time ONNX Runtime dependency. The first review caught a static link that
+  broke the Debian 12 build (glibc 2.38/GLIBCXX 3.4.31 symbols); the fix keeps
+  the glibc 2.36 floor and restores the release sidecar to ~3.5 MB.
+- Developer runtime: pinned ONNX Runtime 1.31.0 shared library fetched by
+  `scripts/fetch-onnxruntime.sh` (SHA-256 verified) into gitignored `.ort/`;
+  harness and the debug Tauri host set `ORT_DYLIB_PATH`. Shipping the runtime is
+  a separate follow-up.
+- Models: never committed or bundled. `models/manifest.json` + artifact under a
+  gitignored `models/`, resolved via `CHEMISTRY_MODELS_DIR` (debug default
+  `<repo>/models`). Manifest checks artifact SHA-256 and the graph tensor
+  contract (names, dtypes, shapes; dynamic `-1` only on batch).
+- Classifier contract: `input_2` f32 `[1,224,224,3]`, `45214:0` and `45216:0`
+  f32 `[1,1,1,3]` zeros, output `Identity:0` f32 `[1,1]` logit;
+  `score = sigmoid(logit)`, structure when `score <= 0.000089`.
+- Preprocessing matches DECIMER `runtime_default`: white alpha composite,
+  grayscale then RGB, aspect-preserving LANCZOS to 224, white centered pad,
+  float32 NHWC 0..=255; no invert/equalize/sharpen/autocontrast. Decode bounded
+  at 12,000 px/side and 128 MiB.
+- Endpoint: `POST /v2/filter/classify`, raw PNG/JPEG/WebP, 10 MiB cap,
+  200 with `contains_molecule`, `category`, `score`, `threshold`, `logit`,
+  `model`; 400 unsupported/undecodable, 413 over cap (plain text, documented),
+  503 missing/invalid runtime or model (WARN with actionable cause).
+- Health: `onnxruntime_version` (API generation label) and `models` (ids declared
+  by the manifest and present on disk); `/v2/info` unchanged.
+- Tests: 113 default / 120 with `--include-ignored`; preprocessing, tensor
+  contract, invalid-model 503s, exact Rec.601 grayscale, WebP, 10 MiB boundary
+  and three MIT fixtures (caffeine structure; Chinese character and scatter plot
+  no-structure). Model-gated tests run only when `models/` and the ORT dylib
+  exist.
+- Docs: architecture, conventions, testing, DEVELOPMENT, verification,
+  CHECKPOINTS C8 and ROADMAP updated; NOTICE adds ONNX Runtime and `ort`.
+- Review: first REQUEST_CHANGES (static link, any-axis dynamic dims, 503 logged
+  as ERROR, missing invalid-model tests); fix task addressed every finding and
+  the re-review returned PASS.
+- Gates: harness green (blocks 1–13), policy tests 32/32, rustfmt/Clippy/
+  ShellCheck clean.

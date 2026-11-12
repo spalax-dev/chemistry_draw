@@ -188,6 +188,31 @@ pub fn run() {
             #[cfg(not(windows))]
             let sidecar_cmd = sidecar_cmd.env("LD_LIBRARY_PATH", lib_path);
 
+            // Debug builds load the developer-fetched ONNX Runtime; B1 never
+            // bundles it (shipping the runtime is a follow-up activity).
+            #[cfg(debug_assertions)]
+            let sidecar_cmd = {
+                let ort_dylib = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .map(|repo| repo.join(".ort").join(NATIVE_LIB_DIR))
+                    .map(|dir| {
+                        dir.join(if cfg!(windows) {
+                            "onnxruntime.dll"
+                        } else {
+                            "libonnxruntime.so"
+                        })
+                    })
+                    .filter(|path| path.is_file());
+
+                match ort_dylib {
+                    Some(path) => {
+                        log::info!("[chemistry-draw] ONNX Runtime dylib = {}", path.display());
+                        sidecar_cmd.env("ORT_DYLIB_PATH", path.to_string_lossy().to_string())
+                    }
+                    None => sidecar_cmd,
+                }
+            };
+
             tauri::async_runtime::spawn(async move {
                 match sidecar_cmd.spawn() {
                     Ok((mut rx, child)) => {

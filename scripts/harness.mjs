@@ -26,7 +26,12 @@
  *  8. Frontend build (`pnpm build`) [skipped by --fast/--skip-build]
  *  9. Rust formatting (`cargo fmt --all --check`)
  * 10. Rust lint (`cargo clippy -- -D warnings`; `cargo check` with --fast/--skip-clippy)
- * 11. Sidecar tests (`cargo test -p indigo-server`) [skipped by --fast/--skip-tests]
+ * 11. Sidecar tests (`cargo test -p indigo-server`). Sets CHEMISTRY_MODELS_DIR
+ *     (honouring an existing value, else <repo>/models) and ORT_DYLIB_PATH
+ *     (honouring an existing value, else <repo>/.ort/<platform>/libonnxruntime.so
+ *     or onnxruntime.dll). Adds `--include-ignored` only when both
+ *     models/manifest.json and the ONNX Runtime dylib exist [skipped by
+ *     --fast/--skip-tests]
  * 12. ShellCheck (shell scripts, warnings and above)
  * 13. Summary
  *
@@ -402,7 +407,41 @@ if (SKIP_TESTS) {
     env.LD_LIBRARY_PATH = env.LD_LIBRARY_PATH ? `${LIB_DIR}:${env.LD_LIBRARY_PATH}` : LIB_DIR;
   }
 
-  if (run("cargo", ["test", "-p", "indigo-server"], env).status === 0) {
+  // The sidecar reads the model root from CHEMISTRY_MODELS_DIR and the runtime
+  // from ORT_DYLIB_PATH. Both are optional: honour explicit values and fall
+  // back to the gitignored checkout directories. Model-gated tests only run
+  // when the manifest and the runtime are both present.
+  const modelsDir = env.CHEMISTRY_MODELS_DIR
+    ? path.resolve(env.CHEMISTRY_MODELS_DIR)
+    : path.join(PROJECT_ROOT, "models");
+  env.CHEMISTRY_MODELS_DIR = modelsDir;
+
+  const ortDirName = IS_WINDOWS ? "windows-x86_64" : "linux-x86_64";
+  const ortDylibName = IS_WINDOWS ? "onnxruntime.dll" : "libonnxruntime.so";
+  const ortDylib = env.ORT_DYLIB_PATH
+    ? path.resolve(env.ORT_DYLIB_PATH)
+    : path.join(PROJECT_ROOT, ".ort", ortDirName, ortDylibName);
+  env.ORT_DYLIB_PATH = ortDylib;
+
+  const manifestPath = path.join(modelsDir, "manifest.json");
+  const missingForGatedTests = [];
+  if (!existsSync(manifestPath)) {
+    missingForGatedTests.push(path.relative(PROJECT_ROOT, manifestPath));
+  }
+  if (!existsSync(ortDylib)) {
+    missingForGatedTests.push(path.relative(PROJECT_ROOT, ortDylib));
+  }
+
+  const testArgs = ["test", "-p", "indigo-server"];
+  if (missingForGatedTests.length === 0) {
+    testArgs.push("--", "--include-ignored");
+  } else {
+    console.log(
+      `${YELLOW}[INFO]${NC}  Model-gated tests skipped: missing ` + missingForGatedTests.join(", "),
+    );
+  }
+
+  if (run("cargo", testArgs, env).status === 0) {
     ok("All sidecar tests pass");
   } else {
     fail("Some sidecar tests are broken");

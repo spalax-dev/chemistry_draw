@@ -1,19 +1,19 @@
 # Chemistry Draw — Roadmap
 
-> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo only**. Windows and Linux both ship Indigo-only builds; _Recognize Molecule_ is hidden until Phase B (DECIMER) lands.
+> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo plus the B1 ONNX classifier gate**. Phase A shipped Imago-free builds on Windows and Linux; _Recognize Molecule_ stays hidden until B2 wires OCSR.
 
 ## Overview
 
-| Phase  | Goal                                                     | Depends on               | Outcome                                                         |
-| ------ | -------------------------------------------------------- | ------------------------ | --------------------------------------------------------------- |
-| **A**  | Remove Imago dependency entirely                         | —                        | Smaller, simpler packages; Imago-free release on all platforms  |
-| **B1** | ML router: drawing vs. document                          | A (recommended)          | Local model, validated on sample images                         |
-| **B2** | DECIMER pipeline: classifier + handdraw/printed → SMILES | B1                       | Local end-to-end image→SMILES (replaces Imago recognition)      |
-| **B3** | Remote model delivery from Hugging Face + first-run UX   | B2                       | Lightweight installers; on-demand download + progress/setup UI  |
-| **C**  | Update Ketcher + enable language selector                | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config |
-| **D**  | Live local functional review                             | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next   |
+| Phase  | Goal                                                   | Depends on               | Outcome                                                         |
+| ------ | ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------- |
+| **A**  | Remove Imago dependency entirely                       | —                        | Smaller, simpler packages; Imago-free release on all platforms  |
+| **B1** | Filter model: molecule present vs. not                 | A (recommended)          | ONNX foundation + classifier endpoint (in progress)             |
+| **B2** | OCSR model: image → SMILES                             | B1                       | Local end-to-end image→SMILES (replaces Imago recognition)      |
+| **B3** | Remote model delivery from Hugging Face + first-run UX | B2                       | Lightweight installers; on-demand download + progress/setup UI  |
+| **C**  | Update Ketcher + enable language selector              | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config |
+| **D**  | Live local functional review                           | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next   |
 
-> Recommended sequencing: **A → B1 → B2 → B3**, with **C** tracked in parallel and merged whenever the upstream fix ships; **D** runs after the DECIMER path is usable locally (and again after B3/C).
+> Recommended sequencing: **A → B1 → B2 → B3**, with **C** tracked in parallel and merged whenever the upstream fix ships; **D** runs after the filter + OCSR path is usable locally (and again after B3/C).
 
 ---
 
@@ -58,45 +58,48 @@ package sizes are recorded below.
 3. **Docs & contracts:** update `docs/architecture.md`, `DEVELOPMENT.md`, `verification.md`, `CHECKPOINTS.md`, and `conventions.md` (e.g., `imago_ops`), and API behavior (`/v2/info` no longer advertises Imago). Remove/retire Imago-specific tests and smoke checks; add/keep smoke tests proving Imago is absent.
 4. **Release:** version bump, changelog, green harness (`node scripts/harness.mjs`), produce fresh builds for all targets, and confirm package size reduction (record before/after).
 
-**Definition of done:** no Imago code, binaries, routes, or docs references in shipped artifacts; all targets build green; _Recognize Molecule_ is hidden behind a clear UX state until Phase B (DECIMER) lands.  
+**Definition of done:** no Imago code, binaries, routes, or docs references in shipped artifacts; all targets build green; _Recognize Molecule_ is hidden behind a clear UX state until Phase B (filter + OCSR) lands.  
 **Risks/notes:** this temporarily removes image-recognition capability until B2 lands—call it out in the release notes.
 
 ---
 
-## B — DECIMER ML integration (3 stages)
+## B — ML integration: filter + OCSR (3 stages)
 
-**Objective:** replace Imago-based recognition with a DECIMER-based ML pipeline, introduced incrementally and validated locally before adding remote model delivery.
+**Objective:** replace Imago-based recognition with a two-model ML pipeline — a **filter model** (is there a chemical structure in this image?) and a single **OCSR model** (OCSR = Optical Chemical Structure Recognition, image → SMILES) — introduced incrementally and validated locally before adding remote model delivery. There is **no routing model**: the pipeline does not classify drawings vs. documents, and the OCSR stage does not switch models per input style.
 
-### B1 — Router model (drawing vs. document)
+### B1 — Filter model (molecule present vs. not)
 
-**Goal:** given an input image, classify whether it is a **chemical drawing/structure** or a **document/other**; run locally and prove accuracy on a small curated test set.
+**Goal:** given an input image, decide whether it contains a **chemical structure**; reject non-molecule images locally with a user-meaningful result before any OCSR work happens.
 
-- Select/integrate the router model and define its runtime (Python sidecar/process, ONNX, or other—pick one and document it).
-- Define the I/O contract (image in → label + confidence).
-- Add local evaluation: sample set, metrics/thresholds, and a repeatable test script.
-- **DoD:** deterministic local inference, documented model/version/source, tests/eval passing, no network dependency.
+**Status: in progress (started 2026-11-11).** Activity 3 (`phase-b1-onnx-filter`) is complete: the ONNX Runtime foundation (`ort` 2.0.0-rc.15, CPU, one intra-op thread, lazy cached sessions, **dynamic runtime loading**), the gitignored `models/` layout with a checksummed manifest, the DECIMER image classifier with `runtime_default` preprocessing, and `POST /v2/filter/classify` (raw image, 10 MiB cap, 400/413/503) are in place. The sidecar has no link-time ONNX Runtime dependency; developers fetch the pinned 1.31.0 shared library into gitignored `.ort/` with `scripts/fetch-onnxruntime.sh`. Still open: bundling/shipping `libonnxruntime`, real-input calibration of the threshold, asserting the fixed classifier input names at load time (B3 hardening), and B2 (OCSR + UI wiring).
 
-### B2 — DECIMER classifier + handdraw/printed → SMILES
+- Runtime decided: **ONNX Runtime** via `ort` 2.0.0-rc.15, CPU only, loaded dynamically (`load-dynamic` + `ORT_DYLIB_PATH`); no Python and no TensorFlow at runtime. B1 does not bundle the runtime.
+- I/O contract: raw image → `contains_molecule`, `category`, `score`, `threshold`, `logit` and a `model` id. Low score means structure (`score <= 0.000089`).
+- Local evaluation: the frozen upstream evaluation (binary accuracy 0.7679, AUC 0.603, p50 49 ms / p95 206 ms on CPU) is recorded; a curated chemistry-draw set is still needed to re-calibrate the threshold on real inputs.
+- **Known limitation:** binary only — 146 of 250 multi-molecule images (~58%) are classified `no-structure`, and no confidence gate applies.
+- **DoD:** deterministic local inference, documented model/version/source, tests/eval passing on positives and negatives, no network dependency.
 
-**Goal:** full local conversion pipeline.
+### B2 — OCSR model → SMILES
 
-- **DECIMER classifier (pre-filter):** runs before/with routing to determine whether a molecule is present; reject/short-circuit non-molecule images with a user-meaningful result.
-- **Core OCSR:** integrate **DECIMER handdrawn** and **DECIMER printed** models to produce **SMILES** from the image (choose model based on router/classifier or an ensemble rule; document the decision).
+**Goal:** full local conversion pipeline: filter-approved image → **SMILES**.
+
+- **Model selection (open):** pick **one** OCSR model that handles both hand-drawn and printed input, and document the choice, version, source and license. No router, no per-style switching and no ensemble rule; if a single model proves insufficient, that is a roadmap change, not an implicit second stage.
+- **Core OCSR:** run the selected model on filter-approved images to produce **SMILES** from the image.
 - Wire into the app flow that previously used Imago (sidecar endpoint or equivalent internal service), returning SMILES/structure compatible with Ketcher.
 - Local-only for now; include error handling, timeouts, and basic performance notes.
-- **DoD:** image → (presence/routing) → SMILES works locally for representative hand-drawn and printed cases; harness + targeted tests green; UX shows clear success/failure states.
+- **DoD:** image → filter → OCSR → SMILES works locally for representative hand-drawn and printed cases; non-molecule images are rejected by the filter with a clear state; harness + targeted tests green; UX shows clear success/failure states.
 
 ### B3 — Remote model download (Hugging Face) + first-run setup
 
-**Goal:** keep distributables small by fetching large model weights on demand.
+**Goal:** keep distributables small by fetching the two model weight sets (filter + OCSR) on demand.
 
-- **Model registry/manifest:** pin model IDs, revisions/checksums, sizes, and licenses; download from **Hugging Face** (or mirrored URLs) with integrity verification.
+- **Model registry/manifest:** pin the **filter** and **OCSR** model IDs, revisions/checksums, sizes, and licenses; download from **Hugging Face** (or mirrored URLs) with integrity verification.
 - **Storage & lifecycle:** versioned local cache, resume/retry, offline detection, and a path to update/rollback models.
-- **UX:** first-run/setup window (and Settings entry) showing what will be downloaded, total size, progress, cancel/retry, and disk-space/errors; block recognition gracefully until required models are ready.
+- **UX:** first-run/setup window (and Settings entry) showing what will be downloaded (filter and OCSR separately), total size, progress, cancel/retry, and disk-space/errors; block recognition gracefully until both models are ready.
 - **Privacy & ops:** make network behavior explicit (opt-in/notice as appropriate), log failures for support, and document firewall/offline behavior.
 - **DoD:** clean install → guided download → working recognition; corrupted/partial downloads recover; packages no longer bundle heavy model weights.
 
-**Cross-cutting B risks/notes:** model licenses & attribution; runtime footprint (Python/torch vs. lighter runtimes) and its impact on A’s “lighter builds”; GPU/CPU performance; nondeterminism/accuracy vs. Imago—capture baselines during D.
+**Cross-cutting B risks/notes:** model licenses & attribution; runtime footprint (Python/torch vs. lighter runtimes) and its impact on A’s “lighter builds”; GPU/CPU performance; filter false negatives (146 of 250 multi-molecule images classified `no-structure`) and OCSR accuracy on hand-drawn vs. printed input; nondeterminism/accuracy vs. Imago—capture baselines during D.
 
 ---
 
@@ -118,7 +121,7 @@ package sizes are recorded below.
 **Objective:** validate the real user experience and decide the next backlog with evidence.
 
 - **Test matrix (real usage):** structure drawing/editing, Indigo operations (clean/aromatize/convert/layout as applicable), image recognition end-to-end (hand-drawn + printed), error states (no models, bad image, offline), and packaging smoke per target.
-- **Compare quality:** spot-check DECIMER results vs. expectations (and vs. former Imago behavior where relevant); note failure modes.
+- **Compare quality:** spot-check OCSR results vs. expectations (and vs. former Imago behavior where relevant); note failure modes.
 - **Non-functional:** startup time, recognition latency, memory/CPU, and installed/download size.
 - **Output:** a written findings list → new activities/issues prioritized (bugs, UX gaps, model quality, performance, locales). Optionally repeat a short review after B3 and after C.
 - **DoD:** reviewed scenarios documented, regressions filed, and a clear “what’s next” backlog agreed.
@@ -127,4 +130,9 @@ package sizes are recorded below.
 
 ## Suggested immediate next step
 
-Start with **Phase A (Imago removal)** as a focused, shippable milestone: the product decision for _Recognize Molecule_ is settled (hidden with a clear UX state until Phase B), then execute A as `docs → test → implement → review` tasks tracked in `activities.json`, and cut the lighter Imago-free release. In parallel, spike **B1** model/runtime selection so B2 has a settled foundation.
+Phase A is complete (Imago removed, lighter artifacts published) and **B1 is in
+progress**: finish the ONNX foundation (model-gated tests, runtime
+shipping/packaging as its own activity, real-input threshold calibration), then
+move to **B2** (single OCSR model, image → SMILES, UI wiring for _Recognize
+Molecule_). B3 remote delivery and Phase C stay behind B2, with C merged
+whenever the upstream Ketcher fix ships.
