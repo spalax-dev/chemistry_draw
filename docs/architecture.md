@@ -172,11 +172,21 @@ wiring and `libonnxruntime` packaging are out of scope for B1.
 
 ### Model directory and manifest
 
-Models are never bundled with the app and never committed. The model root comes
-from `CHEMISTRY_MODELS_DIR`; debug builds default to `<repo>/models`
-(gitignored). Release delivery (the host providing a downloaded model root) is
-Phase B3 and not implemented yet; a release build without the variable falls
-back to `models` in the working directory.
+Models are never bundled with the app and never committed. The contract
+delivered by activity 5 (`model-root-resolution`) resolves the model root in
+this order (first match wins):
+
+1. `CHEMISTRY_MODELS_DIR` when set — absolute or relative, used as-is and never
+   rewritten.
+2. An existing `<repo>/models`, the compile-time candidate derived from the
+   sidecar crate location (gitignored).
+3. `models` in the sidecar's working directory.
+
+In development the Tauri host passes `<repo>/models` as an **absolute**
+`CHEMISTRY_MODELS_DIR` to the sidecar, so `task run` and `pnpm tauri dev` find
+the model store without a manual export and the startup log names the absolute
+root. Release delivery (the host providing a downloaded model root) remains
+Phase B3 and is not implemented yet.
 
 ```text
 models/
@@ -326,7 +336,8 @@ sidecar/src/
   service/ml/
     mod.rs                shared cache and entry points
     runtime.rs            dynamically loaded ONNX Runtime environment and sessions
-    registry.rs           model root, manifest, checksum, contract validation
+    registry.rs           manifest, checksum, contract validation
+    paths.rs              model-root precedence (explicit, repo, cwd)
     preprocess.rs         runtime_default image → NHWC tensor (bounded decode)
     classifier.rs         three-input run, sigmoid, threshold
 ```

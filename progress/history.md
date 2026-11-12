@@ -210,3 +210,78 @@ image-recognition replacement.
   the re-review returned PASS.
 - Gates: harness green (blocks 1–13), policy tests 32/32, rustfmt/Clippy/
   ShellCheck clean.
+
+---
+
+## Activity 4 — image-check-ui (feat, complete 2026-11-12)
+
+Manual image-classification path from the app UI, using the B1 sidecar endpoint.
+
+- New floating **Check image** control (bottom-left, clear of Ketcher's left and
+  bottom toolbars): hidden file input restricted to PNG/JPEG/WebP, raw bytes
+  POSTed to `/v2/filter/classify`, native Tauri dialog with the verdict
+  (`This image contains a molecule.` / `No molecule detected in this image.`).
+- Loading disables the button (`Checking...`); the same file can be re-checked;
+  400/413/503/network errors show actionable dialogs (`kind: "error"`), with an
+  `alert` fallback outside Tauri. Client-side 10 MB cap and a 30 s request
+  timeout. Recognize Molecule stays hidden.
+- Helpers in `src/imageCheck.ts` (MIME detection, response parsing, verdict copy,
+  raw-bytes request); `src/ImageCheck.tsx` owns the UI; `App.tsx` keeps the
+  resolved `apiBase`.
+- Added Vitest 3.2.7 (Node environment, `src/**/*.test.ts`), the `pnpm test`
+  script and harness block 5b. 46 tests cover MIME type-vs-extension conflicts,
+  malformed/plain-text/HTTP errors, exact 10 MiB boundary, timeout and request
+  shape.
+- Docs: architecture, testing, verification (manual steps incl. loading state),
+  DEVELOPMENT, CHECKPOINTS C4 and ROADMAP updated. Agent instructions now list
+  `pnpm test`.
+- Review: first REQUEST_CHANGES (control overlapped Ketcher's bottom toolbar,
+  plain-text 413/503 fallbacks untested); fix task moved the control, added the
+  fallback/boundary/malformed tests, error dialog kind, 400 fallback, timeout and
+  docs corrections; re-review PASS.
+- Gates: `pnpm test` 46/46, tsc/lint/format/build clean, harness green (sidecar
+  120/120), policy 32/32.
+
+---
+
+## Activity 5 — model-root-resolution (fix, complete 2026-11-12)
+
+Fix the 503 from the image-check UI under `task run`.
+
+- Root cause: `task run` builds the sidecar with `--release`, so the debug-only
+  default was off and the sidecar resolved `models` relative to its working
+  directory; the Tauri host never passed `CHEMISTRY_MODELS_DIR`.
+- New pure resolver `service/ml/paths.rs`: explicit `CHEMISTRY_MODELS_DIR` >
+  existing `<repo>/models` > cwd `models`; an empty explicit value counts as
+  unset.
+- `main.rs` delegates to the resolver; the debug Tauri host passes an absolute
+  `<repo>/models` and preserves an existing value. Release delivery stays B3.
+- Proof: the release sidecar launched from `/tmp` with no env logs
+  `model root: /.../chemistry-draw/models`; an explicit value wins; an empty
+  model root still returns the actionable 503.
+- Tests: 5 path tests (explicit, explicit over an existing repo candidate, repo
+  wins over cwd, cwd fallback, empty explicit) plus the existing suite.
+- Docs: architecture precedence and module map, verification startup/bare
+  sidecar wording, DEVELOPMENT dev auto-root, conventions and module docs.
+- Review: functional fix approved; documentation-only findings corrected and
+  re-reviewed as PASS.
+- Gates: harness green (sidecar 125/125, Vitest 46/46), policy 32/32, fmt/Clippy/
+  Prettier/ShellCheck clean. Stale dev servers and the leftover sidecar stopped.
+
+---
+
+## Activity 6 — remove-image-check-ui (chore, complete 2026-11-12)
+
+Remove the temporary image-check UI aid after manual validation; the B1
+classifier endpoint stays.
+
+- Deleted `src/ImageCheck.tsx`, `src/imageCheck.ts` and the Vitest suite; removed
+  the `test` script, the `vitest` dependency, the Vite `test` block and harness
+  block 5b. `App.tsx` is back to the provider-only flow (no `apiBase` state, no
+  control); Ketcher Recognize stays hidden.
+- Docs and agent instructions return to the no-frontend-test-runner state; the
+  backend endpoint, model-root precedence and fixtures remain documented.
+- Review: PASS; no code changes required. Stale `pnpm tauri dev`/Vite/sidecar
+  processes stopped, ports 1420/9321 free.
+- Gates: tsc, ESLint, Prettier, build, rustfmt, Clippy, ShellCheck and the full
+  harness green (125 sidecar tests, policy 32/32).

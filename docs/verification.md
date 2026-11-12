@@ -67,6 +67,9 @@ Windows changes are validated by the `windows` job in
 ### Application startup
 
 - `task run` opens the editor and the sidecar logs `indigo-server listening`.
+- `task run` logs `model root: /.../models` — an absolute path, not
+  `model root: models` — and `POST /v2/filter/classify` answers without
+  exporting `CHEMISTRY_MODELS_DIR`.
 - `curl -s http://127.0.0.1:9321/v2/info` answers 200.
 - `curl -s http://127.0.0.1:9321/v2/health` reports `"status": "ok"`.
 - Closing the window kills `indigo-server` (no orphan on the port).

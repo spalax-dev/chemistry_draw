@@ -11,14 +11,17 @@
 //!   environment.
 //! - [`classifier`] runs the validated session and applies the sigmoid and the
 //!   manifest threshold.
+//! - [`paths`] resolves the model root (explicit value, repo candidate, cwd).
 //!
-//! Models are never bundled: the root comes from `CHEMISTRY_MODELS_DIR` (debug
-//! default: `<repo>/models`) and a missing or invalid model store is reported
-//! as an unavailable service, never a panic. ONNX Runtime itself is loaded
-//! dynamically from `ORT_DYLIB_PATH` (or the loader search path) and is not
-//! linked or bundled in B1.
+//! Models are never bundled: the root is the first match of
+//! `CHEMISTRY_MODELS_DIR`, an existing `<repo>/models` (the debug host injects
+//! it as an absolute path) and `models` in the working directory. A missing or
+//! invalid model store is reported as an unavailable service, never a panic.
+//! ONNX Runtime itself is loaded dynamically from `ORT_DYLIB_PATH` (or the
+//! loader search path) and is not linked or bundled in B1.
 
 pub mod classifier;
+pub mod paths;
 pub mod preprocess;
 pub mod registry;
 pub mod runtime;

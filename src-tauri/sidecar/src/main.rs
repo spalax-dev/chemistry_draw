@@ -8,12 +8,14 @@
 #[cfg(windows)]
 use std::io::IsTerminal;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
+use indigo_server::service::ml::paths::resolve_models_dir;
 use indigo_server::{build_router, AppState};
 
 /// Ports to try starting from `preferred` before falling back to an ephemeral one.
@@ -127,26 +129,18 @@ async fn bind(preferred: u16) -> std::io::Result<(TcpListener, u16)> {
 
 /// Resolves the model root.
 ///
-/// `CHEMISTRY_MODELS_DIR` always wins. Debug builds default to the gitignored
-/// `<repo>/models` next to the workspace; release builds fall back to `models`
-/// in the working directory.
-fn resolve_models_dir() -> std::path::PathBuf {
-    if let Some(dir) = std::env::var_os("CHEMISTRY_MODELS_DIR") {
-        return std::path::PathBuf::from(dir);
-    }
+/// `CHEMISTRY_MODELS_DIR` always wins. Otherwise an existing `<repo>/models` is
+/// used; a release build launched elsewhere falls back to `models` in the
+/// working directory.
+fn models_dir() -> PathBuf {
+    let explicit = std::env::var_os("CHEMISTRY_MODELS_DIR").map(PathBuf::from);
+    let repo_models = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .map(|repo| repo.join("models"))
+        .unwrap_or_else(|| PathBuf::from("models"));
 
-    #[cfg(debug_assertions)]
-    {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .map(|repo| repo.join("models"))
-            .unwrap_or_else(|| std::path::PathBuf::from("models"))
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        std::path::PathBuf::from("models")
-    }
+    resolve_models_dir(explicit, repo_models)
 }
 
 #[tokio::main]
@@ -187,7 +181,7 @@ async fn main() {
     println!("INDIGO_PORT={port}");
     info!("indigo-server listening on http://127.0.0.1:{port}");
 
-    let models_dir = resolve_models_dir();
+    let models_dir = models_dir();
     info!("model root: {}", models_dir.display());
     let state = AppState::new(port, models_dir);
 

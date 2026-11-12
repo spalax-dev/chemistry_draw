@@ -173,7 +173,9 @@ Rules:
 ## 9. ML models and inference
 
 - Models are **never** committed or bundled. `models/` is gitignored; the model
-  root comes from `CHEMISTRY_MODELS_DIR` (debug default: `<repo>/models`).
+  root is resolved first match wins: `CHEMISTRY_MODELS_DIR`, then an existing
+  `<repo>/models`, then `models` in the working directory. The debug host passes
+  the absolute `<repo>/models` as `CHEMISTRY_MODELS_DIR`.
 - A model is usable only when `manifest.json` verifies: artifact path,
   `artifact_sha256`, provenance id, input/output names, shapes and dtype.
   Validation failure is `AppError::ServiceUnavailable` (503), never a fallback

@@ -10,6 +10,7 @@ mod health;
 mod imago_absent;
 mod info;
 mod layout_clean;
+mod paths;
 mod render;
 mod stereochemistry;
 mod structural_errors;

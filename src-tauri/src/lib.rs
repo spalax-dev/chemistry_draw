@@ -213,6 +213,28 @@ pub fn run() {
                 }
             };
 
+            // Debug builds point the sidecar at the checkout's gitignored
+            // models/; release delivery (host-provided model root) is Phase B3.
+            // An explicit CHEMISTRY_MODELS_DIR from the host environment wins.
+            #[cfg(debug_assertions)]
+            let sidecar_cmd = {
+                let models_dir = std::env::var_os("CHEMISTRY_MODELS_DIR")
+                    .map(std::path::PathBuf::from)
+                    .or_else(|| {
+                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .parent()
+                            .map(|repo| repo.join("models"))
+                    });
+
+                match models_dir {
+                    Some(path) => {
+                        log::info!("[chemistry-draw] model root = {}", path.display());
+                        sidecar_cmd.env("CHEMISTRY_MODELS_DIR", path.to_string_lossy().to_string())
+                    }
+                    None => sidecar_cmd,
+                }
+            };
+
             tauri::async_runtime::spawn(async move {
                 match sidecar_cmd.spawn() {
                     Ok((mut rx, child)) => {

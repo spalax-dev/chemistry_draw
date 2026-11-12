@@ -224,12 +224,10 @@ proves axum's 2 MiB default is not in effect.
 
 ## 6. Frontend
 
-There is no JS test runner configured yet. Frontend correctness is currently
-verified by `pnpm exec tsc --noEmit`, `pnpm build`, and the manual checklist in
-`docs/verification.md`.
-
-If you add a test runner (Vitest is the natural fit), document it here and add
-it to the harness before writing tests that depend on it.
+There is no JS test runner configured yet. Frontend correctness is verified by
+`pnpm exec tsc --noEmit`, `pnpm build` and the manual checklist in
+`docs/verification.md`. If a runner is added, document it and add it to the
+harness before writing tests that depend on it.
 
 ---
 

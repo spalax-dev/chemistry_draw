@@ -16,6 +16,15 @@ Every change follows **docs → test → implement → review**:
 `phase` order in `activities.json` with `scripts/lib/activity-policy.mjs`.
 Docs-only activities (`type: "docs"`) run docs → review and skip test/implement.
 
+## Frontend checks
+
+```bash
+pnpm run typecheck      # tsc --noEmit
+pnpm run lint           # ESLint
+pnpm run format:check   # Prettier
+pnpm build              # tsc + vite build
+```
+
 ## Local development (`task dev` / `task run`)
 
 These are **development packages** (`-devel`/`-dev`) because `pkg-config` and headers are required to compile crates like `glib-sys`, `gtk-sys`, `webkit2gtk-sys`.
@@ -119,6 +128,13 @@ It extracts `lib/libonnxruntime.so*` into the gitignored
 file exists, and the debug Tauri host does the same for the sidecar. Without the
 runtime, Indigo keeps working and `POST /v2/filter/classify` answers `503` with
 an actionable message.
+
+Development builds need no manual export: the debug Tauri host passes an
+absolute `<repo>/models` as `CHEMISTRY_MODELS_DIR` when the variable is not
+already set, and the sidecar otherwise prefers an existing `<repo>/models` over
+`models` in its working directory. `CHEMISTRY_MODELS_DIR` is only needed for a
+non-default model root or a manual sidecar run. Models stay gitignored and are
+never bundled.
 
 Windows: place the pinned `onnxruntime.dll` under `.ort/windows-x86_64/` and set
 `ORT_DYLIB_PATH` to it. Shipping the runtime with the installers is a follow-up
