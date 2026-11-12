@@ -48,8 +48,9 @@ src-tauri/lib/windows-x86_64/
 models/
 
 # ONNX Runtime shared library for local inference (dev/test only). Fetched by
-# scripts/fetch-onnxruntime.sh; the sidecar loads it dynamically and packages
-# never include it. Shipping the runtime is a separate follow-up activity.
+# scripts/fetch-onnxruntime.sh into .ort/<platform>/ and selected through
+# ORT_DYLIB_PATH. Packages ship the builder's copy (see docs/DEVELOPMENT.md),
+# never this directory.
 .ort/
 
 # Local session state (kept on disk, not tracked)

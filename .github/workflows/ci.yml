@@ -36,7 +36,7 @@ jobs:
         run: |
           mkdir -p src-tauri/lib/linux-x86_64
           docker run --rm -v "$PWD:/app" chemistry-builder bash -c '
-            cp /opt/chemistry/libs/*.so* /app/src-tauri/lib/linux-x86_64/
+            cp -a /opt/chemistry/libs/*.so* /app/src-tauri/lib/linux-x86_64/
             rm -f /app/src-tauri/lib/linux-x86_64/libstdc++.so* /app/src-tauri/lib/linux-x86_64/libgcc_s.so*
           '
 

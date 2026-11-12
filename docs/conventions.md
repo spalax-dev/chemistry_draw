@@ -196,8 +196,9 @@ Rules:
   `load-dynamic`; no `download-binaries`, `copy-dylibs`, GPU providers or
   `ndarray`. The dev runtime is fetched by `scripts/fetch-onnxruntime.sh` into
   gitignored `.ort/<platform>/` and selected with `ORT_DYLIB_PATH`.
-- `libonnxruntime` packaging is its own activity. B1 may use the developer's
-  runtime but must not bundle it or any model file; release packaging stays
-  runtime-free until that activity lands.
+- Activity 7 (`ship-onnx-runtime`) **ships** the pinned `libonnxruntime` 1.31.0
+  through the Linux builder image and the Windows fetch script; the host points
+  `ORT_DYLIB_PATH` at the bundled copy. Loading stays dynamic, and no model file
+  is ever bundled.
 - Bound image decoding (`image::Limits`) before trusting dimensions: 12,000 px
   per side and 128 MiB of decoder allocations. Over-limit input is `400`.

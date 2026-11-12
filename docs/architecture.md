@@ -22,15 +22,15 @@ Instead of Ketcher's WASM backend, the app ships a **native REST sidecar** that
 implements the Indigo v2 HTTP API on top of EPAM's C++ libraries. This is a
 community packaging: it is not an official EPAM product.
 
-| Piece             | Technology                                                                 |
-| ----------------- | -------------------------------------------------------------------------- |
-| Desktop shell     | Tauri v2 (Rust)                                                            |
-| Frontend          | React 18 + TypeScript + Vite                                               |
-| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §10)                 |
-| Chemistry backend | `indigo-server` sidecar: Rust + axum                                       |
-| Native chemistry  | `libindigo`, `libindigo-renderer` (FFI)                                    |
-| Image inference   | ONNX Runtime 1.31 via `ort` 2.0.0-rc.15 (dynamic, CPU, DECIMER classifier) |
-| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS            |
+| Piece             | Technology                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| Desktop shell     | Tauri v2 (Rust)                                                                        |
+| Frontend          | React 18 + TypeScript + Vite                                                           |
+| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §10)                             |
+| Chemistry backend | `indigo-server` sidecar: Rust + axum                                                   |
+| Native chemistry  | `libindigo`, `libindigo-renderer` (FFI)                                                |
+| Image inference   | ONNX Runtime 1.31.0 (shipped) via `ort` 2.0.0-rc.15 (dynamic, CPU, DECIMER classifier) |
+| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS                        |
 
 ---
 
@@ -141,29 +141,32 @@ There is no `/v2/imago/*` surface and no job upload/polling contract.
 
 Phase B replaces Imago with a two-model pipeline: a **filter** (does the image
 contain a chemical structure?) and an **OCSR** model (image → SMILES). B1
-delivers the runtime foundation and the filter only. Model download, OCSR, UI
-wiring and `libonnxruntime` packaging are out of scope for B1.
+delivers the runtime foundation, the filter and the shipped ONNX Runtime.
+Model download (B3), OCSR and UI wiring stay out of scope for B1.
 
 ### Runtime
 
 - Rust binding: `ort` **2.0.0-rc.15** (pykeio), pinned, built with
   `default-features = false` and features `std`, `api-31`, `load-dynamic`.
 - `libonnxruntime` is **loaded dynamically at runtime**: the sidecar has no
-  link-time dependency on it and B1 never bundles it. The path comes from
-  `ORT_DYLIB_PATH`; when unset, the bare platform name
-  (`libonnxruntime.so` / `onnxruntime.dll`) is passed to the loader, so
-  `LD_LIBRARY_PATH` / `PATH` applies. A failed load is an actionable error
-  (HTTP 503), never a panic.
-- Developer/runtime setup: `scripts/fetch-onnxruntime.sh` downloads the pinned
-  ONNX Runtime **1.31.0** Linux x86_64 shared build, verifies its SHA-256 and
+  link-time dependency on it. The path comes from `ORT_DYLIB_PATH`; when unset,
+  the bare platform name (`libonnxruntime.so` / `onnxruntime.dll`) is passed to
+  the loader, so `LD_LIBRARY_PATH` / `PATH` applies. Activity 7
+  (`ship-onnx-runtime`) also **ships** the pinned library with Linux and Windows
+  packages (§7); a failed load stays an actionable error (HTTP 503), never a
+  panic.
+- Developer setup: `scripts/fetch-onnxruntime.sh` downloads the pinned ONNX
+  Runtime **1.31.0** Linux x86_64 shared build, verifies its SHA-256 and
   extracts only `lib/libonnxruntime.so*` into the gitignored
-  `.ort/linux-x86_64/`, preserving the `libonnxruntime.so` -> `libonnxruntime.so.1`
-  -> `libonnxruntime.so.1.31.0` chain. It is idempotent, fails with a clear
-  message on other platforms, and never downloads models. The pinned URL and
-  checksum live in the script.
-- Debug host: `src-tauri/src/lib.rs` sets `ORT_DYLIB_PATH` on the sidecar when
-  `.ort/<platform>/libonnxruntime.so` (or `onnxruntime.dll`) exists, and logs
-  the path. Release packaging/shipping of the runtime is a follow-up activity.
+  `.ort/linux-x86_64/`, preserving the `libonnxruntime.so` ->
+  `libonnxruntime.so.1` -> `libonnxruntime.so.1.31.0` chain. It is idempotent,
+  fails with a clear message on other platforms, and never downloads models.
+  The pinned URL and checksum live in the script.
+- Host resolution: `src-tauri/src/lib.rs` sets `ORT_DYLIB_PATH` on the sidecar
+  and logs the resolved path. Debug prefers the `.ort/<platform>/` developer
+  override and falls back to the bundled `lib/<platform>/`; release always uses
+  the bundled library. If neither exists, the sidecar keeps serving Indigo and
+  the classifier returns `503`.
 - Execution provider: **CPU only**, one intra-op thread, telemetry disabled. No
   GPU providers.
 - Sessions are created lazily on first use and cached for the process lifetime,
@@ -346,10 +349,10 @@ sidecar/src/
 
 ## 7. Native libraries
 
-Indigo and Indigo Renderer are **not vendored in git**.
+Indigo, Indigo Renderer and ONNX Runtime are **not vendored in git**.
 
-- **Linux**: built in the Docker builder and copied by `task libs` into
-  `src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what
+- **Linux**: built or fetched in the Docker builder and copied by `task libs`
+  into `src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what
   packaging ships. `libstdc++` and `libgcc_s` are **never** shipped: the target
   distro runtime is used. The real support floor is **glibc 2.36**
   (`arc4random@GLIBC_2.36` in `libindigo.so`): Debian 12+, Ubuntu 24.04+,
@@ -361,11 +364,42 @@ Indigo and Indigo Renderer are **not vendored in git**.
   generates the MSVC import libraries `indigo.lib` / `indigo-renderer.lib`
   from the `indigo*` C exports.
 
-ONNX Runtime is not part of that set in B1: the sidecar uses it for inference
-but loads it **dynamically** from the developer's `.ort/` directory (or the
-loader search path). Obtaining and bundling `libonnxruntime` for Linux and
-Windows is a separate follow-up activity; no package may contain it. Model
-weights are never bundled under any circumstance.
+Activity 7 (`ship-onnx-runtime`) adds the pinned ONNX Runtime **1.31.0** to
+that shipped set on both platforms; both downloads are SHA-256 verified:
+
+| Platform | Pinned archive                     | SHA-256                                                            | Payload                                           |
+| -------- | ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| Linux    | `onnxruntime-linux-x64-1.31.0.tgz` | `cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57` | `lib/libonnxruntime.so*` (real file 29,345,384 B) |
+| Windows  | `onnxruntime-win-x64-1.31.0.zip`   | `3958d8a44984160692c1b4ffd0de3cb48f8c39f9d34bb31e433db06e30b82195` | `onnxruntime.dll` (17,253,176 B)                  |
+
+Both archives are the official 1.31.0 release assets:
+[Linux x64](https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-linux-x64-1.31.0.tgz)
+and
+[Windows x64](https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-win-x64-1.31.0.zip).
+
+- Linux: `scripts/build-libs.sh` downloads, verifies and extracts
+  `libonnxruntime.so*` into the builder output, so `/opt/chemistry/libs` holds
+  the chain `libonnxruntime.so` -> `libonnxruntime.so.1` ->
+  `libonnxruntime.so.1.31.0` (one real file). `task libs` and the packaging
+  scripts copy it with `cp -a`, preserving the symlinks instead of shipping
+  three copies. Tauri's resource copier dereferences symlinks, so
+  `scripts/repack-native-payload.sh` restores the chain inside the `.deb` and
+  `.rpm` payloads; the AppImage AppDir is assembled with `cp -a` directly.
+- Windows: `scripts/fetch-windows-libs.ps1` downloads, verifies and extracts
+  `onnxruntime.dll` next to the Indigo DLLs.
+
+The runtime is still **loaded dynamically** through `ORT_DYLIB_PATH`: the
+sidecar has no link-time dependency, `ldd` shows no `libonnxruntime`, and no
+`OrtGetApiBase` symbol appears in the binary. Host precedence is
+`.ort/<platform>/` (debug developer override, fetched by
+`scripts/fetch-onnxruntime.sh`) over the bundled `lib/<platform>/`; release uses
+the bundled copy only. Missing both leaves Indigo working and makes the
+classifier answer `503`.
+
+ONNX Runtime 1.31 needs **glibc 2.28** and **GLIBCXX 3.4.22**, below the Debian
+12 builder (glibc 2.36, GLIBCXX 3.4.30), so the application floor stays
+**glibc 2.36**. Model weights remain **not bundled**: no `.onnx` file or
+`manifest.json` is shipped in any artifact; model download is Phase B3.
 
 ---
 
@@ -384,10 +418,16 @@ Linux: `task packages` runs everything inside `chemistry-builder` and writes to
   because it copies the whole ELF closure (GTK/WebKit/Wayland), which breaks EGL
   on other distros.
 
+The Linux payloads bundle the builder's `lib/linux-x86_64/` as a Tauri
+resource: exactly one real `libonnxruntime.so.1.31.0` plus the
+`libonnxruntime.so.1` and `libonnxruntime.so` symlinks, and no model files.
+`check-native-libs.sh --allowlist /opt/chemistry/libs` runs before bundling and
+rejects any file the builder image did not provide.
+
 Windows: `pnpm tauri build --bundles nsis` produces an NSIS installer under
 `target/release/bundle/nsis/`. It bundles `indigo-server.exe` plus the five
-Indigo/MSVC DLLs under `lib/windows-x86_64/`; `externalBin` lists only
-`indigo-server`.
+Indigo/MSVC DLLs and `onnxruntime.dll` under `lib/windows-x86_64/`; `externalBin`
+lists only `indigo-server`.
 
 The Windows build lives in `.github/actions/windows-build`: toolchain, DLL fetch,
 sidecar build, harness, smoke test and NSIS bundle. Both `ci.yml` (artifact) and
@@ -439,6 +479,6 @@ published a release with the fix yet. Removal procedure:
 - Reimplementing Ketcher's editor UI.
 - Supporting glibc < 2.36 or webkit2gtk < 4.1.
 - Shipping Imago or OpenCV. B1 ships an ONNX classifier gate only; B2 adds OCSR
-  through the two-model pipeline. Model weights are not bundled in B1, and
-  `libonnxruntime` is loaded dynamically from the developer's `.ort/` directory
-  (shipping it is a follow-up activity).
+  through the two-model pipeline. B1 ships the pinned ONNX Runtime 1.31.0
+  native library (loaded dynamically) but never model weights; downloading
+  models is Phase B3.

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # Fetch the pinned ONNX Runtime shared library for local development and tests.
 #
-# The sidecar loads ONNX Runtime dynamically (`ort` with `load-dynamic`) and B1
-# never links or bundles it. This script downloads the pinned upstream release,
-# verifies its SHA-256 and extracts only the shared library chain
+# The sidecar loads ONNX Runtime dynamically (`ort` with `load-dynamic`) and
+# never links it. Release packages ship their own copy (Linux: the builder
+# image via `task libs`/packages; Windows: scripts/fetch-windows-libs.ps1);
+# this script only provides the developer override used by the harness and the
+# debug host. It downloads the pinned upstream release, verifies its SHA-256
+# and extracts only the shared library chain
 # (`libonnxruntime.so -> libonnxruntime.so.1 -> libonnxruntime.so.1.31.0`) into
 # the gitignored `.ort/linux-x86_64/` directory.
 #
 # Model weights are separate: they live in `models/` and are never downloaded
-# here. Shipping the runtime is a follow-up activity; this is a dev tool.
+# here. They are not bundled with the app.
 #
 # Usage: scripts/fetch-onnxruntime.sh (idempotent)
 set -euo pipefail

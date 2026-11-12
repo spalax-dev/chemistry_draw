@@ -43,7 +43,7 @@ docker run --rm \
 
   mkdir -p "$LIB_DIR"
   find "$LIB_DIR" -mindepth 1 -maxdepth 1 -delete
-  cp /opt/chemistry/libs/*.so* "$LIB_DIR/"
+  cp -a /opt/chemistry/libs/*.so* "$LIB_DIR/"
   bash scripts/check-native-libs.sh --allowlist /opt/chemistry/libs /opt/chemistry/libs "$LIB_DIR"
 
   # Never ship the C++ runtime: use the target distro libstdc++ instead
@@ -57,6 +57,10 @@ docker run --rm \
   pnpm install --frozen-lockfile --prefer-offline
   rm -rf target/release/bundle
   NO_STRIP=1 pnpm tauri build --bundles rpm
+
+  for pkg in target/release/bundle/rpm/*.rpm; do
+    bash scripts/repack-native-payload.sh rpm "$pkg"
+  done
 
   mkdir -p /app/dist-packages
   cp -v target/release/bundle/rpm/*.rpm /app/dist-packages/ 2>/dev/null || true

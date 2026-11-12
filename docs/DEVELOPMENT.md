@@ -76,9 +76,10 @@ sudo pacman -S --needed \
   fuse3
 ```
 
-## Native libraries (Indigo)
+## Native libraries (Indigo + ONNX Runtime)
 
-The `indigo-server` sidecar links against prebuilt Indigo libraries.
+The `indigo-server` sidecar links against prebuilt Indigo libraries and loads
+ONNX Runtime dynamically; both are shipped with the app.
 
 - They are **not committed** (they are binaries). Generate them with:
 
@@ -87,17 +88,28 @@ task libs
 ```
 
 That builds the Docker builder image and copies the runtime libraries into
-`src-tauri/lib/linux-x86_64/`, which is gitignored. `task libs` wipes that
-directory before copying, so it only ever holds what the builder image
-produces — no accumulated host leftovers.
+`src-tauri/lib/linux-x86_64/`, which is gitignored. The set is Indigo, Indigo
+Renderer, their runtime dependencies and the pinned ONNX Runtime 1.31.0 chain.
+`task libs` wipes that directory before copying, so it only ever holds what the
+builder image produces — no accumulated host leftovers. The copy uses `cp -a`
+like the packaging scripts, so `libonnxruntime.so -> libonnxruntime.so.1 ->
+libonnxruntime.so.1.31.0` stays a chain of symlinks (one real 29 MB file).
 
 - Packaging builds (`.deb`/`.rpm`/AppImage) copy the same set from
-  `/opt/chemistry/libs/` inside the container and ship it in the package. That
-  set is Indigo-only (`libindigo.so`, `libindigo-renderer.so` and their runtime
-  dependencies). The copy goes into the bind-mounted
-  `src-tauri/lib/linux-x86_64/`, so each packaging script snapshots that
-  directory first and restores it with an `EXIT` trap: a dev checkout is never
-  left mutated by packaging, and only builder-image libraries are bundled.
+  `/opt/chemistry/libs/` inside the container and ship it in the package. The
+  copy goes into the bind-mounted `src-tauri/lib/linux-x86_64/`, so each
+  packaging script snapshots that directory first and restores it with an
+  `EXIT` trap: a dev checkout is never left mutated by packaging, and only
+  builder-image libraries are bundled. Tauri's resource copier dereferences
+  symlinks, so the deb/rpm builds run `scripts/repack-native-payload.sh` after
+  bundling to restore the ONNX Runtime chain (it repacks with gzip payloads so
+  `data.tar.gz` / `rpm2cpio` keep working). The repack pins the same
+  `ORT_VERSION=1.31.0` as the fetchers (bump them together; the packaging
+  contract test fails on drift). RPM metadata other than the implicit
+  capabilities is copied verbatim; rpmbuild regenerates provides/requires, which
+  canonicalizes `chemistry-draw(x86_64)` to `(x86-64)` and re-emits `rpmlib(...)`
+  with `<=` (see the script header for why). The AppImage AppDir is assembled
+  directly with `cp -a`, so its chain is preserved.
 - Packaging refuses forbidden native libs:
   `scripts/check-native-libs.sh [--allowlist <source-dir>] <dir...>` exits
   non-zero when it finds `*imago*` or `*opencv*` files. With `--allowlist`, it
@@ -106,28 +118,39 @@ produces — no accumulated host leftovers.
   cannot leak into a package. It prints the offending paths and the fix. Every
   packaging script runs it right after copying `/opt/chemistry/libs/*.so*` into
   the bundled lib dir, with `--allowlist /opt/chemistry/libs`.
-- When `scripts/build-libs.sh` changes (dependencies added or removed), rebuild
-  the builder image with `task builder-image -- --no-cache` (same as
-  `bash scripts/build-image.sh --no-cache`). Packaging with a stale image now
-  fails fast instead of silently bundling old libraries.
+- When `scripts/build-libs.sh` changes (dependencies added or removed, or the
+  ONNX Runtime pin bumped), rebuild the builder image with
+  `task builder-image -- --no-cache` (same as
+  `bash scripts/build-image.sh --no-cache`). The builder downloads and verifies
+  the ONNX Runtime archive at image build time; a stale image lacks the chain
+  and packaging fails fast in `check-native-libs.sh --allowlist` instead of
+  silently shipping old libraries.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.
 
-## ONNX Runtime (local inference)
+## ONNX Runtime (inference runtime)
 
-The sidecar loads ONNX Runtime **dynamically**; B1 does not link or bundle it.
-Fetch the pinned 1.31.0 Linux x86_64 shared build (checksummed, idempotent, no
-models) before running model-gated tests or trying the classifier locally:
+The sidecar loads ONNX Runtime **dynamically** (`ort` `load-dynamic`); it is
+never linked at build time. Activity 7 (`ship-onnx-runtime`) also **ships** the
+pinned 1.31.0 library:
 
-```bash
-scripts/fetch-onnxruntime.sh
-```
+- Linux: `scripts/build-libs.sh` downloads and SHA-256-verifies
+  `onnxruntime-linux-x64-1.31.0.tgz`, extracts `lib/libonnxruntime.so*` into the
+  builder output, and `task libs` copies the chain into
+  `src-tauri/lib/linux-x86_64/`. Packaging ships it. Rebuild the image with
+  `task builder-image -- --no-cache` when the pin changes.
+- Windows: `pwsh scripts/fetch-windows-libs.ps1` downloads and verifies
+  `onnxruntime-win-x64-1.31.0.zip` and extracts `onnxruntime.dll` into
+  `src-tauri/lib/windows-x86_64/`.
 
-It extracts `lib/libonnxruntime.so*` into the gitignored
-`.ort/linux-x86_64/`. `node scripts/harness.mjs` sets `ORT_DYLIB_PATH` when the
-file exists, and the debug Tauri host does the same for the sidecar. Without the
-runtime, Indigo keeps working and `POST /v2/filter/classify` answers `503` with
-an actionable message.
+Developer override: `scripts/fetch-onnxruntime.sh` fetches the same pinned
+Linux build into the gitignored `.ort/linux-x86_64/` (idempotent, checksummed,
+never models); on Windows put `onnxruntime.dll` in `.ort/windows-x86_64/`. The
+debug Tauri host prefers `.ort/<platform>/` and falls back to the bundled
+`lib/<platform>/`, while release uses the bundled copy only. The harness still
+sets `ORT_DYLIB_PATH` from `.ort/` when present. Without a loadable runtime,
+Indigo keeps working and `POST /v2/filter/classify` answers `503` with an
+actionable message.
 
 Development builds need no manual export: the debug Tauri host passes an
 absolute `<repo>/models` as `CHEMISTRY_MODELS_DIR` when the variable is not
@@ -135,10 +158,6 @@ already set, and the sidecar otherwise prefers an existing `<repo>/models` over
 `models` in its working directory. `CHEMISTRY_MODELS_DIR` is only needed for a
 non-default model root or a manual sidecar run. Models stay gitignored and are
 never bundled.
-
-Windows: place the pinned `onnxruntime.dll` under `.ort/windows-x86_64/` and set
-`ORT_DYLIB_PATH` to it. Shipping the runtime with the installers is a follow-up
-activity (see `docs/ROADMAP.md`).
 
 ## Windows 10/11 (x86_64)
 
@@ -167,8 +186,9 @@ node scripts/harness.mjs
 pnpm tauri build --bundles nsis
 ```
 
-`scripts/fetch-windows-libs.ps1` downloads the pinned archive, verifies its
-SHA-256, extracts only the runtime DLLs into
+`scripts/fetch-windows-libs.ps1` downloads the pinned Indigo archive and the
+pinned ONNX Runtime 1.31.0 zip, verifies both SHA-256 values, extracts the six
+runtime DLLs (five Indigo/MSVC plus `onnxruntime.dll`) into
 `src-tauri/lib/windows-x86_64/` (gitignored) and generates
 `indigo.lib` / `indigo-renderer.lib` from the exported `indigo*` C symbols.
 CI runs it under `ilammy/msvc-dev-cmd@v1`; packaging the installers is part of
@@ -203,7 +223,7 @@ Debian 11, which is not possible today because Tauri v2 needs
 pkg-config --exists glib-2.0 gtk+-3.0 webkit2gtk-4.1 && echo "GTK/WebKit OK"
 
 # Check missing runtime deps for the sidecar (libonnxruntime is loaded
-# dynamically and must not appear here)
+# dynamically and must not appear as a NEEDED entry)
 ldd target/debug/indigo-server 2>/dev/null | grep "not found"
 ldd target/debug/indigo-server 2>/dev/null | grep -c "libonnxruntime" # must print 0
 ```

@@ -5,12 +5,14 @@
 //! lazy: the sidecar starts and serves Indigo even when `libonnxruntime` or the
 //! models are missing, and only the classifier reports the problem (HTTP 503).
 //!
-//! The runtime is loaded **dynamically** (`ort`'s `load-dynamic` feature): B1
-//! never links or bundles `libonnxruntime`. [`environment`] resolves the library
-//! from `ORT_DYLIB_PATH` when it is set; otherwise it passes the bare platform
-//! name (`libonnxruntime.so` / `onnxruntime.dll`) so the normal loader search
-//! path (`LD_LIBRARY_PATH`, `PATH`) applies. A failed load is an actionable
-//! error, never a panic, and the endpoint maps it to HTTP 503.
+//! The runtime is loaded **dynamically** (`ort`'s `load-dynamic` feature): the
+//! sidecar never links `libonnxruntime`. Activity 7 ships the pinned 1.31.0
+//! library next to the Indigo native libs; [`environment`] resolves the library
+//! from `ORT_DYLIB_PATH` when it is set (the host points it at the bundled
+//! copy); otherwise it passes the bare platform name (`libonnxruntime.so` /
+//! `onnxruntime.dll`) so the normal loader search path (`LD_LIBRARY_PATH`,
+//! `PATH`) applies. A failed load is an actionable error, never a panic, and
+//! the endpoint maps it to HTTP 503.
 //!
 //! `ort` 2.0.0-rc.15 does not expose the exact patch version of the loaded
 //! runtime through its safe API. [`version_string`] therefore reports the ONNX
@@ -53,9 +55,10 @@ pub fn environment() -> Result<ort::environment::Environment> {
             let builder = ort::init_from(&path).map_err(|error| {
                 format!(
                     "could not load ONNX Runtime from `{}` (ort {ORT_BINDING_VERSION}): {error}. \
-                     Install the developer runtime with scripts/fetch-onnxruntime.sh, point \
+                     The packaged app ships the runtime under its native lib directory; for \
+                     development install it with scripts/fetch-onnxruntime.sh, point \
                      {ORT_DYLIB_PATH_ENV} at a compatible ONNX Runtime 1.{}.x shared library, or \
-                     make `{DYLIB_NAME}` visible on the loader search path. B1 does not bundle libonnxruntime.",
+                     make `{DYLIB_NAME}` visible on the loader search path.",
                     path.display(),
                     ort::MINOR_VERSION
                 )

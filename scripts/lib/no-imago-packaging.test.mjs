@@ -91,7 +91,7 @@ for (const script of SCRIPTS) {
 const GUARD = "scripts/check-native-libs.sh";
 const GUARD_PATH = path.join(ROOT, GUARD);
 const GUARD_CALL = "bash scripts/check-native-libs.sh --allowlist /opt/chemistry/libs";
-const LIBS_COPY = 'cp /opt/chemistry/libs/*.so* "$LIB_DIR/"';
+const LIBS_COPY = 'cp -a /opt/chemistry/libs/*.so* "$LIB_DIR/"';
 const PACKAGING_SCRIPTS = [
   "scripts/build-deb.sh",
   "scripts/build-rpm.sh",

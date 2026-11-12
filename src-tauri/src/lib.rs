@@ -39,6 +39,29 @@ const NATIVE_LIB_DIR: &str = if cfg!(windows) {
     "linux-x86_64"
 };
 
+/// ONNX Runtime shared library name. The sidecar loads it dynamically through
+/// `ORT_DYLIB_PATH`; it is shipped next to the Indigo libraries but never
+/// linked at build time.
+const ORT_DYLIB_NAME: &str = if cfg!(windows) {
+    "onnxruntime.dll"
+} else {
+    "libonnxruntime.so"
+};
+
+/// Debug-only developer override fetched by `scripts/fetch-onnxruntime.sh`.
+/// Release builds use only the bundled `lib/<platform>/` runtime.
+#[cfg(debug_assertions)]
+fn ort_dev_override() -> Option<std::path::PathBuf> {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|repo| repo.join(".ort").join(NATIVE_LIB_DIR).join(ORT_DYLIB_NAME))
+}
+
+#[cfg(not(debug_assertions))]
+fn ort_dev_override() -> Option<std::path::PathBuf> {
+    None
+}
+
 /// Remove ANSI SGR sequences (the sidecar's `tracing` output is colorized when
 /// it detects a terminal). Log files should stay readable.
 fn strip_ansi(input: &str) -> String {
@@ -186,30 +209,32 @@ pub fn run() {
                 }
             };
             #[cfg(not(windows))]
-            let sidecar_cmd = sidecar_cmd.env("LD_LIBRARY_PATH", lib_path);
+            let sidecar_cmd = sidecar_cmd.env("LD_LIBRARY_PATH", &lib_path);
 
-            // Debug builds load the developer-fetched ONNX Runtime; B1 never
-            // bundles it (shipping the runtime is a follow-up activity).
-            #[cfg(debug_assertions)]
+            // The sidecar loads ONNX Runtime dynamically. Debug builds prefer
+            // the developer-fetched `.ort/<platform>/` override; both debug and
+            // release fall back to the shipped copy next to the Indigo libs
+            // (`lib/<platform>/` in the packaged resource directory). Leaving
+            // ORT_DYLIB_PATH unset keeps Indigo working and makes the
+            // classifier answer 503.
             let sidecar_cmd = {
-                let ort_dylib = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .map(|repo| repo.join(".ort").join(NATIVE_LIB_DIR))
-                    .map(|dir| {
-                        dir.join(if cfg!(windows) {
-                            "onnxruntime.dll"
-                        } else {
-                            "libonnxruntime.so"
-                        })
-                    })
-                    .filter(|path| path.is_file());
+                let bundled = std::path::PathBuf::from(&lib_path).join(ORT_DYLIB_NAME);
+                let ort_dylib = ort_dev_override()
+                    .filter(|path| path.is_file())
+                    .or_else(|| bundled.is_file().then_some(bundled));
 
                 match ort_dylib {
                     Some(path) => {
                         log::info!("[chemistry-draw] ONNX Runtime dylib = {}", path.display());
                         sidecar_cmd.env("ORT_DYLIB_PATH", path.to_string_lossy().to_string())
                     }
-                    None => sidecar_cmd,
+                    None => {
+                        log::warn!(
+                            "[chemistry-draw] ONNX Runtime not found in {}; the classifier will answer 503",
+                            std::path::Path::new(&lib_path).display()
+                        );
+                        sidecar_cmd
+                    }
                 }
             };
 

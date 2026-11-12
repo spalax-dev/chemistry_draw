@@ -116,14 +116,21 @@ Rules:
   `--allowlist <source-dir>` mode: a bundled file absent from the builder image
   fails with "not provided by the builder image", while a missing target
   directory only warns on stderr.
+- ONNX Runtime packaging contracts pin the 1.31.0 archives and SHA-256 values,
+  assert every bundle copy uses `cp -a`, and require `build-deb.sh`,
+  `build-rpm.sh` and `build-packages.sh` to run
+  `scripts/repack-native-payload.sh` after bundling (removing an invocation
+  fails the suite). The repack itself is tested for the version pin, the
+  restored `.so -> .so.1 -> .so.1.31.0` chain, per-field RPM metadata reads
+  (no `eval`) and a clean failure when the builder runtime is missing.
 - Never test private state (`obj.field`); test behaviour.
 
 ---
 
 ## 5. Model-gated ML tests
 
-ONNX models and ONNX Runtime are gitignored and absent in CI, so the ML suite
-splits in two:
+ONNX model weights are gitignored and absent in CI, and the model-gated tests
+also need a loadable ONNX Runtime, so the ML suite splits in two:
 
 - **Always run** (no model, no runtime): preprocessing units, the tensor-contract
   comparator, the 400/413/503 error paths and anything that does not open a real

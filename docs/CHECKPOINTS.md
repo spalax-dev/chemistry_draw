@@ -69,6 +69,9 @@
       `imago-worker`.
 - [ ] Rebuilt artifacts contain no imago-worker/libimago/OpenCV (deb/rpm/AppImage
       inspected).
+- [ ] Rebuilt artifacts contain the shipped ONNX Runtime 1.31.0 payload — one
+      real `libonnxruntime.so.1.31.0` plus the `.so.1`/`.so` symlinks on Linux,
+      `onnxruntime.dll` on Windows — and no model weights.
 - [ ] NSIS installer is uploaded as an artifact.
 - [ ] Docs state that Recognize Molecule is hidden until B2 wires OCSR and list
       the Windows build commands.
@@ -92,10 +95,11 @@
 
 ## C8 — ONNX Foundation Contract
 
-- [ ] `models/` and `.ort/` are gitignored; no ONNX artifact, model weight or
-      `libonnxruntime` file is committed or bundled in B1. The runtime is loaded
-      dynamically (`ort` `load-dynamic`, `ORT_DYLIB_PATH`) and the sidecar has
-      no `DT_NEEDED libonnxruntime` or `OrtGetApiBase` symbol.
+- [ ] `models/` and `.ort/` are gitignored; no ONNX model weight is committed
+      or bundled. The pinned ONNX Runtime 1.31.0 **is** shipped from the builder
+      image / Windows fetch script and loaded dynamically (`ort`
+      `load-dynamic`, `ORT_DYLIB_PATH`); the sidecar has no
+      `DT_NEEDED libonnxruntime` or `OrtGetApiBase` symbol.
 - [ ] `scripts/fetch-onnxruntime.sh` pins ONNX Runtime 1.31.0, verifies its
       SHA-256 and extracts only `lib/libonnxruntime.so*` into
       `.ort/linux-x86_64/`; it is idempotent and ShellCheck-clean.

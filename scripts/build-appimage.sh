@@ -43,7 +43,7 @@ docker run --rm \
 
   mkdir -p "$LIB_DIR"
   find "$LIB_DIR" -mindepth 1 -maxdepth 1 -delete
-  cp /opt/chemistry/libs/*.so* "$LIB_DIR/"
+  cp -a /opt/chemistry/libs/*.so* "$LIB_DIR/"
   bash scripts/check-native-libs.sh --allowlist /opt/chemistry/libs /opt/chemistry/libs "$LIB_DIR"
 
   # Never ship the C++ runtime: use the target distro libstdc++ instead

@@ -285,3 +285,38 @@ classifier endpoint stays.
   processes stopped, ports 1420/9321 free.
 - Gates: tsc, ESLint, Prettier, build, rustfmt, Clippy, ShellCheck and the full
   harness green (125 sidecar tests, policy 32/32).
+
+---
+
+## Activity 7 — ship-onnx-runtime (chore, complete 2026-11-12)
+
+Ship the native ONNX Runtime that the `ort` binding loads dynamically, so
+packaged apps can run the classifier instead of returning 503.
+
+- Pinned ONNX Runtime 1.31.0 with SHA-256 checks: Linux
+  `onnxruntime-linux-x64-1.31.0.tgz` (`cc5c72…3a57`) and Windows
+  `onnxruntime-win-x64-1.31.0.zip` (`3958d8…2195`).
+- `scripts/build-libs.sh` downloads/verifies/extracts the Linux runtime into
+  the builder output; `scripts/fetch-windows-libs.ps1` extracts only
+  `onnxruntime.dll` via entry-level `ZipFile`.
+- Packaging copies the builder libs with `cp -a` to preserve the
+  `.so -> .so.1 -> .so.1.31.0` chain. Tauri dereferences resources, so
+  `scripts/repack-native-payload.sh` restores the chain in deb/rpm after the
+  bundle build; the AppImage chain was already correct.
+- The Tauri host resolves `ORT_DYLIB_PATH`: debug prefers `.ort/<platform>`,
+  then the bundled `lib/<platform>`; release uses the bundled runtime. Missing
+  runtime still yields the actionable 503. No link-time ORT dependency.
+- Contract tests pin the URLs, hashes, extraction paths, `cp -a`, repack
+  invocations and the `sha256sum -c -` verification (the test fails if the
+  command is removed). The builder tag was rebuilt from this worktree after a
+  stale image from another worktree was found.
+- Payloads: one real `libonnxruntime.so.1.31.0` + two symlinks, no models,
+  Imago, OpenCV, `libstdc++` or `libgcc_s`. Packaged AppImage sidecar classify
+  returns 200 for caffeine with the repo models and no `ORT_DYLIB_PATH`.
+- Sizes: deb 30,851,320 (+11,021,978); rpm 30,983,791 (+11,153,993);
+  AppImage 27,515,384 (+10,559,488); recorded in ROADMAP.
+- Review: first REQUEST_CHANGES (stale builder tag, repack untested); fix task
+  rebuilt the tag, added repack/path/CI tests, removed `eval`, used entry-level
+  Windows extraction and fixed stale comments; re-review PASS.
+- Gates: 75 Node tests, 125 sidecar tests, policy 32/32, harness green,
+  ShellCheck/rustfmt/Clippy/Prettier clean.

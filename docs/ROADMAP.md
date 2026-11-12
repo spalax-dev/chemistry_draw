@@ -71,9 +71,22 @@ package sizes are recorded below.
 
 **Goal:** given an input image, decide whether it contains a **chemical structure**; reject non-molecule images locally with a user-meaningful result before any OCSR work happens.
 
-**Status: in progress (started 2026-11-11).** Activity 3 (`phase-b1-onnx-filter`) is complete: the ONNX Runtime foundation (`ort` 2.0.0-rc.15, CPU, one intra-op thread, lazy cached sessions, **dynamic runtime loading**), the gitignored `models/` layout with a checksummed manifest, the DECIMER image classifier with `runtime_default` preprocessing, and `POST /v2/filter/classify` (raw image, 10 MiB cap, 400/413/503) are in place. The sidecar has no link-time ONNX Runtime dependency; developers fetch the pinned 1.31.0 shared library into gitignored `.ort/` with `scripts/fetch-onnxruntime.sh`. Still open: bundling/shipping `libonnxruntime`, real-input calibration of the threshold, asserting the fixed classifier input names at load time (B3 hardening), and B2 (OCSR + UI wiring).
+**Status: in progress (started 2026-11-11).** Activity 3 (`phase-b1-onnx-filter`) is complete: the ONNX Runtime foundation (`ort` 2.0.0-rc.15, CPU, one intra-op thread, lazy cached sessions, **dynamic runtime loading**), the gitignored `models/` layout with a checksummed manifest, the DECIMER image classifier with `runtime_default` preprocessing, and `POST /v2/filter/classify` (raw image, 10 MiB cap, 400/413/503) are in place. Activity 7 (`ship-onnx-runtime`) delivers the runtime shipment: pinned, SHA-256-verified ONNX Runtime **1.31.0** on Linux (builder image → `task libs`/packages) and Windows (`fetch-windows-libs.ps1`), symlink-preserving `cp -a` copies, host `ORT_DYLIB_PATH` resolution (debug `.ort/<platform>` override → bundled `lib/<platform>`; release bundled), and no link-time dependency. The payloads carry one real `libonnxruntime.so.1.31.0` plus its `.so.1`/`.so` symlinks and the measured size delta is recorded below. Still open: real-input calibration of the threshold, asserting the fixed classifier input names at load time (B3 hardening), and B2 (OCSR + UI wiring).
 
-- Runtime decided: **ONNX Runtime** via `ort` 2.0.0-rc.15, CPU only, loaded dynamically (`load-dynamic` + `ORT_DYLIB_PATH`); no Python and no TensorFlow at runtime. B1 does not bundle the runtime.
+- Runtime decided: **ONNX Runtime** via `ort` 2.0.0-rc.15, CPU only, loaded dynamically (`load-dynamic` + `ORT_DYLIB_PATH`); no Python and no TensorFlow at runtime. B1 ships the pinned 1.31.0 native library; model weights stay download-only (B3).
+- Package-size delta, measured with `task packages` inside the rebuilt `chemistry-builder` image (baseline: runtime-free 0.1.6). The delta is measured after restoring the symlink chain in the deb/rpm payloads; Tauri's resource copier dereferences symlinks, so `scripts/repack-native-payload.sh` repacks them with gzip payloads.
+
+> | Artifact | 0.1.6 (no runtime) | Activity 7 (runtime shipped) | Δ bytes    | Δ MB   |
+> | -------- | ------------------ | ---------------------------- | ---------- | ------ |
+> | `.deb`   | 19,829,342         | 30,851,320                   | 11,021,978 | 11.022 |
+> | `.rpm`   | 19,829,798         | 30,983,791                   | 11,153,993 | 11.154 |
+> | AppImage | 16,955,896         | 27,515,384                   | 10,559,488 | 10.559 |
+>
+> The uncompressed payload grows by 29,345,384 B per Linux artifact (one real
+> `libonnxruntime.so.1.31.0`); the `.so.1`/`.so` symlinks add no bytes. The
+> compressed delta is smaller (compression + the runtime's 29 MB compress to
+> ~11 MB). No model weights are bundled.
+
 - I/O contract: raw image → `contains_molecule`, `category`, `score`, `threshold`, `logit` and a `model` id. Low score means structure (`score <= 0.000089`).
 - Local evaluation: the frozen upstream evaluation (binary accuracy 0.7679, AUC 0.603, p50 49 ms / p95 206 ms on CPU) is recorded; a curated chemistry-draw set is still needed to re-calibrate the threshold on real inputs.
 - **Known limitation:** binary only — 146 of 250 multi-molecule images (~58%) are classified `no-structure`, and no confidence gate applies.
@@ -131,8 +144,8 @@ package sizes are recorded below.
 ## Suggested immediate next step
 
 Phase A is complete (Imago removed, lighter artifacts published) and **B1 is in
-progress**: finish the ONNX foundation (model-gated tests, runtime
-shipping/packaging as its own activity, real-input threshold calibration), then
-move to **B2** (single OCSR model, image → SMILES, UI wiring for _Recognize
-Molecule_). B3 remote delivery and Phase C stay behind B2, with C merged
-whenever the upstream Ketcher fix ships.
+progress**: activity 7 ships the ONNX Runtime and its measured package-size delta
+is recorded above, so what remains is model-gated tests and real-input threshold
+calibration, then move to **B2** (single OCSR model, image → SMILES, UI wiring
+for _Recognize Molecule_). B3 remote delivery and Phase C stay behind B2, with C
+merged whenever the upstream Ketcher fix ships.

@@ -53,10 +53,63 @@ for f in "$OUT_DIR"/libindigo.so "$OUT_DIR"/libindigo-renderer.so; do
     [ "$dir" = "$OUT_DIR" ] && continue
     for link in "$dir"/lib*.so*; do
       [ -e "$link" ] || continue
-      [ "$(readlink -f "$link" 2>/dev/null)" = "$real" ] && cp -a "$link" "$OUT_DIR/"
+      [ "$(readlink -f "$link" 2>/dev/null)" = "$real" ] || continue
+      name=$(basename "$link")
+      if [ -L "$link" ]; then
+        # Copy the chain as relative symlinks: the builder's absolute links
+        # (e.g. Debian's /lib -> /usr/lib) break once the directory lands on a
+        # developer host or in a package.
+        ln -sfn "$(basename "$real")" "$OUT_DIR/$name"
+      else
+        cp -a "$link" "$OUT_DIR/"
+      fi
     done
   done <<< "$deps"
 done
+
+# ----- ONNX Runtime: shipped inference runtime -----
+# The sidecar loads it dynamically through ORT_DYLIB_PATH, so the builder must
+# provide the shared library next to the Indigo libs (the app itself has no
+# link-time dependency). The archive is pinned and checksum-verified: never
+# download-and-execute.
+ORT_VERSION="1.31.0"
+echo "==> Fetching ONNX Runtime ${ORT_VERSION}..."
+ORT_ARCHIVE="onnxruntime-linux-x64-${ORT_VERSION}.tgz"
+ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-linux-x64-1.31.0.tgz"
+ORT_SHA256="cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57"
+ORT_LIB_DIR="onnxruntime-linux-x64-${ORT_VERSION}/lib"
+ORT_MEMBERS=(
+  "${ORT_LIB_DIR}/libonnxruntime.so"
+  "${ORT_LIB_DIR}/libonnxruntime.so.1"
+  "${ORT_LIB_DIR}/libonnxruntime.so.${ORT_VERSION}"
+)
+ORT_TMP="$(mktemp -d)"
+trap 'rm -rf "$ORT_TMP"' EXIT
+
+curl -fsSL --retry 3 -o "$ORT_TMP/$ORT_ARCHIVE" "$ORT_URL"
+
+if ! printf '%s  %s\n' "$ORT_SHA256" "$ORT_TMP/$ORT_ARCHIVE" | sha256sum -c -; then
+  echo "ERROR: checksum mismatch for $ORT_ARCHIVE." >&2
+  echo "  expected: $ORT_SHA256" >&2
+  echo "  Refusing to extract an unverified ONNX Runtime archive." >&2
+  echo "  If the pin was bumped deliberately, update ORT_VERSION/ORT_SHA256 in" >&2
+  echo "  scripts/build-libs.sh and the contract in" >&2
+  echo "  scripts/lib/onnx-runtime-packaging.test.mjs." >&2
+  exit 1
+fi
+
+tar -xzf "$ORT_TMP/$ORT_ARCHIVE" -C "$ORT_TMP" --strip-components=2 "${ORT_MEMBERS[@]}"
+cp -a "$ORT_TMP"/libonnxruntime.so* "$OUT_DIR/"
+
+# One real file plus the .so.1/.so symlinks: copying the chain must not turn it
+# into three copies of the 29 MB library.
+if [ ! -f "$OUT_DIR/libonnxruntime.so.${ORT_VERSION}" ] \
+  || [ ! -L "$OUT_DIR/libonnxruntime.so.1" ] \
+  || [ ! -L "$OUT_DIR/libonnxruntime.so" ]; then
+  echo "ERROR: ONNX Runtime extraction did not produce the shared library chain" >&2
+  echo "  expected libonnxruntime.so -> libonnxruntime.so.1 -> libonnxruntime.so.${ORT_VERSION}" >&2
+  exit 1
+fi
 
 cd "$PROJECT_DIR"
 
