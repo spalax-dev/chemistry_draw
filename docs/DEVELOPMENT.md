@@ -90,10 +90,19 @@ task libs
 
 That builds the Docker builder image and copies the runtime libraries into
 `src-tauri/lib/linux-x86_64/`, which is gitignored. It includes the minimal
-OpenCV that Imago needs (`libopencv_*.so.406`) plus `libpng`/`libjpeg`, so no
-host-specific SONAME shims are required.
+OpenCV that Imago needs (`libopencv_*.so.406`) plus `libjpeg`. It does **not**
+copy `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or `libbrotli*`:
+those stay host-provided, as do `libc`, `libm`, `libz`, `libstdc++`,
+`libgcc_s` and GL/X11/xcb. If your `src-tauri/lib/linux-x86_64/` was populated
+before this split, delete those files (the directory is gitignored) so the
+sidecar loads the host copies.
 
-- Packaging builds (`.deb`/`.rpm`/AppImage) copy the same set from
+The reason: Debian 12 ships fontconfig **2.14**, which cannot parse the newer
+`/etc/fonts` syntax of current distros (Fedora 45 uses fontconfig **2.18**), so
+a bundled copy floods every PNG render with `Fontconfig warning` lines even when
+it works. The host libraries produce identical output without the warnings.
+
+- Packaging builds (`.deb`/`.rpm`/AppImage) copy the same filtered set from
   `/opt/chemistry/libs/` inside the container and ship it in the package.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.

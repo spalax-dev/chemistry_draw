@@ -211,3 +211,44 @@ re-review.
 - Tests guard both directions (no bare assignment, token not pre-wrapped,
   repeat/size wired); docs record the raw-token/CSS-function rule.
 - 105 frontend tests, harness green.
+
+## 2026-11-13 — Activity 8: fs-scope-autosave
+
+- Autosave failed with `forbidden path: .../dev.spalax.ChemistryDraw/recovery:
+... allow-mkdir` because `fs:scope` only had `"**"`, a relative pattern that
+  cannot match absolute paths.
+- Scope is now `$APPDATA/**` (appDataDir/recovery) and `$HOME/**` (documents
+  restored without a dialog grant); dialog-picked files keep their runtime
+  per-path grant from the dialog plugin. No Rust changes.
+- `src/capabilities.test.ts` guards the scope entries and the fs command list
+  (109 frontend tests). Docs describe the scope model and the two manual checks.
+- GUI verification pending: no WARN while editing, and Restore -> Save.
+
+## 2026-11-13 — Activity 9: host-fontconfig-libs
+
+- The sidecar logged ~45 `Fontconfig warning` lines per PNG render: the builder
+  bundled Debian 12's libfontconfig 2.14, which cannot parse Fedora 45's newer
+  /etc/fonts config.
+- Fix: stop bundling platform font/PNG libs (`libfontconfig*`, `libfreetype*`,
+  `libexpat*`, `libpng*`, `libbrotli*`) in build-libs.sh, the Taskfile libs
+  copy and bundle-libs.sh, and drop the already-copied files.
+- Verified with the real sidecar: render PNG against host libs -> 0 warnings,
+  same output; `ldd` resolves them from the distro. 113 frontend tests.
+- Follow-ups noted: strengthen the skip-list test against over-broad patterns;
+  `libstdc++` is still shipped by the Arch PKGBUILD (pre-existing).
+
+## 2026-11-13 — Activity 10: ketcher-rebond-guard
+
+- Symptom: the renderer flooded `TypeError: undefined is not an object
+(restruct.molecule.halfBonds.get(bond.hb1).p)` every frame after a
+  struct/render desync (invalid-valence edit, undo of a deletion).
+- Cause: Ketcher 3.18 `ReBond.getSelectionPoints` dereferences both half-bonds
+  without checking; upstream fixed it in epam/ketcher#11165.
+- Fix: extended `patches/ketcher-core@3.18.0.patch` (cumulative with the
+  `parametrizeUrl` hunks) for `rebond.js` and `rebond.modern.js`:
+  `getSelectionPoints` returns `[]` on a missing half-bond,
+  `getSelectionContour` returns null, and the plate/drawHover callers no-op.
+  `pnpm install` re-applied with the new patch hash; build uses the modern file.
+- Not ported (outside this crash path): upstream's `setDoubleBondShift`,
+  `stereoUpBondGetCoordinates` and `show` guards.
+- `src/ketcherPatch.test.ts` guards the hunks and the installed dist (116 tests).

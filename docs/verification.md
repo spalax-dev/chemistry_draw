@@ -73,8 +73,32 @@ Windows changes are validated by the `windows` job in
 
 - Draw a molecule, run Layout and Clean: the structure stays valid.
 - Save as PNG/SVG: the file is produced and non-empty.
+- Export a structure to PNG with the desktop build: the render succeeds, the
+  image matches the previous output, and the log contains **no**
+  `Fontconfig warning` lines.
+- `ldd src-tauri/lib/linux-x86_64/libindigo-renderer.so` resolves
+  `libfontconfig.so.1` from the host (e.g. `/lib64/` on Fedora,
+  `/usr/lib/x86_64-linux-gnu/` on Debian), not from the bundled directory.
 - Recognize (Imago, Linux): upload → poll reaches `SUCCESS` or a clear error.
 - Windows: Recognize Molecule is disabled and `/v2/imago/uploads` is absent.
+
+### Ketcher render robustness
+
+Run against the desktop build (`task run`) with the developer console open.
+
+1. **Reproduce the desync.** Draw a small structure, then create an
+   invalid-valence edit and/or edit a bond and undo the deletion so a bond keeps
+   a stale half-bond reference. A structure whose bond references a half-bond
+   missing from the struct is the condition under test; `Ctrl+Z` after deleting
+   a bond is the shortest reproduction.
+2. **Hover and select bonds.** Hover over the affected bond and select it (click
+   or rubber-band selection). The console must not flood with
+   `halfBonds.get(...)` / `undefined is not an object (restruct.molecule.halfBonds.get(bond.hb1).p)`
+   errors, and the render loop must keep running. The bond may simply show no
+   hover or selection highlight; that graceful degradation is the expected
+   result, not a failure.
+3. **No regression.** Hover and select a normal, valid bond: the hover plate and
+   selection plate draw as before.
 
 ### Documents, autosave and recovery
 
@@ -122,6 +146,16 @@ on Linux and `%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
 11. **Browser fallback.** `pnpm dev` in a normal browser: Save and Export
     download files (no dialog, no path), there is no autosave, no recovery
     prompt and no close guard, and the console stays free of errors.
+12. **Autosave scope.** Draw or edit a structure and let the debounce fire
+    (about 2 s). `<appDataDir>/recovery/` contains `autosave.ket` and
+    `autosave.json`, and the log has no `forbidden path` WARN naming
+    `recovery` or `allow-mkdir`.
+13. **Restored document scope.** Repeat step 5 with a document that has a saved
+    `path`, relaunch and choose Restore. Press `Ctrl+S` without opening a
+    dialog: the restored document is written to its original path, the title
+    loses `*`, and the log has no `forbidden path` WARN for that path. With the
+    original file deleted, Restore keeps the path and the first Save recreates
+    the file.
 
 ### In-app dialog styling
 
@@ -210,6 +244,8 @@ Run against the desktop build (`task run`) unless a step says browser.
   Wayland.
 - `.deb`/`.rpm` install into `/usr/bin` and `/usr/lib/chemistry-draw`.
 - No `libstdc++`/`libgcc_s` inside any artifact.
+- No bundled `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or
+  `libbrotli*` inside any artifact: the distribution provides them.
 
 ---
 

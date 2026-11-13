@@ -335,3 +335,54 @@ disk glyph.
 - Test packaging changes with `task packages` before declaring done.
 - The AppImage is assembled by `scripts/make-appimage.sh`; do not reintroduce
   Tauri's linuxdeploy AppImage path.
+
+---
+
+## 10. Tauri capabilities and filesystem scope
+
+- `src-tauri/capabilities/default.json` is the single source of truth for what
+  the webview may do. Never widen access from Rust, and never bypass
+  `plugin-fs` with a host command.
+- Every capability or scope change is justified in `docs/architecture.md`
+  section 5.6.1 and guarded by the capability contract test
+  (`docs/testing.md` section 4.1). An unjustified scope change is a review
+  finding.
+- Scope entries are absolute paths or `$VAR` roots (`$APPDATA/**`,
+  `$HOME/**`). A bare `**` does not match absolute paths and is never an
+  acceptable entry.
+- Programmatic paths — autosave, recovery, restored documents — never pass
+  through a dialog, so each needs an explicit static scope. Only dialog-picked
+  paths get the plugin's runtime grant; do not rely on it for app-written
+  files.
+- Grant no permission the app does not call. Keep the fs command list in sync
+  with the `@tauri-apps/plugin-fs` functions used in `src/`.
+
+---
+
+## 11. Vendored Ketcher patches
+
+Ketcher is consumed as published `dist/` bundles; a bug we cannot fix in `src/`
+is patched through `pnpm`'s `patchedDependencies` mechanism.
+
+- **One patch file per package version**: `patches/<package>@<version>.patch`,
+  registered in `pnpm-workspace.yaml` under `patchedDependencies`. A new
+  Ketcher version gets a new file; never rename or widen an existing one.
+- **Never edit `node_modules/`.** The patch file is the only source of the
+  change, and `pnpm install` must reapply it from a clean store.
+- **Every hunk cites its origin** in the patch context: the upstream
+  issue/PR and the exact `dist/` file the hunk touches. A hunk without an
+  upstream reference or a removal plan is a review finding.
+- **Mirror every hunk for both bundles**: `dist/**/*.js` and
+  `dist/**/*.modern.js`. The app may resolve either build, so a guard in only
+  one of them is unpatched behaviour.
+- **Add a regression test** with the patch: a patch-contract test asserts the
+  patch file and the installed `dist/` carry the guard
+  (`docs/testing.md` §4.3). The manual reproduction stays in
+  `docs/verification.md`.
+- **Remove the hunk when the upstream release lands.** Bump to the release that
+  contains the fix, delete the hunk (and the patch file when it becomes empty),
+  drop the `patchedDependencies` entry if unused, then run `pnpm install` and
+  the patch-contract test. The removal plan lives beside the upstream reference
+  in `docs/architecture.md` §10 and, for `parametrizeUrl`, in
+  `docs/KETCHER-BUG-parametrizeUrl.md#removing-the-patch`. An applied hunk whose
+  upstream fix has shipped is a review finding.

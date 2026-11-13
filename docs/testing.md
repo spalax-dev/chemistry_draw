@@ -113,6 +113,76 @@ Rules:
   only run in Windows CI.
 - Never test private state (`obj.field`); test behaviour.
 
+### 4.1 Capability contract
+
+`src-tauri/capabilities/default.json` is configuration the whole app depends on,
+so it gets a contract test alongside the sidecar tests. The test reads the real
+file (relative to the repository root) and asserts:
+
+| Assertion              | Expected                                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fs:scope` entries     | include `$APPDATA/**` and `$HOME/**`, and contain no bare `**` entry                                                                                                                                           |
+| fs command permissions | `fs:allow-read-text-file`, `fs:allow-write-text-file`, `fs:allow-read-file`, `fs:allow-write-file`, `fs:allow-mkdir`, `fs:allow-rename`, `fs:allow-remove`, `fs:allow-stat`, `fs:allow-exists` are all granted |
+
+Rules:
+
+- Assert the real files; do not mirror the scope in a fixture. Removing either
+  scope entry, reintroducing a bare `**`, or dropping one of the fs commands
+  must each make the test fail.
+- The test does not launch Tauri; it guards the contract. The end-to-end
+  behaviour (no `forbidden path` WARN, saving a restored document) is the manual
+  step in `docs/verification.md`, section 2.
+
+### 4.2 Native library skip lists
+
+The scripts that decide which shared libraries are bundled are configuration the
+runtime depends on, so a contract test (Vitest, alongside the capability test)
+reads the real files and asserts the platform libraries stay host-provided:
+
+| File                     | Assertion                                                                                                |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `scripts/build-libs.sh`  | the dependency skip list names `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` and `libbrotli*` |
+| `Taskfile.yml`           | the `libs` copy excludes or removes the same five families                                               |
+| `scripts/bundle-libs.sh` | `SKIP_PATTERNS` contains a pattern for each of the five families                                         |
+
+Rules:
+
+- Assert the real files, not a fixture. Deleting one family from any of the
+  three must make the test fail, so the three lists cannot drift apart.
+- Keep the guards narrow: assert those five families, not a blanket `lib*`.
+  A pattern that would also skip `libindigo*`, `libimago*` or `libopencv*` must
+  fail the test, because those stay bundled.
+- When `src-tauri/lib/linux-x86_64/` exists, assert it contains no matching
+  `.so*`; skip that assertion cleanly when the directory is absent (CI does not
+  always run `task libs`).
+- The test guards the lists, not the renderer. The observable outcome — a PNG
+  render with no `Fontconfig warning` and an `ldd` that resolves fontconfig from
+  the host — is the manual step in `docs/verification.md`, section 2.
+
+### 4.3 Ketcher patch contract
+
+`patches/ketcher-core@3.18.0.patch` is configuration the editor depends on, so a
+contract test (Vitest, alongside the capability test) reads the real patch file
+and the installed `dist/` and asserts the guards survive a reinstall:
+
+| Target                                      | Assertion                                                                                                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `patches/ketcher-core@3.18.0.patch`         | contains the `ReBond.getSelectionPoints` half-bond guards for both `dist/application/render/restruct/rebond.js` and `rebond.modern.js`                                          |
+| installed `ketcher-core` `rebond.modern.js` | the patched `getSelectionPoints` returns early on a missing half-bond, `getSelectionContour` returns `null` on an empty list, and the plate/`drawHover` helpers no-op on `null` |
+
+Rules:
+
+- Assert the real files, not a fixture. Removing either the `.js` or the
+  `.modern.js` hunk, or removing a guard from the installed bundle, must make
+  the test fail.
+- The test reads the patch text and the installed `node_modules/ketcher-core`
+  file; it does not run Ketcher. The end-to-end behaviour — hovering/selecting a
+  bond with a stale half-bond without an error flood — is the manual step in
+  `docs/verification.md` §2, "Ketcher render robustness".
+- Keep the assertions narrow: the `parametrizeUrl` hunk is covered by its own
+  upstream regression, so this test names only the ReBond guard symbols and the
+  two dist paths.
+
 ---
 
 ## 5. Frontend

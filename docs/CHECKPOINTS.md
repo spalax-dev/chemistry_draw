@@ -110,6 +110,10 @@
       and the manual checklist in `docs/verification.md` §2 passes.
 - [x] Browser fallback: Save and Export download files; no autosave, recovery
       prompt or close guard.
+- [x] `src-tauri/capabilities/default.json` scopes `$APPDATA/**` for
+      `<appDataDir>/recovery` and `$HOME/**` for restored documents, with no
+      bare `**` entry, so autosave and re-saves raise no `forbidden path` WARN;
+      the capability contract test guards the scopes and the fs command list.
 
 ## C9 — Ketcher Toolbar Integration
 
@@ -136,8 +140,23 @@
 - [x] The manual checklist in `docs/verification.md` §2 "Toolbar integration"
       passes, including the browser fallback.
 
+## C10 — Bundled vs Host Native Libraries
+
+- [x] The Linux bundled set is Indigo, Indigo Renderer, Imago, minimal OpenCV
+      and non-platform deps only; `libfontconfig*`, `libfreetype*`, `libexpat*`,
+      `libpng*` and `libbrotli*` are excluded by the `scripts/build-libs.sh`
+      dependency skip list, the Taskfile `libs` copy and
+      `scripts/bundle-libs.sh` `SKIP_PATTERNS`, guarded by the test in
+      `docs/testing.md` §4.2.
+- [x] `src-tauri/lib/linux-x86_64` contains none of those files, `ldd` resolves
+      them from the host, and a PNG render logs no `Fontconfig warning` (manual
+      step in `docs/verification.md` §2).
+- [x] `.deb`/`.rpm`/AppImage ship no platform font/PNG libraries and rely on the
+      distribution's copies, which GTK already pulls in, as documented in
+      `docs/architecture.md` §7.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C9 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C10 remain empty.

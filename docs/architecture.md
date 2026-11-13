@@ -272,8 +272,8 @@ Tauri API used:
 
 - `appDataDir()` from `@tauri-apps/api/path` for the recovery directory.
 - `readTextFile`, `writeTextFile`, `mkdir`, `rename`, `remove`, `stat` and
-  `exists` from `@tauri-apps/plugin-fs`; the `fs:scope` capability is already
-  `**`.
+  `exists` from `@tauri-apps/plugin-fs`, under the filesystem scopes in
+  section 5.6.1.
 - `save` / `open` from `@tauri-apps/plugin-dialog`.
 - Ketcher's remaining library saves (image export and any internal save) go
   through the `file-saver` alias (§5.7): a `.ket` blob writes the document
@@ -281,6 +281,31 @@ Tauri API used:
   (§5.7.1).
 - `getCurrentWindow()` from `@tauri-apps/api/window`: `setTitle()`,
   `onCloseRequested()` and `destroy()`.
+
+#### 5.6.1 Filesystem scope
+
+`src-tauri/capabilities/default.json` is the single source of truth for what the
+webview may touch; the Rust host adds no scope at runtime. Tauri matches a
+`fs:scope` entry against **absolute paths or a `$VAR` root**, so a bare `**`
+matches nothing useful and leaves absolute app and user paths forbidden.
+
+| Entry          | Grants                                                                                    | Why                                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `$APPDATA/**`  | `<appDataDir>/**` — Linux `~/.local/share/<identifier>`, Windows `%APPDATA%\<identifier>` | Autosave writes `<appDataDir>/recovery/autosave.ket` and `.json` with no dialog, so it can never be granted at runtime                     |
+| `$HOME/**`     | the user's home directory, recursively                                                    | A document opened in an earlier session, or restored from a snapshot, is saved again without a dialog, so its path is never dialog-granted |
+| runtime grants | one picked file or directory                                                              | `plugin-dialog`'s `open` / `save` commands call `allow_file` / `allow_directory` on the fs scope, granting that path for the session       |
+
+`$APPDATA` resolves to Tauri's `app_data_dir()`, i.e. `data_dir()/<identifier>` —
+exactly the recovery root. Files picked through a dialog are added to the scope
+at runtime, but autosave paths and snapshot-restored document paths never are,
+which is why both static entries are required.
+
+`$HOME/**` is a deliberate trade-off for a document editor that reopens files
+without a dialog: the webview only loads local app code, and paths outside
+`$HOME` stay reachable only when the user picks them through a dialog. Scope
+entries grant no command on their own; the fs commands (`readTextFile`,
+`writeTextFile`, `mkdir`, `rename`, `remove`, `stat`, `exists`, plus the
+non-text variants) stay listed explicitly in the same capability file.
 
 **Browser fallback** (`pnpm dev` without Tauri): no autosave, no recovery
 prompt and no close guard. Save and Export fall back to a download, following
@@ -421,11 +446,28 @@ Indigo, Indigo Renderer and Imago are **not vendored in git**.
 
 - **Linux**: built in the Docker builder and copied by `task libs` into
   `src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what
-  packaging ships. The build uses a **minimal OpenCV** (core, imgproc,
-  imgcodecs; PNG/JPEG only) compiled into the builder. `libstdc++` and
-  `libgcc_s` are **never** shipped: the target distro runtime is used. The real
+  packaging ships. The **bundled set** is Indigo, Indigo Renderer, Imago, the
+  **minimal OpenCV** (core, imgproc, imgcodecs; PNG/JPEG only) and their
+  non-platform dependencies such as `libjpeg`. `libstdc++` and `libgcc_s` are
+  **never** shipped: the target distro runtime is used.
+- **Host-provided**: `libfontconfig`, `libfreetype`, `libexpat`, `libpng` and
+  `libbrotli` are **not** bundled, and neither are `libc`, `libm`, `libz` or the
+  GL/X11/xcb family. The sidecar loads them from the distro through the normal
+  loader path, and `ldd` on the bundled libraries shows the system paths. The
+  reason is version mixing: the Debian 12 builder ships fontconfig **2.14**,
+  whose parser rejects the newer `/etc/fonts` syntax of current distros (e.g.
+  Fedora 45 with fontconfig **2.18**), so every PNG render logged about 45
+  `Fontconfig warning` lines. The host libraries render the same output with
+  **zero** warnings, and the support floor below already implies a
+  fontconfig/freetype/expat/png family new enough for its own config. The real
   support floor is **glibc 2.36** (`arc4random@GLIBC_2.36` in `libindigo.so`):
   Debian 12+, Ubuntu 24.04+, current Fedora.
+- **Packaging implication**: `.deb`/`.rpm` ship only the bundled set and use the
+  distribution's fontconfig/freetype/png libraries. GTK, already in the
+  Tauri/WebKit dependency closure, pulls fontconfig and freetype, so the
+  packages add no explicit runtime dependency for them. The custom AppImage
+  likewise contains only our libraries and resolves the platform libraries from
+  the host.
 - **Windows**: `scripts/fetch-windows-libs.ps1` downloads the pinned EPAM
   Indigo **1.46.0** x86_64 archive, verifies its SHA-256, extracts
   `indigo.dll`, `indigo-renderer.dll`, `msvcp140.dll`, `vcruntime140.dll` and
@@ -486,7 +528,7 @@ Version bumps are driven by release-please and must stay in sync across
 
 ---
 
-## 10. Temporary workaround
+## 10. Temporary workarounds
 
 `ketcher-core` 3.18.0 has a bug in `parametrizeUrl` that turns the port in
 `127.0.0.1:9321` into a placeholder. We ship `patches/ketcher-core@3.18.0.patch`
@@ -494,6 +536,19 @@ Version bumps are driven by release-please and must stay in sync across
 [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552) but has not
 published a release with the fix yet. Removal procedure:
 `docs/KETCHER-BUG-parametrizeUrl.md`.
+
+The same patch file guards `ReBond` against a struct/render desync. When a bond
+still references a half-bond that is no longer in `restruct.molecule.halfBonds`
+(invalid-valence edits, undo of deletions), `ReBond.getSelectionPoints` dereferences
+`undefined` (`halfBonds.get(bond.hb1).p`) and throws every frame, flooding the
+console with uncaught render-loop errors. The patch mirrors
+[epam/ketcher#11165](https://github.com/epam/ketcher/pull/11165) in both
+`dist/application/render/restruct/rebond.js` and `rebond.modern.js`: a missing
+half-bond returns an empty point list, `getSelectionContour` returns `null` for
+that list, and `makeHoverPlate`, `makeSelectionPlate`, `makeHighlitePlate` and
+`drawHover` no-op on `null`. The bond then simply renders without hover or
+selection instead of crashing. The patch rules are in `docs/conventions.md` §11
+and the manual check is in `docs/verification.md` §2.
 
 ---
 
