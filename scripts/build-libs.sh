@@ -122,6 +122,7 @@ for f in "$OUT_DIR"/libindigo.so "$OUT_DIR"/libindigo-renderer.so "$OUT_DIR"/lib
       libc.so.*|libm.so.*|libgcc_s.so.*|libz.so.*| \
       libdl.so.*|libpthread.so.*|librt.so.*| \
       libGL*|libX11*|libxcb*|libXau*|libXdmcp*| \
+      libfontconfig*|libfreetype*|libexpat*|libpng*|libbrotli*| \
       linux-vdso*|ld-linux*) continue ;;
     esac
     real=$(readlink -f "$dep")
