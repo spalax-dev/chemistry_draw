@@ -74,6 +74,9 @@ Enforcement:
 - **One scenario per test.**
 - **Naming**: `test_<unit>_<behavior>_<condition>` — the name states the
   contract (e.g. `corrupted_molfile_returns_400`).
+- **Frontend unit tests** live next to their module as
+  `src/<module>.test.ts` (Vitest) and cover pure helpers and constants only; see
+  §6.1.
 
 ---
 
@@ -129,6 +132,76 @@ Rules:
   restored `.so -> .so.1 -> .so.1.31.0` chain, per-field RPM metadata reads
   (no `eval`) and a clean failure when the builder runtime is missing.
 - Never test private state (`obj.field`); test behaviour.
+
+### 4.1 Capability contract
+
+`src-tauri/capabilities/default.json` is configuration the whole app depends on,
+so it gets a contract test alongside the sidecar tests. The test reads the real
+file (relative to the repository root) and asserts:
+
+| Assertion              | Expected                                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fs:scope` entries     | include `$APPDATA/**` and `$HOME/**`, and contain no bare `**` entry                                                                                                                                           |
+| fs command permissions | `fs:allow-read-text-file`, `fs:allow-write-text-file`, `fs:allow-read-file`, `fs:allow-write-file`, `fs:allow-mkdir`, `fs:allow-rename`, `fs:allow-remove`, `fs:allow-stat`, `fs:allow-exists` are all granted |
+
+Rules:
+
+- Assert the real files; do not mirror the scope in a fixture. Removing either
+  scope entry, reintroducing a bare `**`, or dropping one of the fs commands
+  must each make the test fail.
+- The test does not launch Tauri; it guards the contract. The end-to-end
+  behaviour (no `forbidden path` WARN, saving a restored document) is the manual
+  step in `docs/verification.md`, section 2.
+
+### 4.2 Native library skip lists
+
+The scripts that decide which shared libraries are bundled are configuration the
+runtime depends on, so a contract test (Vitest, alongside the capability test)
+reads the real files and asserts the platform libraries stay host-provided:
+
+| File                     | Assertion                                                                                                |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `scripts/build-libs.sh`  | the dependency skip list names `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` and `libbrotli*` |
+| `Taskfile.yml`           | the `libs` copy excludes or removes the same five families                                               |
+| `scripts/bundle-libs.sh` | `SKIP_PATTERNS` contains a pattern for each of the five families                                         |
+
+Rules:
+
+- Assert the real files, not a fixture. Deleting one family from any of the
+  three must make the test fail, so the three lists cannot drift apart.
+- Keep the guards narrow: assert those five families, not a blanket `lib*`.
+  A pattern that would also skip `libindigo*`, `libindigo-renderer*` or
+  `libonnxruntime*` must fail the test, because those stay bundled.
+- When `src-tauri/lib/linux-x86_64/` exists, assert it contains no matching
+  `.so*`; skip that assertion cleanly when the directory is absent (CI does not
+  always run `task libs`).
+- The test guards the lists, not the renderer. The observable outcome — a PNG
+  render with no `Fontconfig warning` and an `ldd` that resolves fontconfig from
+  the host — is the manual step in `docs/verification.md`, section 2.
+
+### 4.3 Ketcher patch contract
+
+`patches/ketcher-core@3.18.0.patch` is configuration the editor depends on, so a
+contract test (Vitest, alongside the capability test) reads the real patch file
+and the installed `dist/` and asserts the guards survive a reinstall:
+
+| Target                                      | Assertion                                                                                                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `patches/ketcher-core@3.18.0.patch`         | contains the `ReBond.getSelectionPoints` half-bond guards for both `dist/application/render/restruct/rebond.js` and `rebond.modern.js`                                          |
+| installed `ketcher-core` `rebond.modern.js` | the patched `getSelectionPoints` returns early on a missing half-bond, `getSelectionContour` returns `null` on an empty list, and the plate/`drawHover` helpers no-op on `null` |
+
+Rules:
+
+- Assert the real files, not a fixture. Removing either the `.js` or the
+  `.modern.js` hunk, or removing a guard from the installed bundle, must make
+  the test fail.
+- The test reads the patch text and the installed `node_modules/ketcher-core`
+  file; it does not run Ketcher. The end-to-end behaviour — hovering/selecting a
+  bond with a stale half-bond without an error flood — is the manual step in
+  `docs/verification.md` §2, "Ketcher render robustness".
+- Keep the assertions narrow: the `parametrizeUrl` hunk is covered by its own
+  upstream regression, so this test names only the ReBond guard symbols and the
+  two dist paths.
 
 ---
 
@@ -402,10 +475,67 @@ asserts that the route returns `404`.
 
 ## 6. Frontend
 
-There is no JS test runner configured yet. Frontend correctness is verified by
-`pnpm exec tsc --noEmit`, `pnpm build` and the manual checklist in
-`docs/verification.md`. If a runner is added, document it and add it to the
-harness before writing tests that depend on it.
+Frontend correctness is verified by `pnpm exec tsc --noEmit`, `pnpm build`, the
+Vitest suite for pure helpers below, and the manual checklist in
+`docs/verification.md`.
+
+### 6.1 Vitest scope: pure helpers
+
+Vitest is the frontend test runner. The test task adds it (with the `test`
+script and a harness block) before the first helper test is written. Tests live
+next to the module as `src/<module>.test.ts` and cover **only** pure functions
+and constants from `src/document.ts`, `src/autosave.ts`, `src/saveRoute.ts`,
+`src/ui/toolbarIcons.ts` and `src/ui/tokens.ts` — no DOM, no Tauri imports, no
+React rendering.
+
+| Helper / module        | Behaviour under test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `documentTitle`        | `Untitled` with no path; base name without `.ket`; `*` only while dirty                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| names                  | `documentName` and `exportFileName`: base name, untitled fallback, Windows paths, export extension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| dirty transitions      | an editor change sets dirty; Save and `.ket` Open/New clear it; importing another format marks the document dirty with `path: null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| save target            | Save with no path defaults to `untitled.ket`; with a path it reuses it; Save As appends `.ket`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| save vs export mapping | `.ket`/`getKet` for Save; V2000, V3000, SMILES, InChI, SVG, PNG sources and file extensions for Export; Export leaves `path` and `format` untouched                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| saved-blob routing     | `.ket` (any case) routes to document save: existing path, Save As when `path` is `null`; `.mol`/`.smi`/`.inchi`/`.svg`/`.png` route to export save with `path` and `format` unchanged; no Tauri or no registered handler falls back to a download; an unknown or missing extension takes the export route                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| saver default filename | an untitled `.ket` document save suggests `untitled.ket`; the export route keeps the filename Ketcher supplied (the app's own Export naming is `exportFileName`, covered by the `names` row)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| autosave scheduling    | debounce coalesces rapid edits; the slow interval writes only while dirty; a clean document never writes; timers reset after a write                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| recovery decision      | no metadata, `dirty: false`, snapshot older than the last clean save, snapshot newer, unknown or missing original path, unreadable metadata                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| write generation       | a write started before `clearSnapshot()` cannot recreate the snapshot; a stale write removes the shared snapshot files it just committed (metadata, structure, partial)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| close-guard decision   | clean allows close; Save closes after saving; Discard closes without saving; Cancel stays open; a cancelled Save As aborts the close                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| toolbar icon module    | the exported `imageLink` is a valid, fully transparent SVG data URI (draws nothing); the three button ids and titles stay stable (`chemistry-draw:save`/`Save`, `chemistry-draw:new`/`New`, `chemistry-draw:export`/`Export`); the generated style has exactly one mask rule per `alt` (Save/New/Export) with a `mask-image` data URI; the style contains no literal colour — no hex, no `%23` escape and no named colour such as `black`/`white`/`grey` — only `currentColor`; every glyph is an outline (`fill='none'`, `stroke-width='1.5'`, round caps/joins) whose path centrelines stay inside 5.25-18.75                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| dialog tokens          | the overlay token is exactly `rgba(94,94,94,0.2)` and the pre-fade token is `rgba(94,94,94,0.01)`; the hatch overlay token's data URI decodes to a 10×10 SVG whose path is `M0 10 10 0zm12-2-4 4zM-2 2l4-4z` with `stroke` `#555`, `stroke-width` 2 and `stroke-opacity` 0.02; its repeat and size tokens are `repeat` and `10px 10px`; the old `rgba(94,94,94,0.8)` overlay is gone; the dialog panel tokens resolve to radius `8px`, border `none` and shadow `none`; `tokens.dialog.transition` is `background-color 0.3s` (the transition lives on that token, not on the overlay colour); the generic 3 px `radius` and soft shadow remain for non-dialog surfaces and are asserted non-empty; every in-app dialog gets its overlay and panel styling from these tokens, with no per-dialog colour, radius, border or shadow; `tokens.dialog.backdropPattern` stays a bare `data:image/svg+xml` URI that does not itself start with `url(`, while the `background-image` the overlay applies wraps that token as `url("…")` — the token raw, the CSS function owned by the component |
+
+Rules:
+
+- Assert exact values, not "does not throw"; the tables in `docs/architecture.md`
+  §5.3–5.5 are the expected outputs.
+- Use `vi.useFakeTimers()` and fixed timestamps. No real timers, no wall clock.
+- Mutation check before committing: removing the debounce, writing while clean,
+  or returning the Save format for Export must each make a test fail. For the
+  saver, routing a `.mol` blob to document save (or a `.ket` blob to export)
+  must fail a test. For the dialog tokens, restoring the `rgba(94,94,94,0.8)`
+  overlay, dropping the diagonal hatch from the overlay, changing its stroke
+  colour/width/opacity or its `repeat`/`10px 10px` size, the `3px` panel radius,
+  the `1px` panel border or any panel shadow must each make the token test fail.
+  For the hatch, dropping the `url("…")` wrapper from the applied
+  `background-image` or pre-wrapping the token itself must each fail a test.
+- The dialog-token test asserts the exported `tokens` constants directly; the
+  rendered overlay tint, hatch visibility, fade smoothness and panel shape are
+  covered by the manual checklist (`docs/verification.md` §2, "In-app dialog
+  styling").
+- Do not mock Tauri in these tests. The I/O adapters (`appDataDir`,
+  `writeTextFile`, `onCloseRequested`) stay thin and are covered manually.
+- Clearing `dirty` and the recovery snapshot is **not** part of the pure
+  `routeSavedBlob`: `saveRoutedBlob` in `src/App.tsx` writes the blob first and
+  then applies the state change. That adapter is not unit-tested.
+
+### 6.2 Manual checklist
+
+The real flows cannot be unit-tested without a WebView and a filesystem, so
+`docs/verification.md` §2 is mandatory: "Documents, autosave and recovery"
+(Save, Save As, each Export format, crash simulation, the recovery
+Restore/Discard prompt, all close-guard paths) and "Toolbar integration" (the
+three custom buttons, the hidden native Save As entry, the shortcuts and the
+browser fallback).
 
 ---
 

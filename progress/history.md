@@ -391,3 +391,169 @@ Ketcher-compatible job protocol, with the UI re-enabled.
   non-structure); 75 Node tests; harness green.
 - Review: two REQUEST_CHANGES rounds (test/doc evidence, job-store pruning,
   stale docs, then the UI issues) followed by PASS after the user's manual check.
+
+---
+
+## 2026-11-12 — Activity 1: ket-document-autosave
+
+Worktree `../chemistry-draw-backstage-menu`, branch `feat/file-workflow`, based on
+`main` (Imago era, `c18046c`). Six tasks: docs → test → implement → implement →
+fix → review, with one review round that returned REQUEST_CHANGES and a clean
+re-review.
+
+- **Policy:** `.ket` is the only save format. Save / Save As write `.ket`;
+  Export is the only route to Molfile V2000/V3000, SMILES, InChI, SVG and PNG
+  (`generateImage(ket, { outputFormat })`; `exportImage` is deliberately unused
+  because it downloads directly and only renders SVG in 3.18) and never changes
+  `path` or `format`.
+- **Document model:** one document per window (`{ path, format: "ket", dirty }`),
+  title `<name|Untitled>` + `*`, dirty driven by `ketcher.changeEvent`.
+- **Autosave:** `.ket` + `{path, savedAt, dirty}` metadata in
+  `<appDataDir>/recovery/`, 2 s debounce + 30 s interval, only while dirty, never
+  the user's file; a write generation counter stops an in-flight write from
+  recreating a cleared snapshot.
+- **Recovery:** on launch, a snapshot newer than the original's mtime offers
+  Restore/Discard in-app; Restore re-attaches the path and stays dirty.
+  Missing/unreadable originals still offer recovery, with copy naming a vanished
+  file.
+- **Close guard:** `onCloseRequested` + Save/Discard/Cancel; New and Open reuse
+  the same prompt, so a dirty document is never replaced silently.
+- **UI:** all new dialogs are in-app components on Ketcher tokens (`Dialog`,
+  `Button`, overlay `rgba(94,94,94,0.8)`), with `role="dialog"`, `aria-modal`,
+  focus trap and Escape (recovery = Discard, close = Cancel). No native dialogs
+  in new code.
+- **Environment:** `task libs` rebuilt the shared `chemistry-builder` image from
+  main's Dockerfile (Imago + OpenCV) and the sidecar binaries were built with
+  the target-triple names Tauri expects before Clippy.
+- **Tests:** 60 frontend tests (37 document, 23 autosave), 87 sidecar tests;
+  typecheck, ESLint, Prettier, rustfmt, Clippy and ShellCheck clean; full harness
+  green.
+
+## 2026-11-12 — Activity 2: ketcher-toolbar-integration
+
+- Removed the temporary bottom-left dock. Save, New and Export are now
+  `customButtons` entries in Ketcher's top toolbar; clicks arrive as
+  `CUSTOM_BUTTON_PRESSED` custom actions on `ketcher.eventBus`.
+- Kept Ketcher's native **Save As…** (its dialog defaults to Molfile) as the
+  click-only route to other formats. `.ket` defaulting comes from the app Save.
+- The pre-existing Vite alias `file-saver` → `src/fileSaver.ts` now routes every
+  native save: `.ket` → document save (path or Save As), other extensions →
+  export save, no Tauri/handler → download. Pure `src/saveRoute.ts`, 19 tests.
+- Shortcuts are captured on `window` (capture phase) and consume the event
+  before the dialog/busy early return, so Ketcher's `Mod+S` dialog cannot open
+  even while a save is in flight.
+- Review: first round REQUEST_CHANGES (shortcut ordering, wrong hotkey evidence
+  in docs, four inaccurate doc rows, a stray `src-tauri/untitled.ket`), fix task
+  `f`, re-review PASS; C9 ticked.
+- Gates: 79 frontend tests, 87 sidecar tests, typecheck, ESLint, Prettier,
+  rustfmt, Clippy, ShellCheck and the full harness green.
+- Still needs a GUI run: toolbar rendering/icons, live custom actions, shortcut
+  behaviour against Ketcher's handlers, Tauri dialogs and the manual checklists.
+
+## 2026-11-13 — Activity 3: toolbar-icon-native-style
+
+- The user rejected the first icons: bigger than Ketcher's and filled. Measured
+  the native ink boxes (save 4.5-19.4, open 4.0-19.8 x 5.0-18.9 → ~15x15 in a
+  24 viewBox) versus ours (17-20 units, solid fills).
+- Final design: transparent `imageLink` + CSS mask painted with
+  `background-color: currentColor`, keyed by `img[alt="Save"|"New"|"Export"]`
+  scoped to `.Ketcher-root`, so the button's colour drives default #333333,
+  hover #167782 and the active state exactly like native icons.
+- Glyphs redrawn as outlines (`fill=none`, 1.5-unit stroke, round caps) inside a
+  15x15 live area; measured ink 4.5-19.5 for all three, matching native weight.
+- Review rounds: REQUEST_CHANGES (solid fills/oversize, literal `black`, loose
+  live-area guard, docs wording) → fixes → PASS. 10 icon tests.
+
+## 2026-11-13 — Activity 4: hide-native-save-as
+
+- Hid Ketcher's native "Save As…" entry with `buttons={{ save: { hidden: true } }}`
+  (`src/ui/editorButtons.ts`, `as ButtonsConfig` because Ketcher's `ButtonName`
+  union omits `save` while `isHidden`/`FileControls` read it at runtime).
+- `recognize` stays hidden; no CSS or DOM hiding, no Ketcher edits.
+- Consequences documented: Export is the only format route; the native save
+  dialog and its image-save entry are unreachable; remaining library saves still
+  use the `file-saver` alias; `Ctrl/Cmd+S` remains intercepted.
+- Review: REQUEST_CHANGES (a stale manual step still used the native image
+  save) → fix → PASS. 93 frontend tests.
+
+## 2026-11-13 — Activity 5: native-modal-backdrop
+
+- Ketcher's native modal overlay is `rgba(94,94,94,0.2)` with `background-color .3s`
+  (`.Modal-module_modalOverlay` / `_animate` / `_hide`), and its panel is white
+  with an 8 px radius, no border and no shadow (`.Dialog-module_dialog`).
+- Tokens now carry `color.overlay` (0.2), `color.overlayHidden` (0.01) and
+  `dialog.{radius,border,shadow,transition}`; `Dialog` fades the backdrop in on
+  first paint (rAF, cleaned up) and builds the panel from those tokens.
+- Every in-app dialog inherits it; per-dialog overrides are forbidden.
+- Documented divergences: no panel transform/opacity entrance, flat overlay
+  (Ketcher adds a 2 % hatch) and `position: fixed` above the app instead of
+  `absolute`/`z-index: 40` inside the editor.
+- Review: REQUEST_CHANGES (two overstated doc claims, missing pre-fade
+  assertion) → fix → PASS. 98 frontend tests.
+
+## 2026-11-13 — Activity 6: dialog-hatch-pattern
+
+- Ketcher's native overlay is not a flat wash: `.Modal-module_modalOverlay`
+  paints a 10x10 repeating SVG tile of diagonals (`#555`, width 2, opacity .02)
+  over `rgba(94,94,94,.2)`. The `background:none\9` beside it is an IE9 hack.
+- The exact 211-byte data URI now lives in `tokens.dialog.backdropPattern`
+  (plus `backdropRepeat: repeat`, `backdropSize: 10px 10px`) and the shared
+  `Dialog` overlay applies it; the colour still fades 0.01 -> 0.2 over 0.3 s
+  while the image stays static.
+- Verified byte-for-byte against the Ketcher CSS and rasterised: 10 px pitch,
+  ~2 % stroke, no seam when tiled.
+- Docs: conventions/verification/testing describe the hatch; the former "flat
+  overlay" divergence is gone. 102 frontend tests.
+
+## 2026-11-13 — Activity 7: hatch-background-image-url
+
+- The hatch never painted: `Dialog` assigned the bare data URI to
+  `backgroundImage`, but CSS needs `url("…")`, so the declaration was invalid
+  and silently dropped (flat 20 % wash, no console error).
+- Fix: the token stays the raw data URI and the overlay builds
+  `url("${tokens.dialog.backdropPattern}")`. Confirmed in headless Chromium:
+  bare = 1 colour in a strip, wrapped = 2 colours (hatch at 10 px pitch).
+- Tests guard both directions (no bare assignment, token not pre-wrapped,
+  repeat/size wired); docs record the raw-token/CSS-function rule.
+- 105 frontend tests, harness green.
+
+## 2026-11-13 — Activity 8: fs-scope-autosave
+
+- Autosave failed with `forbidden path: .../dev.spalax.ChemistryDraw/recovery:
+... allow-mkdir` because `fs:scope` only had `"**"`, a relative pattern that
+  cannot match absolute paths.
+- Scope is now `$APPDATA/**` (appDataDir/recovery) and `$HOME/**` (documents
+  restored without a dialog grant); dialog-picked files keep their runtime
+  per-path grant from the dialog plugin. No Rust changes.
+- `src/capabilities.test.ts` guards the scope entries and the fs command list
+  (109 frontend tests). Docs describe the scope model and the two manual checks.
+- GUI verification pending: no WARN while editing, and Restore -> Save.
+
+## 2026-11-13 — Activity 9: host-fontconfig-libs
+
+- The sidecar logged ~45 `Fontconfig warning` lines per PNG render: the builder
+  bundled Debian 12's libfontconfig 2.14, which cannot parse Fedora 45's newer
+  /etc/fonts config.
+- Fix: stop bundling platform font/PNG libs (`libfontconfig*`, `libfreetype*`,
+  `libexpat*`, `libpng*`, `libbrotli*`) in build-libs.sh, the Taskfile libs
+  copy and bundle-libs.sh, and drop the already-copied files.
+- Verified with the real sidecar: render PNG against host libs -> 0 warnings,
+  same output; `ldd` resolves them from the distro. 113 frontend tests.
+- Follow-ups noted: strengthen the skip-list test against over-broad patterns;
+  `libstdc++` is still shipped by the Arch PKGBUILD (pre-existing).
+
+## 2026-11-13 — Activity 10: ketcher-rebond-guard
+
+- Symptom: the renderer flooded `TypeError: undefined is not an object
+(restruct.molecule.halfBonds.get(bond.hb1).p)` every frame after a
+  struct/render desync (invalid-valence edit, undo of a deletion).
+- Cause: Ketcher 3.18 `ReBond.getSelectionPoints` dereferences both half-bonds
+  without checking; upstream fixed it in epam/ketcher#11165.
+- Fix: extended `patches/ketcher-core@3.18.0.patch` (cumulative with the
+  `parametrizeUrl` hunks) for `rebond.js` and `rebond.modern.js`:
+  `getSelectionPoints` returns `[]` on a missing half-bond,
+  `getSelectionContour` returns null, and the plate/drawHover callers no-op.
+  `pnpm install` re-applied with the new patch hash; build uses the modern file.
+- Not ported (outside this crash path): upstream's `setDoubleBondShift`,
+  `stereoUpBondGetCoordinates` and `show` guards.
+- `src/ketcherPatch.test.ts` guards the hunks and the installed dist (116 tests).

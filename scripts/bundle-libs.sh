@@ -28,6 +28,11 @@ SKIP_PATTERNS=(
   ^libxcb\.
   ^libXau\.
   ^libXdmcp\.
+  ^libfontconfig\.
+  ^libfreetype\.
+  ^libexpat\.
+  ^libpng\.
+  ^libbrotli
   ^linux-vdso\.
   ^ld-linux\.
 )

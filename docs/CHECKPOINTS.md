@@ -170,7 +170,9 @@
 - [ ] `/v2/info` advertises exactly one synthetic `imago_versions` entry
       (`local-ocsr`) so Ketcher enables Recognize; the real Imago backend,
       worker and libraries remain absent, and the `?version=` query is ignored.
-- [ ] `App.tsx` no longer hides Recognize and maps no-molecule,
+- [ ] Ketcher's built-in Recognize control stays visible
+      (`src/ui/editorButtons.ts` never hides `recognize`) and its Imago
+      version selector is hidden by `src/overrides.css`; `App.tsx` maps no-molecule,
       low-confidence/incomplete, unsupported-image and model-unavailable
       failures to friendly dialogs with a generic fallback. A JSON body without
       a usable `error`/`message` is treated as JSON and shown as the generic
@@ -209,8 +211,86 @@
 - [ ] Model-gated tests (`--include-ignored`, `models/` and the runtime present)
       pass, and the suite stays green without them.
 
+## C9 — Document and Autosave Contract
+
+- [x] `.ket` is the only save format: Save and Save As write `.ket`, while
+      Export is the only route to Molfile V2000/V3000, SMILES, InChI, SVG and
+      PNG, and never changes the document path or format.
+- [x] The window title shows the document name (or `Untitled`) plus a dirty
+      marker; a successful Save, Open or New clears the dirty state.
+- [x] Opening a `.ket` file gives a clean document with that path; opening
+      `.mol`/`.smi`/`.sdf`/`.rxn` imports through Ketcher, leaves `path` `null`
+      and keeps the document dirty.
+- [x] Autosave writes `.ket` plus metadata into the app data dir only while
+      dirty, debounced and on a slow interval, never to the user's file, and
+      the snapshot is cleared after Save, New or Open; an in-flight write
+      cannot recreate a snapshot after that cleanup.
+- [x] A snapshot newer than the last clean save triggers an in-app
+      Restore/Discard prompt on launch; Restore re-attaches the original path
+      when known. A missing or unreadable original still offers recovery
+      (missing files are called out in the prompt).
+- [x] Closing with unsaved changes is guarded by an in-app Save/Discard/Cancel
+      dialog; Cancel keeps the window open and Save writes before closing. New
+      and Open reuse the same prompt before replacing a dirty document.
+- [x] Recovery, close guard and feature errors are in-app dialogs styled with
+      Ketcher tokens, with `role="dialog"`, `aria-modal`, focus trap, initial
+      focus and Escape handling; no new Tauri native `message`/`confirm`.
+- [x] Pure helpers (title/dirty/names, save vs export, autosave scheduling,
+      write generation, recovery decision, close guard) are covered by Vitest,
+      and the manual checklist in `docs/verification.md` §2 passes.
+- [x] Browser fallback: Save and Export download files; no autosave, recovery
+      prompt or close guard.
+- [x] `src-tauri/capabilities/default.json` scopes `$APPDATA/**` for
+      `<appDataDir>/recovery` and `$HOME/**` for restored documents, with no
+      bare `**` entry, so autosave and re-saves raise no `forbidden path` WARN;
+      the capability contract test guards the scopes and the fs command list.
+
+## C10 — Ketcher Toolbar Integration
+
+- [x] No app-owned toolbar, dock or floating control group exists; Save, New
+      and Export render as Ketcher toolbar `customButtons` with sentence-case
+      titles and icons that inherit the toolbar button colour (transparent
+      `imageLink` painted by a CSS mask, Ketcher's native 28/32/40 px metrics,
+      no hard-coded icon colour).
+- [x] `CUSTOM_BUTTON_PRESSED` actions dispatch by id: Save writes `.ket` to the
+      current path (Save As when untitled), New reuses the dirty guard and
+      clears the snapshot, Export opens the in-app format dialog without
+      touching path or format.
+- [x] `Ctrl+S` is the app Save and Ketcher's `Mod+S` dialog stays shut;
+      `Ctrl+Shift+S` opens Save As; `Ctrl+O` and `Ctrl+N` still work.
+- [x] Ketcher's native **Save As…** entry is hidden through the `Editor`
+      `buttons` config (`buttons.save.hidden`, `src/ui/editorButtons.ts`; no CSS
+      or DOM hiding), so Export is the only format route; any remaining library
+      save goes through the Vite `file-saver` alias (`src/fileSaver.ts`) to the
+      Tauri filesystem or the export dialog (§5.7.1), while the native save
+      dialog and its image-save entry are hidden; `node_modules/` is untouched.
+- [x] Ketcher's built-in **Recognize** entry stays visible
+      (`src/ui/editorButtons.ts` hides only `save`) so the ONNX/OCSR flow is
+      reachable; `src/overrides.css` hides the unused Imago version selector in
+      the Recognize dialog.
+- [x] The pure routing helper (`.ket` → document save, other extensions →
+      export save, no Tauri/no handler → download) has Vitest coverage and was
+      RED before implementation.
+- [x] The manual checklist in `docs/verification.md` §2 "Toolbar integration"
+      passes, including the browser fallback.
+
+## C11 — Bundled vs Host Native Libraries
+
+- [x] The Linux bundled set is Indigo, Indigo Renderer and non-platform deps
+      only (ONNX Runtime ships as a separate payload); `libfontconfig*`,
+      `libfreetype*`, `libexpat*`, `libpng*` and `libbrotli*` are excluded by
+      the `scripts/build-libs.sh` dependency skip list, the Taskfile `libs` copy
+      and `scripts/bundle-libs.sh` `SKIP_PATTERNS`, guarded by the test in
+      `docs/testing.md` §4.2.
+- [x] `src-tauri/lib/linux-x86_64` contains none of those files, `ldd` resolves
+      them from the host, and a PNG render logs no `Fontconfig warning` (manual
+      step in `docs/verification.md` §2).
+- [x] `.deb`/`.rpm`/AppImage ship no platform font/PNG libraries and rely on the
+      distribution's copies, which GTK already pulls in, as documented in
+      `docs/architecture.md` §8.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C8 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C11 remain empty.

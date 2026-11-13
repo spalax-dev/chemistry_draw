@@ -67,7 +67,12 @@ not contain `test` or `implement` tasks.
   `progress/current.md` and stop — no workarounds.
 - Never commit `src-tauri/lib/`, `target/`, `dist/`, `dist-packages/` or any
   `.so` file.
+- **Documents are `.ket`**: Save/Save As write `.ket` only; Export is the sole
+  route to Molfile, SMILES, InChI, SVG and PNG and never changes the document
+  path or format.
 - Native Indigo is generated with `task libs` (Docker). It is never vendored.
+- ONNX Runtime is fetched with `scripts/fetch-onnxruntime.sh` and ships with the
+  app; it is never vendored.
 
 ## Activities
 

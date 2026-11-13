@@ -26,8 +26,12 @@
 - **Native performance** — uses a Rust sidecar with native
   [Indigo](https://github.com/epam/Indigo) for cheminformatics (instead of
   WebAssembly).
-- **Native file dialogs** — save in the formats you need, including PNG and SVG
-  rendered by the sidecar.
+- **Recognize Molecule** — convert a PNG, JPEG or WebP image into an editable
+  structure with the local ONNX classifier and OCSR model. No cloud service.
+- **Documents are `.ket`** — Save (Ctrl+S) writes the Ketcher `.ket` format to
+  the file you chose (the native Save dialog appears the first time); **Export**
+  is the way to Molfile, SMILES, InChI, PNG and SVG. Save, New and Export live
+  in Ketcher's own toolbar.
 - **Offline-first** — runs entirely on your machine.
 
 ## Download

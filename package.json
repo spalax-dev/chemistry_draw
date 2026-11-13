@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check",
+    "test": "vitest run",
     "test:policy": "node --test scripts/lib/activity-policy.test.mjs"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "typescript-eslint": "^8.72.1",
     "vite": "^6.0.3",
     "vite-plugin-node-polyfills": "^0.28.0",
+    "vitest": "^3.2.7",
     "yaml": "^2.9.1"
   }
 }

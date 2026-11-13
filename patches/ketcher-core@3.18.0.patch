@@ -34,3 +34,183 @@ index f755ba750e380e35d62b787007189d871482cac1..f0ca4ad3799a3f683d8cbb5492eaf2ee
    });
  }
  function request(method, url, data, headers, responseHandler) {
+diff --git a/dist/application/render/restruct/rebond.js b/dist/application/render/restruct/rebond.js
+index d07d4777dce518511c7429556c06882e39380731..1c6da841e3165df8e157f229e48640424e564229 100644
+--- a/dist/application/render/restruct/rebond.js
++++ b/dist/application/render/restruct/rebond.js
+@@ -87,6 +87,9 @@
+     value: function drawHover(render) {
+       var drawOutline = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+       var ret = this.makeHoverPlate(render, drawOutline);
++      if (!ret) {
++        return;
++      }
+       render.ctab.addReObjectPath(generalEnumTypes.LayerMap.hovering, this.visel, ret);
+       return ret;
+     }
+@@ -101,8 +104,14 @@
+         bondSpacingInPx = options.bondSpacingInPx,
+         stereoBondWidth = options.stereoBondWidth;
+       var regularSelectionThikness = bondSpacingInPx + bondThickness;
+-      var halfBondStart = restruct.molecule.halfBonds.get(bond$1.hb1).p;
+-      var halfBondEnd = restruct.molecule.halfBonds.get(bond$1.hb2).p;
++      // chemistry-draw: guard missing half-bonds (epam/ketcher#11165)
++      var halfBondStartEntry = restruct.molecule.halfBonds.get(bond$1.hb1);
++      var halfBondEndEntry = restruct.molecule.halfBonds.get(bond$1.hb2);
++      if (!halfBondStartEntry || !halfBondEndEntry) {
++        return [];
++      }
++      var halfBondStart = halfBondStartEntry.p;
++      var halfBondEnd = halfBondEndEntry.p;
+       var isStereoBond = bond$1.stereo !== bond.Bond.PATTERN.STEREO.NONE && bond$1.stereo !== bond.Bond.PATTERN.STEREO.CIS_TRANS;
+       var highlightPadding = isHighlight ? -1 : 0;
+       var stereoPadding = isStereoBond ? 0 : -2;
+@@ -136,16 +145,18 @@
+     key: "getSelectionContour",
+     value: function getSelectionContour(render, isHighlight) {
+       var paper = render.paper;
+-      var _this$getSelectionPoi = this.getSelectionPoints(render, isHighlight),
+-        _this$getSelectionPoi2 = _slicedToArray__default["default"](_this$getSelectionPoi, 8),
+-        startPadTop = _this$getSelectionPoi2[0],
+-        startTop = _this$getSelectionPoi2[1],
+-        endTop = _this$getSelectionPoi2[2],
+-        endPadTop = _this$getSelectionPoi2[3],
+-        endPadBottom = _this$getSelectionPoi2[4],
+-        endBottom = _this$getSelectionPoi2[5],
+-        startPadBottom = _this$getSelectionPoi2[6],
+-        startBottom = _this$getSelectionPoi2[7];
++      var points = this.getSelectionPoints(render, isHighlight);
++      if (!points || points.length !== 8) {
++        return null;
++      }
++      var startPadTop = points[0];
++      var startTop = points[1];
++      var endTop = points[2];
++      var endPadTop = points[3];
++      var endPadBottom = points[4];
++      var endBottom = points[5];
++      var startPadBottom = points[6];
++      var startBottom = points[7];
+       var pathString = "\n      M ".concat(startTop.x, " ").concat(startTop.y, "\n      L ").concat(endTop.x, " ").concat(endTop.y, "\n      C ").concat(endPadTop.x, " ").concat(endPadTop.y, ", ").concat(endPadBottom.x, " ").concat(endPadBottom.y, ", ").concat(endBottom.x, " ").concat(endBottom.y, "\n      L ").concat(startBottom.x, " ").concat(startBottom.y, "\n      C ").concat(startPadBottom.x, " ").concat(startPadBottom.y, ", ").concat(startPadTop.x, " ").concat(startPadTop.y, ", ").concat(startTop.x, " ").concat(startTop.y, "\n    ");
+       return paper.path(pathString);
+     }
+@@ -159,6 +170,9 @@
+         return null;
+       }
+       var rect = this.getSelectionContour(render, false);
++      if (!rect) {
++        return null;
++      }
+       return rect.attr(drawOutline ? _objectSpread({}, options.hoverStyle) : {
+         fill: options.hoverStyle.fill,
+         stroke: 'none'
+@@ -171,6 +185,9 @@
+         return null;
+       }
+       var rect = this.getSelectionContour(restruct.render, false);
++      if (!rect) {
++        return null;
++      }
+       return rect.attr(options.selectionStyle);
+     }
+   }, {
+@@ -181,6 +198,9 @@
+         return null;
+       }
+       var rect = this.getSelectionContour(restruct.render, true);
++      if (!rect) {
++        return null;
++      }
+       return rect.attr(highlightStyle);
+     }
+   }, {
+diff --git a/dist/application/render/restruct/rebond.modern.js b/dist/application/render/restruct/rebond.modern.js
+index 76acf13eb2c5bdf1ed36b1d9c17228ea07d95f5b..8c84bc07d38abe047cba0b3938d4b664657e75bc 100644
+--- a/dist/application/render/restruct/rebond.modern.js
++++ b/dist/application/render/restruct/rebond.modern.js
+@@ -72,6 +72,9 @@
+     value: function drawHover(render) {
+       var drawOutline = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+       var ret = this.makeHoverPlate(render, drawOutline);
++      if (!ret) {
++        return;
++      }
+       render.ctab.addReObjectPath(LayerMap.hovering, this.visel, ret);
+       return ret;
+     }
+@@ -86,8 +89,14 @@
+         bondSpacingInPx = options.bondSpacingInPx,
+         stereoBondWidth = options.stereoBondWidth;
+       var regularSelectionThikness = bondSpacingInPx + bondThickness;
+-      var halfBondStart = restruct.molecule.halfBonds.get(bond.hb1).p;
+-      var halfBondEnd = restruct.molecule.halfBonds.get(bond.hb2).p;
++      // chemistry-draw: guard missing half-bonds (epam/ketcher#11165)
++      var halfBondStartEntry = restruct.molecule.halfBonds.get(bond.hb1);
++      var halfBondEndEntry = restruct.molecule.halfBonds.get(bond.hb2);
++      if (!halfBondStartEntry || !halfBondEndEntry) {
++        return [];
++      }
++      var halfBondStart = halfBondStartEntry.p;
++      var halfBondEnd = halfBondEndEntry.p;
+       var isStereoBond = bond.stereo !== Bond.PATTERN.STEREO.NONE && bond.stereo !== Bond.PATTERN.STEREO.CIS_TRANS;
+       var highlightPadding = isHighlight ? -1 : 0;
+       var stereoPadding = isStereoBond ? 0 : -2;
+@@ -121,16 +130,18 @@
+     key: "getSelectionContour",
+     value: function getSelectionContour(render, isHighlight) {
+       var paper = render.paper;
+-      var _this$getSelectionPoi = this.getSelectionPoints(render, isHighlight),
+-        _this$getSelectionPoi2 = _slicedToArray(_this$getSelectionPoi, 8),
+-        startPadTop = _this$getSelectionPoi2[0],
+-        startTop = _this$getSelectionPoi2[1],
+-        endTop = _this$getSelectionPoi2[2],
+-        endPadTop = _this$getSelectionPoi2[3],
+-        endPadBottom = _this$getSelectionPoi2[4],
+-        endBottom = _this$getSelectionPoi2[5],
+-        startPadBottom = _this$getSelectionPoi2[6],
+-        startBottom = _this$getSelectionPoi2[7];
++      var points = this.getSelectionPoints(render, isHighlight);
++      if (!points || points.length !== 8) {
++        return null;
++      }
++      var startPadTop = points[0];
++      var startTop = points[1];
++      var endTop = points[2];
++      var endPadTop = points[3];
++      var endPadBottom = points[4];
++      var endBottom = points[5];
++      var startPadBottom = points[6];
++      var startBottom = points[7];
+       var pathString = "\n      M ".concat(startTop.x, " ").concat(startTop.y, "\n      L ").concat(endTop.x, " ").concat(endTop.y, "\n      C ").concat(endPadTop.x, " ").concat(endPadTop.y, ", ").concat(endPadBottom.x, " ").concat(endPadBottom.y, ", ").concat(endBottom.x, " ").concat(endBottom.y, "\n      L ").concat(startBottom.x, " ").concat(startBottom.y, "\n      C ").concat(startPadBottom.x, " ").concat(startPadBottom.y, ", ").concat(startPadTop.x, " ").concat(startPadTop.y, ", ").concat(startTop.x, " ").concat(startTop.y, "\n    ");
+       return paper.path(pathString);
+     }
+@@ -144,6 +155,9 @@
+         return null;
+       }
+       var rect = this.getSelectionContour(render, false);
++      if (!rect) {
++        return null;
++      }
+       return rect.attr(drawOutline ? _objectSpread({}, options.hoverStyle) : {
+         fill: options.hoverStyle.fill,
+         stroke: 'none'
+@@ -156,6 +170,9 @@
+         return null;
+       }
+       var rect = this.getSelectionContour(restruct.render, false);
++      if (!rect) {
++        return null;
++      }
+       return rect.attr(options.selectionStyle);
+     }
+   }, {
+@@ -166,6 +183,9 @@
+         return null;
+       }
+       var rect = this.getSelectionContour(restruct.render, true);
++      if (!rect) {
++        return null;
++      }
+       return rect.attr(highlightStyle);
+     }
+   }, {

@@ -68,7 +68,12 @@ tasks:
         docker run --rm -v "$(pwd):/app" chemistry-builder bash -c '
           cp -a /opt/chemistry/libs/*.so* /app/src-tauri/lib/linux-x86_64/
           rm -f /app/src-tauri/lib/linux-x86_64/libstdc++.so* \
-                /app/src-tauri/lib/linux-x86_64/libgcc_s.so*
+                /app/src-tauri/lib/linux-x86_64/libgcc_s.so* \
+                /app/src-tauri/lib/linux-x86_64/libfontconfig.so* \
+                /app/src-tauri/lib/linux-x86_64/libfreetype.so* \
+                /app/src-tauri/lib/linux-x86_64/libexpat.so* \
+                /app/src-tauri/lib/linux-x86_64/libpng*.so* \
+                /app/src-tauri/lib/linux-x86_64/libbrotli*.so*
         '
       - ls -lh src-tauri/lib/linux-x86_64/
 

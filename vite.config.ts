@@ -36,7 +36,10 @@ export default defineConfig(async () => ({
   },
   resolve: {
     alias: {
-      "file-saver": path.resolve(__dirname, "src/tauri-file-saver.ts"),
+      // Sanctioned third-party override (docs/architecture.md §5.7): Ketcher's
+      // bundled `file-saver` save path must use the Tauri filesystem instead of
+      // a browser download. The shim lives in `src/fileSaver.ts`.
+      "file-saver": path.resolve(__dirname, "src/fileSaver.ts"),
     },
   },
 }));

@@ -22,6 +22,7 @@ Docs-only activities (`type: "docs"`) run docs → review and skip test/implemen
 pnpm run typecheck      # tsc --noEmit
 pnpm run lint           # ESLint
 pnpm run format:check   # Prettier
+pnpm test               # Vitest (pure frontend helpers)
 pnpm build              # tsc + vite build
 ```
 
@@ -95,7 +96,18 @@ builder image produces — no accumulated host leftovers. The copy uses `cp -a`
 like the packaging scripts, so `libonnxruntime.so -> libonnxruntime.so.1 ->
 libonnxruntime.so.1.31.0` stays a chain of symlinks (one real 29 MB file).
 
-- Packaging builds (`.deb`/`.rpm`/AppImage) copy the same set from
+It does **not** copy `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or
+`libbrotli*`: those stay host-provided, as do `libc`, `libm`, `libz`,
+`libstdc++`, `libgcc_s` and GL/X11/xcb. If your
+`src-tauri/lib/linux-x86_64/` was populated before this split, delete those
+files (the directory is gitignored) so the sidecar loads the host copies.
+
+The reason: Debian 12 ships fontconfig **2.14**, which cannot parse the newer
+`/etc/fonts` syntax of current distros (Fedora 45 uses fontconfig **2.18**), so
+a bundled copy floods every PNG render with `Fontconfig warning` lines even when
+it works. The host libraries produce identical output without the warnings.
+
+- Packaging builds (`.deb`/`.rpm`/AppImage) copy the same filtered set from
   `/opt/chemistry/libs/` inside the container and ship it in the package. The
   copy goes into the bind-mounted `src-tauri/lib/linux-x86_64/`, so each
   packaging script snapshots that directory first and restores it with an
