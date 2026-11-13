@@ -22,6 +22,10 @@
 //! |--------|----------------------------------|------------------------|
 //! | GET    | `/v2/info`                      |                        |
 //! | GET    | `/v2/health`                    |                        |
+//! | GET    | `/v2/models`                    | catalog + download     |
+//! | POST   | `/v2/models/download`           | resumable downloader   |
+//! | POST   | `/v2/models/download/cancel`    | downloader cancellation|
+//! | POST   | `/v2/models/verify`             | artifact SHA-256 report|
 //! | POST   | `/v2/indigo/convert`            | Indigo                 |
 //! | POST   | `/v2/indigo/aromatize`          | Indigo                 |
 //! | POST   | `/v2/indigo/layout`             | Indigo                 |
@@ -48,6 +52,16 @@ pub fn build_router(state: AppState) -> axum::Router {
     Router::new()
         .route("/v2/info", get(transport::info::get_info))
         .route("/v2/health", get(transport::health::get_health))
+        .route("/v2/models", get(transport::models::get_models))
+        .route(
+            "/v2/models/download",
+            post(transport::models::post_download),
+        )
+        .route(
+            "/v2/models/download/cancel",
+            post(transport::models::post_cancel),
+        )
+        .route("/v2/models/verify", post(transport::models::post_verify))
         .route("/v2/indigo/info", get(transport::indigo::get_indigo_info))
         .route("/v2/indigo/convert", post(transport::indigo::post_convert))
         .route(

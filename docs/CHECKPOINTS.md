@@ -66,9 +66,10 @@
       library or worker runs.
 - [ ] The former Imago-absence suite runs on every platform and pins the
       compatibility contract: `/v2/info` (and `/v2/indigo/info`) advertises
-      exactly `imago_versions: ["local-ocsr"]` as a synthetic capability,
-      `/v2/health` exposes no `imago_worker`, `POST /v2/imago/uploads` returns
-      an `upload_id`, and an unknown `GET /v2/imago/uploads/{id}` is `404`.
+      exactly `imago_versions: ["local-ocsr"]` as a synthetic capability when
+      both models are installed and `[]` otherwise (the B3 gate), `/v2/health`
+      exposes no `imago_worker`, `POST /v2/imago/uploads` returns an
+      `upload_id`, and an unknown `GET /v2/imago/uploads/{id}` is `404`.
 - [ ] The packaging contract test asserts `externalBin` never lists
       `imago-worker`.
 - [ ] Rebuilt artifacts contain no imago-worker/libimago/OpenCV (deb/rpm/AppImage
@@ -168,8 +169,10 @@
       hand-drawn measurement and needs recalibration on real inputs before it is
       treated as final.
 - [ ] `/v2/info` advertises exactly one synthetic `imago_versions` entry
-      (`local-ocsr`) so Ketcher enables Recognize; the real Imago backend,
-      worker and libraries remain absent, and the `?version=` query is ignored.
+      (`local-ocsr`) when the manifest and both models' required artifacts are
+      present, and `[]` otherwise, so Ketcher enables Recognize only when it can
+      work; the real Imago backend, worker and libraries remain absent, and the
+      `?version=` query is ignored.
 - [ ] Ketcher's built-in Recognize control stays visible
       (`src/ui/editorButtons.ts` never hides `recognize`) and its Imago
       version selector is hidden by `src/overrides.css`; `App.tsx` maps no-molecule,
@@ -179,10 +182,10 @@
       failure, and the plain-text `413` path (a JSON parse error in Ketcher)
       maps to the "may be too large" copy; raw JSON never reaches the user.
 - [ ] The replaced `imago_absent` contract is tested on every platform: the
-      synthetic info capability, no `imago_worker`, `POST` returning
-      `upload_id`, unknown `GET` `404`, job store states/TTL, missing-model
-      `FAILURE`, filter rejection and a model-gated caffeine `SUCCESS` with a
-      V2000 molfile.
+      synthetic info capability with models and the empty list without them, no
+      `imago_worker`, `POST` returning `upload_id`, unknown `GET` `404`, job
+      store states/TTL, missing-model `FAILURE`, filter rejection and a
+      model-gated caffeine `SUCCESS` with a V2000 molfile.
 - [ ] OCSR sessions load lazily on the first recognition request and are
       cached; startup, `/v2/health` and `/v2/filter/classify` never open them.
       Health lists both model ids only when their required artifacts exist.
@@ -201,8 +204,8 @@
 - [ ] `/v2/health` reports the targeted ONNX Runtime API generation and only
       model ids whose required artifacts exist on disk (classifier file; OCSR
       encoder + decoder + vocab). `/v2/info` adds only the synthetic
-      `imago_versions` capability list: the rest of its payload is unchanged and
-      it exposes no inference/backend fields.
+      `imago_versions` capability list, gated on those artifacts: the rest of
+      its payload is unchanged and it exposes no inference/backend fields.
 - [ ] Non-gated temp-dir tests cover wrong checksum, missing artifact,
       unsupported schema, a manifest without `image-classifier` and a
       preprocessing mismatch; a model-gated test covers a graph/manifest shape
@@ -289,8 +292,37 @@
       distribution's copies, which GTK already pulls in, as documented in
       `docs/architecture.md` §8.
 
+## C12 — Model Delivery (B3)
+
+- [x] No model weight or `manifest.json` is bundled or committed: the catalog is
+      compiled into the sidecar, the packages contain no `.onnx` file or
+      `models/` path, and `NOTICE` records the MIT classifier and CC-BY-4.0
+      OCSR attribution.
+- [x] `GET /v2/models` answers `200` with no model root, manifest or models:
+      bundled catalog version, `ready: false`, total/installed bytes, per-model
+      `installed`/`missing` and `download.state: "idle"`; the sidecar starts and
+      serves Indigo.
+- [x] `POST /v2/models/download` is opt-in (no startup download), returns `202`,
+      is `409` while a run is active and `200` only when every installed
+      artifact re-hashes to the catalog and the manifest is current; cancel
+      keeps the `.part` and a retry resumes with HTTP Range; verify/repair
+      reports missing/corrupt artifacts and the repair hint.
+- [x] Every artifact is size-checked and SHA-256-verified, installed by atomic
+      rename, and a bad checksum deletes the `.part` and fails without a final
+      file; disk-space and offline failures are actionable; the generated
+      `models/manifest.json` is schema 1 with `catalog_version` and loads through
+      the registry.
+- [x] Release passes `<app_data>/models` as `CHEMISTRY_MODELS_DIR`, an explicit
+      env value wins, debug keeps `<repo>/models`, and the directory is created.
+- [x] `/v2/info` advertises `imago_versions: ["local-ocsr"]` only when the
+      manifest and both models' required artifacts are present, and `[]`
+      otherwise; `/v2/health` keeps the same cheap existence rule.
+- [x] Tests use a local HTTP server, dummy artifacts and
+      an injected test catalog / catalog-error seam; CI never downloads the ~324 MB real models; the
+      real HF smoke is gated/manual and the model-gated inference tests remain.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C11 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C12 remain empty.

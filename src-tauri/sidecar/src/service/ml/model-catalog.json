@@ -1,0 +1,70 @@
+{
+  "catalog_version": 1,
+  "models": {
+    "image-classifier": {
+      "id": "image-classifier@Iagea/d21f4cb",
+      "version": "Iagea/d21f4cb",
+      "license": "MIT",
+      "source": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr",
+      "preprocessing": "runtime_default",
+      "threshold": 0.000089,
+      "artifacts": [
+        {
+          "role": "classifier",
+          "path": "image-classifier-fp16/classifier.fp16.onnx",
+          "url": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr/resolve/main/image-classifier-fp16/classifier.fp16.onnx",
+          "size": 8162917,
+          "sha256": "d5f5506beba189cf2489761d96db4ce978023d769688a08065458a3c0af505a9",
+          "inputs": [
+            { "name": "input_2", "dtype": "float32", "shape": [1, 224, 224, 3] },
+            { "name": "45214:0", "dtype": "float32", "shape": [1, 1, 1, 3] },
+            { "name": "45216:0", "dtype": "float32", "shape": [1, 1, 1, 3] }
+          ],
+          "output": { "name": "Identity:0", "dtype": "float32", "shape": [1, 1] }
+        }
+      ]
+    },
+    "ocsr-handdrawn": {
+      "id": "ocsr-handdrawn@zenodo:10781330",
+      "version": "zenodo:10781330",
+      "license": "CC-BY-4.0",
+      "source": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr",
+      "preprocessing": "decimer_ocsr",
+      "start_id": 13,
+      "end_id": 14,
+      "max_len": 302,
+      "confidence_threshold": 0.901,
+      "artifacts": [
+        {
+          "role": "encoder",
+          "path": "ocsr-handdrawn-fp32/encoder.onnx",
+          "url": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr/resolve/main/ocsr-handdrawn-fp32/encoder.onnx",
+          "size": 208801677,
+          "sha256": "996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52",
+          "inputs": [{ "name": "image", "dtype": "float32", "shape": [1, 512, 512, 3] }],
+          "output": { "name": "Identity:0", "dtype": "float32", "shape": [1, 256, 512] }
+        },
+        {
+          "role": "decoder",
+          "path": "ocsr-handdrawn-fp32/decoder_step.onnx",
+          "url": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr/resolve/main/ocsr-handdrawn-fp32/decoder_step.onnx",
+          "size": 107017280,
+          "sha256": "cfff97883de80de4e55463d44d8778c351188f47f1f1c955ed7c3c6bb6d68197",
+          "inputs": [
+            { "name": "tokens", "dtype": "int32", "shape": [1, -1] },
+            { "name": "enc_out", "dtype": "float32", "shape": [1, 256, 512] }
+          ],
+          "zero_inputs": [],
+          "output": { "name": "Identity:0", "dtype": "float32", "shape": [1, -1, 156] }
+        },
+        {
+          "role": "vocab",
+          "path": "ocsr-handdrawn-fp32/vocab.json",
+          "url": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr/resolve/main/ocsr-handdrawn-fp32/vocab.json",
+          "size": 5316,
+          "sha256": "62c84d901199667c171413acfbd9071c0297a9273081063df318877a1fa3c7dd"
+        }
+      ]
+    }
+  }
+}

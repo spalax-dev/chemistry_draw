@@ -13,6 +13,10 @@
 //! - [`ocsr`] owns the OCSR sessions and runs the validated pair.
 //! - [`registry`] verifies `manifest.json`, the artifact checksums and the
 //!   tensor contracts, then creates the CPU sessions.
+//! - [`catalog`] owns the bundled model catalog: URLs, sizes, SHA-256 values,
+//!   provenance and the contracts the generated manifest copies.
+//! - [`download`] streams catalog artifacts into the model root, resumes
+//!   `.part` files, verifies checksums and publishes the generated manifest.
 //! - [`runtime`] owns the process-wide, dynamically loaded ONNX Runtime
 //!   environment.
 //! - [`classifier`] runs the validated session and applies the sigmoid and the
@@ -28,7 +32,9 @@
 //! 1.31.0 library next to the Indigo native libs and the host points
 //! `ORT_DYLIB_PATH` at that copy.
 
+pub mod catalog;
 pub mod classifier;
+pub mod download;
 pub mod ocsr;
 pub mod ocsr_decode;
 pub mod ocsr_preprocess;

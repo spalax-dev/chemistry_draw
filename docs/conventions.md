@@ -330,8 +330,9 @@ disk glyph.
 ## 8. Sidecar contracts
 
 - Every handler logs its route at `info`.
-- Status codes: 400 invalid input, 404 unknown id, 413 payload too large, 500
-  backend failure, 503 model unavailable (missing, corrupt or contract
+- Status codes: 400 invalid input, 404 unknown id, 409 conflicting operation
+  (download/verify already running, nothing to cancel), 413 payload too large,
+  500 backend failure, 503 model unavailable (missing, corrupt or contract
   mismatch).
 - `/v2/info` must report the **actual bound port** in `api_path`.
 - Keep the sidecar stateless: a process-lifetime inference-session cache is an
@@ -354,7 +355,9 @@ disk glyph.
 - Models are **never** committed or bundled. `models/` is gitignored; the model
   root is resolved first match wins: `CHEMISTRY_MODELS_DIR`, then an existing
   `<repo>/models`, then `models` in the working directory. The debug host passes
-  the absolute `<repo>/models` as `CHEMISTRY_MODELS_DIR`.
+  the absolute `<repo>/models` as `CHEMISTRY_MODELS_DIR`; the release host
+  passes `<app_data>/models` and creates it. An explicit
+  `CHEMISTRY_MODELS_DIR` wins in both profiles.
 - A model is usable only when `manifest.json` verifies: artifact path,
   `artifact_sha256`, provenance id, input/output names, shapes and dtype.
   Validation failure is `AppError::ServiceUnavailable` (503), never a fallback

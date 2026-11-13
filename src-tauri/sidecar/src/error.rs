@@ -14,6 +14,7 @@ use serde::Serialize;
 /// |---------|------|---------|
 /// | `BadRequest` | 400 | Invalid input (bad SMILES, undecodable image, etc.) |
 /// | `NotFound` | 404 | Resource not found |
+/// | `Conflict` | 409 | Operation conflicts with the current state (download/verify active) |
 /// | `Unprocessable` | 422 | Input understood, result cannot be produced (incomplete OCSR decode) |
 /// | `ServiceUnavailable` | 503 | Model missing, corrupt or contract mismatch |
 /// | `Internal` | 500 | Native library error, I/O error, etc. |
@@ -26,6 +27,15 @@ pub enum AppError {
     /// Requested resource does not exist.
     #[error("not found: {0}")]
     NotFound(String),
+
+    /// The request conflicts with the current server state.
+    ///
+    /// Used by the model routes: a download or verify is already running, a
+    /// cancel has nothing to cancel, or the installed catalog is newer than
+    /// the bundled one. The current status stays available from
+    /// `GET /v2/models`.
+    #[error("conflict: {0}")]
+    Conflict(String),
 
     /// The input was understood but the requested result cannot be produced.
     ///
@@ -58,6 +68,9 @@ impl AppError {
     pub fn service_unavailable(e: impl std::fmt::Display) -> Self {
         Self::ServiceUnavailable(e.to_string())
     }
+    pub fn conflict(e: impl std::fmt::Display) -> Self {
+        Self::Conflict(e.to_string())
+    }
     pub fn internal(e: impl std::fmt::Display) -> Self {
         Self::Internal(e.to_string())
     }
@@ -73,6 +86,7 @@ impl IntoResponse for AppError {
         let (status, msg) = match &self {
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
+            AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
             AppError::Unprocessable(m) => (StatusCode::UNPROCESSABLE_ENTITY, m.clone()),
             AppError::ServiceUnavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m.clone()),
             AppError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m.clone()),
@@ -85,7 +99,7 @@ impl IntoResponse for AppError {
                 tracing::warn!("{self}")
             }
             AppError::Internal(_) => tracing::error!("{self}"),
-            AppError::BadRequest(_) | AppError::NotFound(_) => {}
+            AppError::BadRequest(_) | AppError::NotFound(_) | AppError::Conflict(_) => {}
         }
         (status, Json(ErrorBody { error: msg })).into_response()
     }

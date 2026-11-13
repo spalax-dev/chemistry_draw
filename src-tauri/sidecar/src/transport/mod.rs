@@ -5,4 +5,5 @@ pub mod health;
 pub mod imago;
 pub mod indigo;
 pub mod info;
+pub mod models;
 pub mod ocsr;

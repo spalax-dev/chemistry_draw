@@ -60,14 +60,15 @@ Windows changes are validated by the `windows` job in
 16. `node scripts/harness.mjs` passes on Windows (ShellCheck is skipped: the
     scripts are POSIX-only).
 17. Sidecar smoke test (Windows job only): the compatibility contract lives in
-    `.github/actions/windows-build/action.yml` — `/v2/info` answers `200` and
-    advertises the synthetic `imago_versions` capability (`local-ocsr`),
+    `.github/actions/windows-build/action.yml` — `/v2/info` answers `200` and,
+    because the runner carries no models, advertises `imago_versions: []`;
     `/v2/health` answers `200` with neither `imago_worker` nor
     `imago_versions`, `POST /v2/imago/uploads` with the `caffeine.png` fixture
     (`image/png`) returns `200` and a non-empty `upload_id` (not 404), an
     unknown id is `404`, and `GET /v2/imago/uploads/{id}` answers `200` with a
     `state` (polled for up to 10 s; `PENDING` is accepted because the runner
-    carries no models). Linux covers the same contract through `cargo test`, in
+    carries no models). A temp-root test covers the installed case
+    (`["local-ocsr"]`). Linux covers the same contract through `cargo test`, in
     the module that replaces `tests/imago_absent.rs`.
 18. `pnpm tauri build --bundles nsis` produces
     `target/release/bundle/nsis/*.exe`, uploaded by CI.
@@ -85,11 +86,121 @@ Windows changes are validated by the `windows` job in
   `model root: models` — and `POST /v2/filter/classify` answers without
   exporting `CHEMISTRY_MODELS_DIR`.
 - `curl -s http://127.0.0.1:9321/v2/info` answers 200 and
-  `jq .imago_versions` returns `["local-ocsr"]` — the synthetic capability
-  list, not an Imago build.
+  `jq .imago_versions` returns `["local-ocsr"]` when the models are installed
+  (and `[]` on a clean install) — the synthetic capability list, not an Imago
+  build.
 - `curl -s http://127.0.0.1:9321/v2/health` reports `"status": "ok"` and has no
   `imago_worker` field.
 - Closing the window kills `indigo-server` (no orphan on the port).
+
+### Model delivery (B3)
+
+The release model root is the Tauri app data directory:
+
+| Platform | Model root                                                                    |
+| -------- | ----------------------------------------------------------------------------- |
+| Linux    | `~/.local/share/dev.spalax.ChemistryDraw/models` (`$XDG_DATA_HOME` respected) |
+| Windows  | `%APPDATA%\dev.spalax.ChemistryDraw\models`                                   |
+
+`CHEMISTRY_MODELS_DIR` overrides it and the host logs `model root = ...` at
+startup. The release host creates the app-data model root before spawning the
+sidecar; a debug run without an explicit value uses `<repo>/models`, which the
+downloader creates on demand.
+
+- **Clean-root status.** Point a debug run at a fresh directory:
+
+  ```bash
+  CLEAN=$(mktemp -d)
+  CHEMISTRY_MODELS_DIR=$CLEAN task run
+  ```
+
+  `GET /v2/models` answers `200` with `ready: false`,
+  `manifest_present: false`, `total_bytes: 323987190`, both models
+  `installed: false` with their `missing` lists and `download.state: "idle"`.
+  `/v2/info` answers `imago_versions: []`, so Recognize is disabled, while
+  Indigo operations still work.
+
+  ```bash
+  BASE=http://127.0.0.1:9321
+  curl -s "$BASE/v2/models" | jq
+  curl -s "$BASE/v2/info" | jq .imago_versions   # []
+  ```
+
+- **Download.** `POST /v2/models/download` returns `202` and starts; poll
+  `GET /v2/models` until the state leaves `downloading`:
+
+  ```bash
+  curl -s -X POST "$BASE/v2/models/download" | jq '.download.state'
+  while :; do
+    S=$(curl -s "$BASE/v2/models")
+    echo "$S" | jq -r '"\(.download.state) \(.download.downloaded_bytes)/\(.download.total_bytes) \(.download.current_file // "")"'
+    [ "$(echo "$S" | jq -r '.download.state')" = "downloading" ] || break
+    sleep 1
+  done
+  echo "$S" | jq '{ready, installed_bytes, total_bytes, download}'
+  ```
+
+  Expected: `ready: true`, `installed_bytes == total_bytes == 323987190`,
+  `download.state: "ready"`, and `/v2/info` now returns
+  `["local-ocsr"]`. The generated `$CLEAN/manifest.json` is schema 1 with
+  `catalog_version` and both models. The sidecar log names each artifact and
+  its checksum result; no `.part` file remains.
+
+- **Cancel and resume.** Start a download into a fresh root, wait until
+  `downloaded_bytes` grows, then cancel:
+
+  ```bash
+  curl -s -X POST "$BASE/v2/models/download/cancel" | jq '.download.state'  # downloading (cooperative)
+  find "$CLEAN" -name '*.part' -ls        # the partial file is kept
+  # The cancel response is immediate and still says "downloading"; polling
+  # reports the transition once the worker observes the flag between chunks.
+  curl -s "$BASE/v2/models" | jq '.download.state'                          # cancelled
+  curl -s "$BASE/v2/models" | jq '.download.downloaded_bytes'
+  curl -s -X POST "$BASE/v2/models/download" | jq '.download.state'         # downloading
+  ```
+
+  The second run resumes with `Range: bytes=<kept>-` (the suite's test server
+  asserts the header; the sidecar itself does not log request headers) instead
+  of restarting, and the final bytes match the catalog. Cancel
+  without a running download is `409`; a second download while one is running
+  is `409`.
+
+- **Verify and repair.** After a complete download:
+
+  ```bash
+  curl -s -X POST "$BASE/v2/models/verify" | jq '{ok, repair}'
+  # { "ok": true, "repair": null }
+  ```
+
+  Corrupt an artifact in a **temp** root (never the installed root), start the
+  sidecar against that root, and run verify: expected `ok: false`, the artifact
+  `status: "corrupt"` with expected/actual hashes and
+  `repair: "POST /v2/models/download"`. A following download replaces the
+  corrupt artifact and rewrites the manifest even when the installed manifest is
+  valid: the explicit POST re-hashes the installed files and answers `200` only
+  when every size and SHA-256 matches. `POST /v2/models/verify` during a
+  download is `409`.
+
+- **Real-network smoke (manual, not CI).** In a temp root with the default
+  catalog:
+
+  ```bash
+  SMOKE=$(mktemp -d)
+  # Start the sidecar with CHEMISTRY_MODELS_DIR=$SMOKE and the default catalog,
+  # POST /v2/models/download, poll to ready, then:
+  du -cb "$SMOKE"/image-classifier-fp16/* "$SMOKE"/ocsr-handdrawn-fp32/* | tail -1
+  # 323987190
+  sha256sum "$SMOKE"/image-classifier-fp16/classifier.fp16.onnx \
+            "$SMOKE"/ocsr-handdrawn-fp32/encoder.onnx \
+            "$SMOKE"/ocsr-handdrawn-fp32/decoder_step.onnx \
+            "$SMOKE"/ocsr-handdrawn-fp32/vocab.json
+  jq '.catalog_version, (.models | keys)' "$SMOKE/manifest.json"
+  ```
+
+  Expected: the four pinned hashes from `docs/architecture.md` §7, total
+  `323987190` B, `catalog_version: 1` and both model keys. Then run the package
+  absence greps in "Packaging" below: no `.onnx`, `manifest.json` or `models/`
+  path is shipped. Remove the temp root when done.
 
 ### Logs
 
@@ -108,8 +219,9 @@ Windows changes are validated by the `windows` job in
   `libfontconfig.so.1` from the host (e.g. `/lib64/` on Fedora,
   `/usr/lib/x86_64-linux-gnu/` on Debian), not from the bundled directory.
 - Recognize Molecule is visible on every platform. With the models installed it
-  inserts a structure end to end (see below); without them the control still
-  opens and the job fails with the model-setup dialog.
+  inserts a structure end to end (see below). On a clean install B3 gates the
+  capability: `/v2/info` advertises no `imago_versions`, so the control is
+  disabled until the model download completes.
 
 ### Image filter
 
@@ -150,9 +262,10 @@ the sidecar still starts.
 - With `ORT_DYLIB_PATH` pointing at a missing file, the first classifier request
   answers `503` (not a panic, not `500`) and the message names the path and
   `scripts/fetch-onnxruntime.sh`.
-- `GET /v2/info` adds only the synthetic `imago_versions` capability list; the
-  rest of the payload (`Indigo`, `indigo_version`, `api_path`) is unchanged and
-  it carries no inference fields.
+- `GET /v2/info` adds only the synthetic `imago_versions` capability list, and
+  only when the manifest and both models' required artifacts exist; the rest of
+  the payload (`Indigo`, `indigo_version`, `api_path`) is unchanged and it
+  carries no inference fields.
 
 ### OCSR recognition
 
@@ -217,15 +330,16 @@ gitignored and never bundled.
   reproduction. A truncated `smiles` must never appear in a `200`.
 
 - `GET /v2/info` adds only the synthetic `imago_versions` capability described
-  below: no OCSR or other inference fields, and the rest of its payload is
-  unchanged.
+  below, and only when both model families' artifacts are installed: no OCSR or
+  other inference fields, and the rest of its payload is unchanged.
 
 ### Recognize Molecule end to end
 
 Requires both model sets (`models/manifest.json`, the classifier file and the
-three OCSR artifacts) and a loadable ONNX Runtime. Without them the control is
-still visible and the job fails with the setup dialog; that path is checked
-below.
+three OCSR artifacts) and a loadable ONNX Runtime. Without them `/v2/info`
+advertises `imago_versions: []` and Ketcher disables the control; the
+model-unavailable job path stays a sidecar contract and the setup UI is a B3
+follow-up.
 
 - The toolbar shows **Recognize Molecule** and opens Ketcher's "Import
   Structure from Image" dialog. The dialog does **not** show an "Imago version"
@@ -256,9 +370,10 @@ below.
   answer is not proof that no structure exists.
 - The same in-app surface is expected for the other recognition failures:
   low confidence (title `Structure problem`, "The structure could not be read
-  confidently…"), models missing ("Molecule recognition is not set up…"),
-  conversion, timeout and the plain-text `413` ("The server could not process
-  the image. It may be too large."). In every case the title is **Structure
+  confidently…"), conversion, timeout and the plain-text `413` ("The server
+  could not process the image. It may be too large."). A direct request with
+  models missing still maps to the setup copy, although B3 disables the control
+  when the capability is absent. In every case the title is **Structure
   problem**, the friendly copy replaces the raw message and no native alert
   appears. When a Playwright runner drives `pnpm dev`, the same check is a DOM
   assertion — a `[role="dialog"]` element titled `Structure problem` — plus
@@ -269,10 +384,11 @@ below.
   coverage is the gate test with a fake prediction. The dialog must say the
   structure could not be read confidently and must not show a partial
   structure.
-- Models missing: rename `models/` (or point `CHEMISTRY_MODELS_DIR` at an empty
-  directory) and retry. The job ends `FAILURE` with the model-unavailable
-  message; the dialog says the models are not available, `/v2/health` lists no
-  model and Indigo keeps working.
+- Models missing: on a clean root (or after renaming `models/`) `/v2/info`
+  returns `imago_versions: []`, the Recognize control is disabled, `/v2/health`
+  lists no model and Indigo keeps working. A direct `POST /v2/imago/uploads`
+  still ends `FAILURE` with the model-unavailable message, but the UI cannot
+  reach that path while the capability is absent.
 - Unsupported format: choose a GIF or rename `caffeine.png` to `.gif`. The POST
   is `400` and the dialog says the image is unsupported. The `.webp` fixture is
   accepted.
@@ -522,8 +638,9 @@ Run against the desktop build (`task run`) unless a step says browser.
   find squashfs-root \( -iname '*imago*' -o -iname '*opencv*' \)
   ```
 
-- The packaged sidecar answers `GET /v2/info` with the synthetic
-  `imago_versions: ["local-ocsr"]` capability and `GET /v2/health` without
+- The packaged sidecar answers `GET /v2/info` with `imago_versions: []` because
+  the payload carries no models (with an installed model root it advertises the
+  synthetic `["local-ocsr"]` capability) and `GET /v2/health` without
   `imago_worker`. `POST /v2/imago/uploads` is registered and returns an
   `upload_id`; with no models in the payload the job ends `FAILURE` (model
   unavailable), never 404. The payload still contains no `imago-worker`,
@@ -604,6 +721,9 @@ The reviewer agent must verify:
 - [ ] Sequential status: no task is `in_progress` or `done` while an earlier
       task is not `done`
 - [ ] New behaviour has a test that would fail without the change
+- [ ] Model delivery is verified: empty-root status, opt-in
+      download/resume/cancel/verify, generated schema-1 manifest, app-data root,
+      `/v2/info` capability gating, and no model files in packages
 - [ ] When `models/` exists, model-gated tests pass with `--include-ignored`
 - [ ] No ONNX model file is committed or bundled; the shipped
       `libonnxruntime` 1.31.0 comes only from the builder image / Windows fetch

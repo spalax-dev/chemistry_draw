@@ -62,8 +62,9 @@ control, however, hardcodes the Imago job protocol: `POST
 sidecar registers that pair as a **compatibility shim**: the route name is
 Ketcher's, the pipeline behind it is the local filter + OCSR + Indigo path, and
 the real Imago library never runs. `/v2/info` advertises one synthetic
-`imago_versions` entry (`local-ocsr`) because Ketcher disables the control when
-the list is empty; it is capability advertisement, not an Imago build.
+`imago_versions` entry (`local-ocsr`) when the required model artifacts are
+installed (B3, §7) because Ketcher disables the control when the list is empty;
+it is capability advertisement, not an Imago build.
 
 Phase B1 adds an ONNX Runtime classifier (`POST /v2/filter/classify`) that
 decides whether an image contains a chemical structure. Phase B2 adds OCSR
@@ -71,7 +72,10 @@ inference (image → SMILES) through `POST /v2/ocsr/recognize`, the contract
 activity 8 defines. Activity 9 (`phase-b2-recognize-e2e`) wires them end to end
 — filter gate → OCSR → SMILES → V2000 molfile through Indigo — behind the
 `imago/uploads` job protocol and re-enables the **Recognize Molecule** UI. The
-flow is implemented; section 7 is its contract.
+flow is implemented; section 7 is its contract. B3 (activity 11) adds the
+opt-in model delivery backend — a bundled catalog, a resumable downloader and
+the `/v2/models` routes — while the first-run setup UI stays a follow-up
+activity.
 
 The inference paths are HTTP → `transport/{filter,ocsr}.rs` → `service/ml/` →
 ONNX Runtime (CPU). They do not touch Indigo. The compatibility path is the one
@@ -128,8 +132,8 @@ Pattern rules:
   unhandled rejections into the Tauri log. It is a no-op outside Tauri.
 - **Recognize Molecule** is Ketcher's built-in "Import Structure from Image"
   dialog. `App.tsx` removes the `hidden` button option and the sidecar
-  advertises the synthetic `imago_versions` capability; Ketcher POSTs the
-  image and polls the compatibility job. Failures reach `errorHandler` as JSON
+  advertises the synthetic `imago_versions` capability when the models are
+  installed (B3); Ketcher POSTs the image and polls the compatibility job. Failures reach `errorHandler` as JSON
   text; `src/recognizeErrors.ts` unwraps and maps them, and `App.tsx` renders
   every one in the in-app `ErrorDialog` (title `Structure problem`), never a
   native OS alert.
@@ -460,6 +464,10 @@ no mouse or keyboard route to the native dialog.
 | GET    | `/v2/info`                                                          | versions + `api_path` (real port)     |
 | GET    | `/v2/health`                                                        | diagnostics for bug reports           |
 | GET    | `/v2/indigo/info`                                                   | alias of `/v2/info`                   |
+| GET    | `/v2/models`                                                        | catalog and download status           |
+| POST   | `/v2/models/download`                                               | opt-in download, repair and update    |
+| POST   | `/v2/models/download/cancel`                                        | cancel the active download            |
+| POST   | `/v2/models/verify`                                                 | SHA-256 report and repair hint        |
 | POST   | `/v2/indigo/convert`, `aromatize`, `dearomatize`, `layout`, `clean` | Indigo                                |
 | POST   | `/v2/indigo/render`                                                 | Indigo Renderer                       |
 | POST   | `/v2/indigo/calculate`, `check`, `calculate_cip`, `automap`         | Indigo                                |
@@ -470,14 +478,17 @@ no mouse or keyboard route to the native dialog.
 
 Errors are `AppError` → `{ "error": "..." }`: 400 invalid input (including an
 undecodable or unsupported image), 404 unknown id (including an unknown,
-expired or restarted recognition job), 413 payload over the 10 MiB cap, 422
-incomplete OCSR decoding (the decoder did not finish the structure), 500
-backend failure, 503 model unavailable (missing, checksum mismatch or contract
-mismatch). The `413` is the exception to the JSON shape: it comes from axum's
-`DefaultBodyLimit`, whose body is plain text, not `{ "error": ... }`.
+expired or restarted recognition job), 409 conflicting operation (a download or
+verify is already running), 413 payload over the 10 MiB cap, 422 incomplete OCSR
+decoding (the decoder did not finish the structure), 500 backend failure
+(including an unreadable `CHEMISTRY_MODEL_CATALOG` override), 503 model
+unavailable (missing, checksum mismatch or contract mismatch). The `413` is the
+exception to the JSON shape: it comes from axum's `DefaultBodyLimit`, whose body
+is plain text, not `{ "error": ... }`. `GET /v2/models` is the exception to the
+error rule: it answers `200` even with no model root, manifest or models.
 `/v2/info` exposes Indigo versions plus the synthetic `imago_versions`
-capability list (the rest of its payload is unchanged); `/v2/health` adds the
-targeted ONNX Runtime API generation and
+capability list when the model artifacts are present (the rest of its payload is
+unchanged); `/v2/health` adds the targeted ONNX Runtime API generation and
 the model ids whose artifacts are present on disk. The `/v2/imago/uploads`
 pair is a compatibility shim for Ketcher's built-in job protocol, not an Imago
 backend: the implementation is the local filter → OCSR → Indigo pipeline, no
@@ -495,7 +506,8 @@ delivers the runtime foundation, the filter and the shipped ONNX Runtime. B2
 adds OCSR inference: one hand-drawn model, a separate preprocessing pipeline
 and `POST /v2/ocsr/recognize`. Activity 9 (`phase-b2-recognize-e2e`) adds the
 implemented filter gate, the Ketcher-compatible job adapter and the re-enabled
-Recognize UI on top of it; model download (B3) stays out of scope.
+Recognize UI on top of it. Model download (B3) is delivered by activity 11 and
+documented in the Model delivery subsection below.
 
 ### Runtime
 
@@ -541,8 +553,11 @@ this order (first match wins):
 In development the Tauri host passes `<repo>/models` as an **absolute**
 `CHEMISTRY_MODELS_DIR` to the sidecar, so `task run` and `pnpm tauri dev` find
 the model store without a manual export and the startup log names the absolute
-root. Release delivery (the host providing a downloaded model root) remains
-Phase B3 and is not implemented yet.
+root. In release the host passes `<app_data>/models` and creates it; an explicit
+`CHEMISTRY_MODELS_DIR` from the host environment wins in both profiles (B3,
+Model delivery subsection below). The downloader creates the root and artifact
+parent directories on demand, so a root that does not exist yet is normal on a
+clean install.
 
 ```text
 models/
@@ -555,11 +570,13 @@ models/
     vocab.json
 ```
 
-`manifest.json` is the source of truth for each model: artifact paths,
-SHA-256 checksums, provenance id and the exact tensor contracts. Loading checks
-each file checksum, then validates input/output names, shapes and dtype against
-the graph. A missing file, checksum mismatch or contract mismatch is a
-configuration error (HTTP 503), never a silent fallback.
+`manifest.json` is the source of truth for **loading** each model: artifact
+paths, SHA-256 checksums, provenance id and the exact tensor contracts. Loading
+checks each file checksum, then validates input/output names, shapes and dtype
+against the graph. A missing file, checksum mismatch or contract mismatch is a
+configuration error (HTTP 503), never a silent fallback. The **bundled catalog**
+(B3, below) is the source of truth for what to download and generates this
+manifest; it never replaces the loading contract.
 
 The classifier entry keeps the single-artifact schema-1 shape below. The OCSR
 entry is a second key in the same `models` map; it declares two graphs and a
@@ -588,6 +605,344 @@ does not change the classifier entry or the schema version.
   }
 }
 ```
+
+### Model delivery (B3)
+
+> **Status:** activity 11 (`phase-b3-model-download`) delivers this contract.
+> The first-run/setup UI and the clean-install validation are follow-up
+> activities.
+
+A clean install ships **no model weights**. The sidecar owns the catalog and the
+downloader; the Tauri host only supplies the model root. Downloading is
+**opt-in**: startup fetches nothing, and Recognize stays disabled until both
+model families are installed.
+
+#### Bundled catalog
+
+The catalog is compiled into the sidecar (a catalog file included in the crate,
+not a runtime file in the model root) and is the source of truth for what to
+download. It pins `catalog_version` and, per model, the provenance `id`,
+`version`, `license`, `source`, preprocessing/threshold/decode settings and the
+tensor contracts already documented below. Every artifact adds `path` (relative
+to the model root), `url`, `size`, `sha256` and a `role` that selects the
+manifest slot: `classifier`, `encoder`, `decoder` or `vocab`. A graph artifact
+also carries the same `inputs`/`output` (and optional `zero_inputs`) contract
+the manifest declares. Artifact paths must stay inside the model root: an
+absolute path or one containing `..` is a catalog error.
+
+```json
+{
+  "catalog_version": 1,
+  "models": {
+    "image-classifier": {
+      "id": "image-classifier@Iagea/d21f4cb",
+      "version": "Iagea/d21f4cb",
+      "license": "MIT",
+      "source": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr",
+      "preprocessing": "runtime_default",
+      "threshold": 0.000089,
+      "artifacts": [
+        {
+          "role": "classifier",
+          "path": "image-classifier-fp16/classifier.fp16.onnx",
+          "url": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr/resolve/main/image-classifier-fp16/classifier.fp16.onnx",
+          "size": 8162917,
+          "sha256": "d5f5506beba189cf2489761d96db4ce978023d769688a08065458a3c0af505a9",
+          "inputs": [
+            { "name": "input_2", "dtype": "float32", "shape": [1, 224, 224, 3] },
+            { "name": "45214:0", "dtype": "float32", "shape": [1, 1, 1, 3] },
+            { "name": "45216:0", "dtype": "float32", "shape": [1, 1, 1, 3] }
+          ],
+          "output": { "name": "Identity:0", "dtype": "float32", "shape": [1, 1] }
+        }
+      ]
+    }
+  }
+}
+```
+
+The `ocsr-handdrawn` entry follows the same shape with `start_id`, `end_id`,
+`max_len` and `confidence_threshold`, plus three artifacts: `role: "encoder"`
+(with its `inputs`/`output`), `role: "decoder"` (with `inputs`, `zero_inputs`
+and `output`) and `role: "vocab"` (no tensor contract). Production always uses
+the bundled catalog; `AppState::with_catalog` is the in-process injection seam
+used by the test suite. `CHEMISTRY_MODEL_CATALOG`, a path to a JSON catalog, is
+the support override and is never set by a release build. An unreadable or
+invalid override is an actionable `500` on the model routes while Indigo keeps
+serving.
+
+| Model key          | Provenance `id`                  | `version`         | License   | Settings                                                                                                     |
+| ------------------ | -------------------------------- | ----------------- | --------- | ------------------------------------------------------------------------------------------------------------ |
+| `image-classifier` | `image-classifier@Iagea/d21f4cb` | `Iagea/d21f4cb`   | MIT       | `runtime_default`, threshold `0.000089`; classifier contract below                                           |
+| `ocsr-handdrawn`   | `ocsr-handdrawn@zenodo:10781330` | `zenodo:10781330` | CC-BY-4.0 | `decimer_ocsr`, `start_id` 13, `end_id` 14, `max_len` 302, `confidence_threshold` 0.901; OCSR contract below |
+
+| Key                | Role         | Artifact path                                | Bytes       | SHA-256                                                            |
+| ------------------ | ------------ | -------------------------------------------- | ----------- | ------------------------------------------------------------------ |
+| `image-classifier` | `classifier` | `image-classifier-fp16/classifier.fp16.onnx` | 8,162,917   | `d5f5506beba189cf2489761d96db4ce978023d769688a08065458a3c0af505a9` |
+| `ocsr-handdrawn`   | `encoder`    | `ocsr-handdrawn-fp32/encoder.onnx`           | 208,801,677 | `996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52` |
+| `ocsr-handdrawn`   | `decoder`    | `ocsr-handdrawn-fp32/decoder_step.onnx`      | 107,017,280 | `cfff97883de80de4e55463d44d8778c351188f47f1f1c955ed7c3c6bb6d68197` |
+| `ocsr-handdrawn`   | `vocab`      | `ocsr-handdrawn-fp32/vocab.json`             | 5,316       | `62c84d901199667c171413acfbd9071c0297a9273081063df318877a1fa3c7dd` |
+
+The URL of every artifact is
+`https://huggingface.co/spalax-dev/chemistry-draw-ocsr/resolve/main/<path>`;
+`source` records the repository. The classifier is 8,162,917 B and the OCSR
+family 315,824,273 B (encoder + decoder + vocab), for **323,987,190 B** total
+(~324 MB / 309 MiB).
+
+#### Generated manifest
+
+A successful run writes `<model root>/manifest.json`, compatible with the
+registry in this section. It keeps `schema: 1` and the existing `models` map,
+adds `catalog_version` at the top level (unknown to the registry, which ignores
+it), maps each catalog artifact to the manifest's `file` and
+`artifact_sha256`, and copies the provenance, license, thresholds and tensor
+contracts from the catalog. The classifier keeps its single-file entry; the OCSR
+entry keeps the `encoder`/`decoder`/`vocab` slots. The manifest is written
+**last**, through a temporary file and an atomic rename, after every artifact
+verifies. A failed run never publishes a partial manifest; the previous one
+stays.
+
+`GET /v2/models` still answers when the manifest is absent. `ready` is true when
+the manifest is a usable schema-1 document — every catalog model's required
+slots have a non-empty file and a 64-hex `artifact_sha256` — and every required
+artifact exists. The explicit download no-op additionally re-hashes the
+installed files and checks the manifest slots against the catalog path and
+SHA-256. A syntactically valid but empty or foreign manifest (`{}`, another
+schema) is not usable, so it is not ready and does not advertise the capability. A catalog
+version difference is reported through `update_available`, not by making usable
+models look broken. `installed_catalog_version` is the manifest value (`null`
+when there is no manifest or it has no `catalog_version`) and `update_available`
+is true when a manifest is present and its catalog version is missing or lower
+than the bundled version. A newer installed catalog is left untouched: v1
+supports install, repair and forward update, not rollback.
+
+#### Model root and host
+
+The release host uses the Tauri app data directory and creates it before
+spawning the sidecar:
+
+| Platform | Model root                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------------- |
+| Linux    | `$XDG_DATA_HOME/dev.spalax.ChemistryDraw/models`, default `~/.local/share/dev.spalax.ChemistryDraw/models` |
+| Windows  | `%APPDATA%\dev.spalax.ChemistryDraw\models`                                                                |
+| macOS    | `~/Library/Application Support/dev.spalax.ChemistryDraw/models`                                            |
+
+- **Release:** the host passes the absolute `<app_data>/models` as
+  `CHEMISTRY_MODELS_DIR` and creates the directory. An explicit
+  `CHEMISTRY_MODELS_DIR` in the host environment wins and is passed through
+  unchanged; the host does not create that custom path, the downloader does.
+- **Debug:** an explicit value wins; otherwise the host passes `<repo>/models`
+  (the existing developer behavior).
+- The sidecar never rewrites an explicit value. It creates the root and the
+  artifact parent directories at download start, so a missing directory is
+  normal on a clean install and is not an error.
+- Catalog artifact `path`s are relative to that root; the on-disk layout is the
+  one in the previous subsection.
+
+#### Download API
+
+All routes share the sidecar's `127.0.0.1:<port>/v2` base. There is **no SSE or
+WebSocket**: the client polls `GET /v2/models`.
+
+| Method | Path                         | Behavior                                                                                                                                                                                                                                   |
+| ------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/v2/models`                 | `200` with the status below, even with no root, manifest or models (the bundled catalog is always valid; a broken test override is `500`)                                                                                                  |
+| POST   | `/v2/models/download`        | Starts or resumes a run: `202`; `409` while a run is active or the installed catalog is newer than the bundled one; `200` only when every installed artifact re-hashes to the catalog size and SHA-256 and the manifest is current (no-op) |
+| POST   | `/v2/models/download/cancel` | Requests cancellation: `202` while downloading; `409` otherwise                                                                                                                                                                            |
+| POST   | `/v2/models/verify`          | `200` with the SHA-256 report and repair hint; `409` while a run is active                                                                                                                                                                 |
+
+The download and cancel responses carry the same status body as
+`GET /v2/models`; `verify` carries its report. A `409` uses the standard
+`{ "error": ... }` envelope, and the current status is still available from
+`GET /v2/models`.
+
+`POST /v2/models/download` is idempotent in the artifact sense: it re-hashes the
+installed artifacts and no-ops only when every file has the catalog size and
+SHA-256 and the installed manifest is usable and current. Otherwise it starts a
+run that skips matching files and repairs the rest, so a repeated call after
+`ready` does no network work, while a corrupt artifact is repaired even when the
+manifest is valid. It is opt-in only: no startup path or `/v2/info` call starts a
+download.
+
+```json
+{
+  "catalog_version": 1,
+  "installed_catalog_version": null,
+  "update_available": false,
+  "ready": false,
+  "manifest_present": false,
+  "total_bytes": 323987190,
+  "installed_bytes": 0,
+  "models": [
+    {
+      "key": "image-classifier",
+      "id": "image-classifier@Iagea/d21f4cb",
+      "version": "Iagea/d21f4cb",
+      "license": "MIT",
+      "total_bytes": 8162917,
+      "installed_bytes": 0,
+      "installed": false,
+      "missing": ["image-classifier-fp16/classifier.fp16.onnx"]
+    },
+    {
+      "key": "ocsr-handdrawn",
+      "id": "ocsr-handdrawn@zenodo:10781330",
+      "version": "zenodo:10781330",
+      "license": "CC-BY-4.0",
+      "total_bytes": 315824273,
+      "installed_bytes": 0,
+      "installed": false,
+      "missing": [
+        "ocsr-handdrawn-fp32/encoder.onnx",
+        "ocsr-handdrawn-fp32/decoder_step.onnx",
+        "ocsr-handdrawn-fp32/vocab.json"
+      ]
+    }
+  ],
+  "download": {
+    "state": "idle",
+    "downloaded_bytes": 0,
+    "total_bytes": 323987190,
+    "current_file": null,
+    "error": null
+  }
+}
+```
+
+- `manifest_present` is true when `<model root>/manifest.json` exists and
+  parses.
+- `installed` and `missing` are a cheap existence check: a model is installed
+  when all its artifact files exist, and `installed_bytes` sums the sizes of the
+  present files. `GET` never hashes 324 MB.
+- `ready` additionally requires the generated manifest to parse. A catalog
+  version difference is reported by `update_available`, not by `ready`.
+- `download.downloaded_bytes` is cumulative for the run: verified/skipped
+  artifacts plus the current `.part` length. `download.current_file` is the
+  artifact path being fetched or installed (`null` when idle/ready);
+  `download.error` is `null` unless the state is `failed`.
+- `download.state` is one of `idle`, `downloading`, `verifying`, `ready`,
+  `cancelled` or `failed`. On a fresh root it is `idle`; after a restart it is
+  `ready` when the top-level `ready` is true and `idle` otherwise. A restart
+  never resumes a run automatically; the next `POST /v2/models/download` reuses
+  the `.part` files.
+
+`POST /v2/models/verify` hashes every installed artifact and returns the report
+below. It checks the installed manifest when it parses (what the app loads) and
+falls back to the active catalog when there is no manifest; an empty root
+therefore reports every artifact as `missing`.
+
+```json
+{
+  "ok": false,
+  "catalog_version": 1,
+  "checked_bytes": 216964594,
+  "artifacts": [
+    { "path": "image-classifier-fp16/classifier.fp16.onnx", "status": "ok" },
+    {
+      "path": "ocsr-handdrawn-fp32/encoder.onnx",
+      "status": "corrupt",
+      "expected_sha256": "996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52",
+      "actual_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    { "path": "ocsr-handdrawn-fp32/decoder_step.onnx", "status": "missing" }
+  ],
+  "repair": "POST /v2/models/download"
+}
+```
+
+`ok` is true only when every artifact is present and matches; `repair` is `null`
+then and the hint above otherwise. On an empty root every artifact is `missing`
+and `ok` is false. `catalog_version` names the catalog used for the check (the
+installed manifest's version, or the active catalog's version when there is no
+manifest).
+`checked_bytes` sums the bytes hashed for the present artifacts (missing files
+are not read). Verification is read-only: it reports
+missing, size-mismatched and checksum-mismatched artifacts but never deletes
+them. `POST /v2/models/download` is the repair path; it re-hashes
+existing artifacts, replaces mismatched ones and rewrites the manifest.
+
+#### Download state machine
+
+```text
+idle ──POST /download──▶ downloading ──last artifact──▶ verifying ──manifest──▶ ready
+  ▲                          │                              │
+  │                          ├── cancel ──▶ cancelled       └── manifest failure ──▶ failed
+  │                          └── network/disk/checksum ──▶ failed
+  └──────── POST /download (retry/resume) ◀── cancelled/failed
+```
+
+1. **Preflight.** Create the model root, then require free disk space for the
+   remaining catalog bytes (`total_bytes - installed_bytes`). Not enough space
+   is `failed` with the required and available bytes in `download.error`; no
+   request is made and no artifact file is written. The check is a floor: a
+   repair can need room for a replacement while the old file still exists, so an
+   out-of-space error mid-run is also a `failed` disk error that keeps the
+   `.part`. Each artifact's parent directory is created just before it is
+   fetched.
+2. **Per artifact.** Artifacts are processed in catalog order: models in
+   catalog order, then each model's artifact array order. If the final file
+   exists with the catalog size and its SHA-256 matches, skip it. Otherwise
+   write `<path>.part`: an existing partial file resumes at its length with
+   `Range: bytes=<length>-` and `Accept-Encoding: identity`. `206` appends only
+   when its `Content-Range` start equals the requested offset; `200` (the server
+   ignored Range) or `416` truncates and restarts. A body that ends before the
+   catalog size is a truncated-download `failed` that keeps the `.part` for the
+   next retry; any other HTTP status or transport error is `failed` and also
+   keeps the `.part`.
+3. **Verify and install.** When the `.part` reaches the catalog size, hash it. A
+   size or SHA-256 mismatch deletes the `.part`, leaves any previous final file
+   untouched and fails with the path, expected and actual hash. A match is
+   installed with an atomic rename; a partially written file never appears at
+   the final path. On Windows, where a rename cannot replace an existing file,
+   the old file is removed immediately before the rename; the new file is
+   already verified, so a crash in that window leaves a missing artifact that
+   `verify`/repair detects. The manifest uses the same replace rule.
+4. **Cancel.** Cancellation is cooperative and checked between chunks. The
+   in-flight `.part` is kept, the state becomes `cancelled` with no error, and
+   the next download resumes from the kept bytes. Cancel is only accepted while
+   `downloading`; `verifying` is short and not cancellable (`409`).
+5. **Finish.** After the last artifact, the state is `verifying` while the
+   manifest is generated and the installed set is re-checked, then `ready`.
+6. **Failure and retry.** There is no automatic retry loop. `failed` and
+   `cancelled` are terminal for that run; `POST /v2/models/download` starts a
+   new run and resumes every `.part`. Offline/connection errors are actionable:
+   they name the URL and ask to check the network, and never panic or stop
+   Indigo.
+
+**Checksum and update policy.** A bad checksum is always rejected: the partial
+file is deleted and no final file is published. `catalog_version` drives
+install/repair/update: an older installed manifest reports
+`update_available: true`, and a download re-verifies existing artifacts, fetches
+only missing or changed ones and rewrites the manifest. The explicit download
+re-hashes the installed files before deciding; a valid manifest does not mask a
+corrupt artifact. v1 has **no rollback**:
+a failed update can leave a mix of old and new artifacts until the next repair
+run. A newer installed catalog is not downgraded: `update_available` is false
+and `POST /v2/models/download` answers `409` instead of replacing it with an
+older bundled catalog; reinstall the app version that matches it.
+
+#### Capability gating
+
+`/v2/info` advertises `imago_versions: ["local-ocsr"]` only when the generated
+manifest is a usable schema-1 document (the catalog slots name the artifact paths
+and SHA-256 values) and both model ids' required artifacts exist on disk — a
+cheap metadata/existence check with no hash and no session. Otherwise it
+advertises `[]`, so Ketcher disables Recognize on a clean install. `/v2/models`
+still answers with the status above, and Indigo keeps working. After a download
+completes, the next `/v2/info` advertises the capability; the setup UI
+(follow-up) refreshes the editor.
+
+#### Licenses and attribution
+
+| Model              | License   | Provenance                                                     |
+| ------------------ | --------- | -------------------------------------------------------------- |
+| `image-classifier` | MIT       | `image-classifier@Iagea/d21f4cb`, DECIMER Image Classifier     |
+| `ocsr-handdrawn`   | CC-BY-4.0 | `ocsr-handdrawn@zenodo:10781330`, DECIMER v2 hand-drawn export |
+
+Both families are downloaded from
+`https://huggingface.co/spalax-dev/chemistry-draw-ocsr` on demand and are
+**never bundled or committed**; the installers contain no `.onnx` file and no
+`manifest.json`. Attribution lives in `NOTICE`.
 
 ### Classifier tensor contract
 
@@ -1057,9 +1412,10 @@ synchronous pipeline.
 
 **UI re-enabled.** `App.tsx` no longer passes
 `buttons={{ recognize: { hidden: true } }}`. The control is enabled by the
-sidecar's synthetic `imago_versions` list, not by a local option: Ketcher
-recomputes the button's `disabled` state from `app.imagoVersions` after
-`GET /v2/info` and keeps the control disabled when the list is empty.
+sidecar's synthetic `imago_versions` list when the models are installed (B3),
+not by a local option: Ketcher recomputes the button's `disabled` state from
+`app.imagoVersions` after `GET /v2/info` and keeps the control disabled when
+the list is empty.
 
 Ketcher's built-in dialog still renders an "Imago version" selector, so
 `src/overrides.css` (imported by `App.tsx` after the Ketcher stylesheet) hides
@@ -1099,28 +1455,34 @@ apply inside the worker; they fail the job as an unsupported image.
 `/v2/health` adds `onnxruntime_version` and `models` to the existing
 diagnostics. `onnxruntime_version` names the ONNX Runtime **API generation**
 `ort` targets (for example `onnxruntime api 1.31.x (ort 2.0.0-rc.15)`), not the
-loaded binary's exact patch version. `models` lists only ids declared by the
-manifest **whose required artifact files exist on disk** (a cheap existence
-check, no checksum, no session): the classifier's single file and the OCSR
-model's encoder, decoder and vocab. With both installed it reports
+loaded binary's exact patch version. `models` lists only ids **whose required
+artifact files exist on disk** (a cheap existence check, no checksum, no
+session): the classifier's single file and the OCSR model's encoder, decoder and
+vocab. A parsed manifest is authoritative; without one, the active catalog
+supplies the ids for the same presence check. With both installed it reports
 `image-classifier@Iagea/d21f4cb` and `ocsr-handdrawn@zenodo:10781330`; an OCSR
 model with only some of its files present is not listed. Health never opens an
 OCSR session.
-`/v2/info` adds the synthetic `imago_versions` capability list; the rest of the
-payload (`Indigo`, `indigo_version`, `api_path`) is unchanged. Ketcher parses
-the capability and needs no inference metadata.
+`/v2/info` adds the synthetic `imago_versions` capability list **only when the
+manifest and both models' required artifacts exist** (the B3 gating above);
+otherwise the list is empty. The rest of the payload (`Indigo`,
+`indigo_version`, `api_path`) is unchanged. Ketcher parses the capability and
+needs no inference metadata.
 
 ```text
 sidecar/src/
   transport/filter.rs     POST /v2/filter/classify
   transport/ocsr.rs       POST /v2/ocsr/recognize
   transport/imago.rs      POST /v2/imago/uploads, GET /v2/imago/uploads/{id}
+  transport/models.rs     GET /v2/models and the download/cancel/verify routes
   service/recognition.rs  filter → OCSR → molfile pipeline and failure mapping
   service/jobs.rs         in-memory recognition job store and TTL
   service/ml/
     mod.rs                shared cache and entry points
     runtime.rs            dynamically loaded ONNX Runtime environment and sessions
     registry.rs           manifest, checksums and contract validation (both models)
+    catalog.rs            bundled catalog: pins, path/URL validation, readiness
+    download.rs           resumable .part downloader and generated manifest
     paths.rs              model-root precedence (explicit, repo, cwd)
     preprocess.rs         runtime_default image → NHWC tensor (bounded decode)
     ocsr_preprocess.rs    decimer_ocsr image → normalized NHWC tensor
@@ -1131,7 +1493,9 @@ sidecar/src/
 ```
 
 The OCSR modules are the layout delivered by activity 8; the compatibility
-modules are the layout delivered by activity 9.
+modules are the layout delivered by activity 9. The B3 catalog and downloader
+live under `service/ml/` (catalog pins, `.part` downloader, generated manifest)
+and their routes in `transport/`.
 
 ---
 
@@ -1204,7 +1568,8 @@ classifier answer `503`.
 ONNX Runtime 1.31 needs **glibc 2.28** and **GLIBCXX 3.4.22**, below the Debian
 12 builder (glibc 2.36, GLIBCXX 3.4.30), so the application floor stays
 **glibc 2.36**. Model weights remain **not bundled**: no `.onnx` file or
-`manifest.json` is shipped in any artifact; model download is Phase B3.
+`manifest.json` is shipped in any artifact; model download is delivered by B3
+(section 7).
 
 ---
 
@@ -1262,6 +1627,9 @@ Version bumps are driven by release-please and must stay in sync across
 - `GET /v2/health` exposes uptime, PID, port, the Indigo version, the targeted
   ONNX Runtime API generation and the model ids whose artifacts are on disk. It
   is for support, not for Ketcher.
+- The model downloader logs each artifact transition, the cancel request and
+  every checksum/network/disk failure, without logging file contents.
+  `GET /v2/models` is the polling surface for support and the setup UI.
 - Panics are logged with location.
 
 ---
@@ -1300,4 +1668,4 @@ and the manual check is in `docs/verification.md` §2.
   inference through the two-model pipeline plus the Ketcher-compatible job
   shim. No Imago code, worker or native library is shipped. The pinned ONNX
   Runtime 1.31.0 native library (loaded dynamically) is shared by both, but
-  model weights are never bundled; downloading models is Phase B3.
+  model weights are never bundled; downloading models is B3 (section 7).

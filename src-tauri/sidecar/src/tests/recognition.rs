@@ -30,6 +30,7 @@ use crate::service::indigo_ops;
 use crate::service::jobs::{JobStatus, JobStore, TTL};
 use crate::service::ml::ocsr::OcsrPrediction;
 use crate::service::recognition::{accept_conversion, accept_prediction, RecognitionFailure};
+use crate::tests::model_delivery::installed_model_root;
 use crate::tests::*;
 use crate::transport::filter::MAX_BODY_BYTES;
 use crate::transport::imago::spawn_processing_with;
@@ -159,13 +160,16 @@ fn prediction(smiles: &str, confidence: f64, incomplete: bool) -> OcsrPrediction
     }
 }
 
-// ── Info compatibility (no model) ─────────────────────────────
+// ── Info compatibility (installed temp root) ─────────────────
 
 /// Ketcher recomputes the Recognize control's `disabled` state from this list
-/// after `GET /v2/info`: exactly one synthetic entry enables the shim.
+/// after `GET /v2/info`: exactly one synthetic entry enables the shim when both
+/// model families are installed. The capability is gated on the manifest and the
+/// artifacts (B3), so the test stages an installed temp root.
 #[tokio::test]
 async fn info_advertises_the_synthetic_imago_capability() {
-    let app = test_app();
+    let root = installed_model_root("info-capability");
+    let app = test_app_with_models(root.path());
     let (status, body) = fetch_get(&app, "/v2/info").await;
 
     assert_eq!(status, StatusCode::OK);
@@ -191,10 +195,11 @@ async fn info_advertises_the_synthetic_imago_capability() {
 }
 
 /// `/v2/indigo/info` is the alias Ketcher calls in some contexts; it must
-/// advertise the same synthetic capability.
+/// advertise the same synthetic capability when the models are installed.
 #[tokio::test]
 async fn indigo_info_alias_advertises_the_synthetic_imago_capability() {
-    let app = test_app();
+    let root = installed_model_root("info-alias-capability");
+    let app = test_app_with_models(root.path());
     let (status, body) = fetch_get(&app, "/v2/indigo/info").await;
 
     assert_eq!(status, StatusCode::OK);

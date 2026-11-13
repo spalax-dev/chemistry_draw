@@ -575,3 +575,34 @@ re-review.
   no raw JSON.
 - Docs updated (architecture, conventions, testing, verification, CHECKPOINTS).
 - Gates: harness green, Vitest 156/156, sidecar 207/207, tsc/lint/build clean.
+
+## 2026-11-13 — Activity 11: phase-b3-model-download
+
+B3 backend: a clean install can download the model weights on demand instead of
+requiring a manually populated `models/`.
+
+- Bundled `model-catalog.json` pins the classifier (8,162,917 B, MIT) and the
+  OCSR encoder/decoder/vocab (208,801,677 + 107,017,280 + 5,316 B, CC-BY-4.0)
+  with Hugging Face URLs, SHA-256, roles, contracts and a catalog version;
+  total 323,987,190 B. No weights are bundled or committed.
+- `reqwest`/rustls downloader: opt-in, streams to `.part`, Range resume,
+  SHA-256/size verification, atomic install, disk preflight, offline errors,
+  cancel/retry, repair and forward update; the generated schema-1 manifest is
+  written last and the previous one survives a failed run.
+- `GET /v2/models` status, `POST /v2/models/download|cancel|verify` with the
+  documented 200/202/409 semantics; `/v2/info` advertises `local-ocsr` only when
+  a usable manifest and all four artifacts are present; `/v2/health` follows the
+  same presence rule.
+- Release host passes and creates `<app_data>/models` as
+  `CHEMISTRY_MODELS_DIR`; an explicit env value wins; debug keeps the repo
+  models.
+- Real HF smoke: 323,987,190 B downloaded in ~89 s, all four SHA-256 values and
+  the generated manifest verified, filter/OCSR returned 200 with caffeine,
+  cancel kept a 23.7 MB `.part` and resume finished ready. Temp roots stayed
+  outside the repo.
+- Review found that a corrupt artifact with a valid manifest was not repaired
+  (download no-op); the fix re-hashes installed artifacts on explicit download,
+  requires a usable schema-1 manifest for readiness/info, adds 11 regression
+  tests and fixes the docs/catalog overflow.
+- Tests: 31 model-delivery, 238 sidecar with ignored, 156 Vitest; harness green;
+  C12 checked. First-run setup UI and clean-install validation remain.

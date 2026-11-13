@@ -9,6 +9,11 @@ mod filter;
 mod health;
 mod info;
 mod layout_clean;
+// The suite lives in `models.rs`; the module is named `model_delivery` so the
+// documented command `cargo test -p indigo-server tests::model_delivery`
+// (docs/testing.md §8) selects it.
+#[path = "models.rs"]
+mod model_delivery;
 mod ocsr;
 mod paths;
 mod recognition;
@@ -26,6 +31,7 @@ use serde_json::{json, Value};
 use std::sync::Once;
 use tower::ServiceExt;
 
+use crate::service::ml::catalog::Catalog;
 use crate::{build_router, AppState};
 
 static INIT: Once = Once::new();
@@ -69,6 +75,37 @@ pub fn test_app() -> axum::Router {
 pub fn test_app_with_models(models_dir: std::path::PathBuf) -> axum::Router {
     init_tracing();
     let state = AppState::new(9321, models_dir);
+    build_router(state)
+}
+
+/// Builds a test app with an explicit model catalog and model root.
+///
+/// Model-delivery tests point both at temporary values, so they never read or
+/// write the checkout's `models/` and never touch the real network.
+pub fn test_app_with_catalog(models_dir: std::path::PathBuf, catalog: Catalog) -> axum::Router {
+    init_tracing();
+    let state = AppState::with_catalog(9321, models_dir, catalog);
+    build_router(state)
+}
+
+/// Builds a test app together with its state, with an explicit catalog.
+///
+/// The model-delivery tests need the state to inject the downloader's
+/// free-space probe; the router and the state share the same download manager.
+pub fn test_app_and_state_with_catalog(
+    models_dir: std::path::PathBuf,
+    catalog: Catalog,
+) -> (axum::Router, AppState) {
+    init_tracing();
+    let state = AppState::with_catalog(9321, models_dir, catalog);
+    let app = build_router(state.clone());
+    (app, state)
+}
+
+/// Builds a test app whose catalog is the injected support-override error.
+pub fn test_app_with_catalog_error(models_dir: std::path::PathBuf, message: &str) -> axum::Router {
+    init_tracing();
+    let state = AppState::with_catalog_error(9321, models_dir, message);
     build_router(state)
 }
 

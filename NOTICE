@@ -7,15 +7,18 @@ This product includes:
 - Ketcher (https://github.com/epam/ketcher) - Apache License 2.0
 - Indigo (https://github.com/epam/Indigo) - Apache License 2.0
 - DECIMER Image Classifier (https://github.com/Iagea/DECIMER-Image-Classifier) - MIT License
-  ONNX artifacts derived from DECIMER models are downloaded at runtime, not bundled;
-  see https://huggingface.co/spalax-dev/chemistry-draw-ocsr for provenance.
+  The classifier ONNX artifact (model id image-classifier@Iagea/d21f4cb,
+  8,162,917 B) is downloaded on demand from
+  https://huggingface.co/spalax-dev/chemistry-draw-ocsr; it is not bundled and
+  not committed.
 - DECIMER v2 OCSR hand-drawn model (https://zenodo.org/records/10781330) - CC BY 4.0
   The encoder, decoder-step and vocabulary ONNX artifacts (model id
-  ocsr-handdrawn@zenodo:10781330) are downloaded locally, not bundled and not
-  committed; see https://huggingface.co/spalax-dev/chemistry-draw-ocsr for the
-  exported artifacts and their checksums.
+  ocsr-handdrawn@zenodo:10781330) are downloaded on demand from
+  https://huggingface.co/spalax-dev/chemistry-draw-ocsr; they are not bundled and
+  not committed. The classifier plus OCSR artifacts total 323,987,190 B
+  (~324 MB) and are downloaded only when the user opts in.
 - ONNX Runtime (https://github.com/microsoft/onnxruntime) - MIT License
-  Loaded dynamically at runtime by developers/tests in B1; the runtime library is
-  not bundled with the application. Shipping it is a separate follow-up activity.
+  The pinned 1.31.0 runtime is shipped with the application on Linux and Windows
+  and loaded dynamically at runtime; model weights are not bundled.
 - ort (https://github.com/pykeio/ort) - MIT License OR Apache License 2.0
   Rust bindings used to load and drive ONNX Runtime.

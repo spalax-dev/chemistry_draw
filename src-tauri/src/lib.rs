@@ -239,8 +239,10 @@ pub fn run() {
             };
 
             // Debug builds point the sidecar at the checkout's gitignored
-            // models/; release delivery (host-provided model root) is Phase B3.
-            // An explicit CHEMISTRY_MODELS_DIR from the host environment wins.
+            // models/; release builds use <app_data>/models and create it.
+            // An explicit CHEMISTRY_MODELS_DIR from the host environment wins
+            // in both profiles and is never created here: the downloader owns
+            // that directory.
             #[cfg(debug_assertions)]
             let sidecar_cmd = {
                 let models_dir = std::env::var_os("CHEMISTRY_MODELS_DIR")
@@ -250,6 +252,40 @@ pub fn run() {
                             .parent()
                             .map(|repo| repo.join("models"))
                     });
+
+                match models_dir {
+                    Some(path) => {
+                        log::info!("[chemistry-draw] model root = {}", path.display());
+                        sidecar_cmd.env("CHEMISTRY_MODELS_DIR", path.to_string_lossy().to_string())
+                    }
+                    None => sidecar_cmd,
+                }
+            };
+
+            #[cfg(not(debug_assertions))]
+            let sidecar_cmd = {
+                let models_dir = match std::env::var_os("CHEMISTRY_MODELS_DIR") {
+                    Some(explicit) => Some(std::path::PathBuf::from(explicit)),
+                    None => match app.path().app_data_dir() {
+                        Ok(data) => {
+                            let path = data.join("models");
+                            if let Err(error) = std::fs::create_dir_all(&path) {
+                                log::warn!(
+                                    "[chemistry-draw] could not create the model root {}: {error}",
+                                    path.display()
+                                );
+                            }
+                            Some(path)
+                        }
+                        Err(error) => {
+                            log::warn!(
+                                "[chemistry-draw] could not resolve the app data directory for \
+                                 models: {error}; the sidecar will use its default model root"
+                            );
+                            None
+                        }
+                    },
+                };
 
                 match models_dir {
                     Some(path) => {

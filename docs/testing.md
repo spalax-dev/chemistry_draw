@@ -111,12 +111,13 @@ Rules:
 - The compatibility contract is tested cross-platform in the suite that
   replaces `tests/imago_absent.rs`: `/v2/info` (and its `/v2/indigo/info`
   alias) advertises exactly the synthetic `imago_versions: ["local-ocsr"]`
-  capability, `/v2/health` exposes no `imago_worker`, `POST /v2/imago/uploads`
-  returns an `upload_id`, and a `GET` for an unknown id is `404`. The old
-  assertion that `/v2/imago/uploads` returns `404` is gone: the route is now
-  the compatibility shim, while the real Imago backend stays absent. The same
-  module runs on Linux and Windows CI, so no `#[cfg(windows)]` variant is
-  needed.
+  capability when a temp root holds both models' artifacts and manifest, and
+  `[]` on an empty root (the B3 gate), `/v2/health` exposes no `imago_worker`,
+  `POST /v2/imago/uploads` returns an `upload_id`, and a `GET` for an unknown
+  id is `404`. The old assertion that `/v2/imago/uploads` returns `404` is
+  gone: the route is now the compatibility shim, while the real Imago backend
+  stays absent. The same module runs on Linux and Windows CI, so no
+  `#[cfg(windows)]` variant is needed.
 - The packaging contract tests (`scripts/lib/*.test.mjs`) assert `externalBin`
   never lists `imago-worker`, and that `scripts/check-native-libs.sh` fails on a
   directory holding `libimago*`/`*opencv*` files (case-insensitively, including
@@ -243,6 +244,94 @@ otherwise falls back to `<repo>/models`, so tests, harness and `main.rs` agree o
 the model root. The same command runs the OCSR model-gated tests when
 `models/ocsr-handdrawn-fp32/` holds the encoder, decoder and vocabulary;
 otherwise those tests self-skip.
+
+### Model delivery tests (B3)
+
+The catalog/downloader suite never touches the real network. Each test builds a
+fresh app state with its own temp model root and an injected dummy catalog
+(`AppState::with_catalog`); it does not read or write the shared `models/`
+checkout. The bundled catalog is the production default: three tests pin its
+versions, URLs, sizes, SHA-256 values and the published total, while the
+download tests use the dummy catalog. The suite does not set
+`CHEMISTRY_MODEL_CATALOG`: catalog errors are injected through
+`AppState::with_catalog_error`, so parallel tests never mutate the environment.
+`CHEMISTRY_MODEL_CATALOG` remains the runtime support override (a path to a JSON
+catalog); an unreadable or invalid override is an actionable `500` on the model
+routes. The test HTTP server is a small axum/tokio listener bound to
+`127.0.0.1:0`, serving dummy artifacts from a temp directory and recording each
+request's `Range` header. Dummy artifacts are a few KiB with SHA-256 values
+computed in the test, and the catalog declares their URLs, sizes and hashes.
+
+- **Status with an empty root.** `GET /v2/models` is `200` with the test catalog
+  version, `ready: false`, `manifest_present: false`, the declared total bytes,
+  every model `installed: false` with its `missing` paths and
+  `download.state: "idle"`. `/v2/info` has `imago_versions: []`. No directory is
+  required for the route to answer.
+- **Success and manifest generation.** A catalog with the four small artifacts
+  (classifier, encoder, decoder step and vocabulary) downloads to a temp root;
+  the server receives the expected GETs; the files appear at their final paths
+  with no `.part` left; `<model root>/manifest.json`
+  is schema 1, carries `catalog_version`, maps `path`/`sha256` to
+  `file`/`artifact_sha256`, and parses through the existing registry. Status
+  becomes `ready: true` with `installed_bytes == total_bytes`, and `/v2/info`
+  advertises `["local-ocsr"]`.
+- **Range resume.** Pre-seed `<path>.part` with the first N bytes; the download
+  sends `Range: bytes=N-`, the server answers `206` with the remainder, and the
+  final file is byte-identical. Two dedicated tests cover restart semantics: a
+  server mode that ignores Range (`200` with the full body) truncates and
+  restarts, and a mode that answers `416` to the range request discards the
+  `.part`, retries without Range and completes. A cancelled run keeps the
+  `.part` and a retry resumes from it instead of restarting.
+- **Checksum mismatch and repair.** A catalog hash that does not match the
+  served bytes ends `failed`, removes the `.part`, leaves no final file and
+  names the path, expected and actual hash. `POST /v2/models/verify` reports
+  `status: "corrupt"` and the repair hint. Repair is tested in the normal case
+  too: a generated manifest plus all four artifacts with one same-size corrupt
+  file makes `download` answer `202` (not a no-op), fetch only that artifact,
+  replace it, rewrite the manifest and leave `verify` `ok`.
+- **Cancel.** A slow/chunked response is cancelled with
+  `POST /v2/models/download/cancel`: state `cancelled`, no error, `.part`
+  retained, and a second POST resumes rather than restarting.
+- **Offline.** A URL pointing at a closed `127.0.0.1` port ends `failed` with an
+  actionable connection message and keeps any `.part`; the sidecar keeps serving
+  Indigo.
+- **Disk guard.** `ensure_space` has pure floor tests; the downloader has an
+  injectable free-space probe so an integration test simulates a full volume,
+  asserts the run fails before any HTTP request with the required/available
+  bytes and writes no artifact, then simulates enough space and completes.
+- **Update and repair by catalog version.** A generated manifest with an older
+  `catalog_version` reports `update_available: true`; a download re-verifies
+  the matching artifacts without fetching them, rewrites the manifest with the
+  active version, and verify stays `ok`. A corrupt artifact is repaired. A newer
+  installed catalog reports `update_available: false` and a download is `409`
+  with no request and an untouched manifest. The catalog total uses checked
+  arithmetic and rejects an overflowing or absurd size sum.
+- **Manifest validity and publishing.** A syntactically valid but unusable
+  manifest (`{}`) is `manifest_present: true` but `ready: false`, and
+  `/v2/info`/`/v2/health` do not advertise models; a download regenerates it.
+  A successful run publishes the manifest last through `manifest.json.tmp` plus
+  a rename (no `.tmp` remains), and a failed run with an existing manifest
+  leaves that previous file byte-identical.
+- **Restart state.** A complete root reports `ready` and a partial root reports
+  `idle` on a fresh app state; neither contacts the network. An explicit
+  download on the partial root resumes its `.part` with `Range`.
+- **Broken catalog.** An injected catalog error makes all model routes `500`
+  with the `{ "error": ... }` envelope while `/v2/info` and `/v2/health` answer
+  `200` with no models; the model root is never created.
+- **Endpoint conflicts.** A second `POST /v2/models/download` while a run is
+  active is `409`; cancel without a download is `409`; verify during a run is
+  `409`; a POST when every hash and the manifest match is `200` and starts no
+  worker.
+
+The real Hugging Face download (~324 MB) is a **gated/manual smoke**, not CI: an
+`#[ignore = "requires network"]` test (or a script) downloads both families into
+a temporary root, checks the pinned SHA-256 values, the generated manifest and
+the measured total, and runs only on demand. CI never downloads 324 MB and never
+requires Hugging Face to be reachable.
+
+The model-gated inference tests described at the start of this section are
+unchanged: they still need a local model root (`models/` or
+`CHEMISTRY_MODELS_DIR`) and a loadable ONNX Runtime, and self-skip otherwise.
 
 ### Tensor-contract guard
 
@@ -410,7 +499,8 @@ Runtime build cannot make the suite brittle.
 
 The `/v2/imago/uploads` shim has three test layers. The suite that replaces the
 old absence contract also pins `/v2/info` to exactly
-`imago_versions: ["local-ocsr"]` and `/v2/health` to no `imago_worker`; it never
+`imago_versions: ["local-ocsr"]` with a temp root holding both models, to `[]`
+without them (the B3 gate), and `/v2/health` to no `imago_worker`; it never
 asserts that the route returns `404`.
 
 **Always run (no model, no runtime):**
@@ -603,4 +693,8 @@ LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
 # Recognize compatibility job protocol (no model needed)
 LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
   cargo test -p indigo-server tests::recognition
+
+# Model catalog/downloader (loopback HTTP + dummy artifacts, no real network)
+LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
+  cargo test -p indigo-server tests::model_delivery
 ```
