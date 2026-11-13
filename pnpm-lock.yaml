@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  ketcher-core@3.18.0: 4cc1e2bdba2ed88b9c3a4b0c4282244ac8376b99472e7fc11ec99d0ccdfbb746
+  ketcher-core@3.18.0: 304bc4dd1b55e7e187ae74b35ec3c1acf4533569efd288fb7898e47668a45d55
 
 importers:
 
@@ -31,7 +31,7 @@ importers:
         version: 2.3.5
       ketcher-core:
         specifier: ^3.18.0
-        version: 3.18.0(patch_hash=4cc1e2bdba2ed88b9c3a4b0c4282244ac8376b99472e7fc11ec99d0ccdfbb746)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 3.18.0(patch_hash=304bc4dd1b55e7e187ae74b35ec3c1acf4533569efd288fb7898e47668a45d55)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       ketcher-react:
         specifier: ^3.18.0
         version: 3.18.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.31)
@@ -4769,7 +4769,7 @@ snapshots:
 
   jsonschema@1.5.0: {}
 
-  ketcher-core@3.18.0(patch_hash=4cc1e2bdba2ed88b9c3a4b0c4282244ac8376b99472e7fc11ec99d0ccdfbb746)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  ketcher-core@3.18.0(patch_hash=304bc4dd1b55e7e187ae74b35ec3c1acf4533569efd288fb7898e47668a45d55)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.29.7
       ajv: 8.20.0
@@ -4805,7 +4805,7 @@ snapshots:
       hoist-non-react-statics: 3.3.2
       intersection-observer: 0.12.2
       jsonschema: 1.5.0
-      ketcher-core: 3.18.0(patch_hash=4cc1e2bdba2ed88b9c3a4b0c4282244ac8376b99472e7fc11ec99d0ccdfbb746)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      ketcher-core: 3.18.0(patch_hash=304bc4dd1b55e7e187ae74b35ec3c1acf4533569efd288fb7898e47668a45d55)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       lexical: 0.40.0
       lodash: 4.18.1
       miew-react: 0.11.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
