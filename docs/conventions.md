@@ -134,11 +134,15 @@ Rules:
 
 ## 6. In-app dialogs and document UI
 
-Every dialog this app adds — recovery prompt, close guard, save/export errors —
-is an **in-app HTML component**, never a Tauri native
-`message` / `confirm` / `ask`. The native error dialogs already in `App.tsx` may
-stay; new work must not add more. The same ban applies to browser
-`alert()` / `confirm()`.
+Every dialog this app adds — recovery prompt, close guard, save/export errors
+and recognition failures — is an **in-app HTML component**, never a Tauri native
+`message` / `confirm` / `ask`. Alerts use `src/ui/Dialog.tsx` and `ErrorDialog`
+(`src/ui/DocumentDialogs.tsx`); `ErrorDialog`'s optional `title` defaults to
+`Error`, and recognition failures pass `Structure problem`. Do **not** call
+`message()` or browser `alert()` / `confirm()` for in-app errors: an OS dialog
+cannot carry the Ketcher styling and sits outside the webview. Native dialogs
+are only for file selection — Tauri `open` / `save` for Open, Save As and Export
+destinations.
 
 ### 6.1 Primitives
 
@@ -228,6 +232,8 @@ so Vitest can exercise them (`docs/testing.md` §6.1):
 - state, title and dirty formatting (`src/document.ts`);
 - save vs export format mapping and the close-guard decision;
 - saved-blob routing by extension and document state (`src/saveRoute.ts`);
+- recognition error unwrapping, friendly copy, dialog title and raw message
+  extraction (`src/recognizeErrors.ts`);
 - autosave scheduling and the recovery decision (`src/autosave.ts`).
 
 React components and Tauri calls stay thin adapters around those helpers; do

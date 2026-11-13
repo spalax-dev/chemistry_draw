@@ -80,7 +80,7 @@
 - [ ] With both model sets and a loadable runtime, Recognize Molecule is visible
       and `caffeine.png` inserts a V2000 structure into the canvas; a
       non-structure image, a low-confidence/incomplete decode, an unsupported
-      image and missing models each surface a friendly dialog, never raw JSON.
+      image and missing models each surface an in-app dialog, never raw JSON.
 - [ ] Docs state that the `/v2/imago/*` pair is a Ketcher compatibility shim,
       that no Imago library/worker ships, and list the Windows build commands.
 - [ ] Linux harness and packaging metadata remain green.
@@ -174,7 +174,7 @@
       (`src/ui/editorButtons.ts` never hides `recognize`) and its Imago
       version selector is hidden by `src/overrides.css`; `App.tsx` maps no-molecule,
       low-confidence/incomplete, unsupported-image and model-unavailable
-      failures to friendly dialogs with a generic fallback. A JSON body without
+      failures to in-app dialogs with a generic fallback. A JSON body without
       a usable `error`/`message` is treated as JSON and shown as the generic
       failure, and the plain-text `413` path (a JSON parse error in Ketcher)
       maps to the "may be too large" copy; raw JSON never reaches the user.

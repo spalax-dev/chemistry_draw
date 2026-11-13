@@ -147,15 +147,17 @@ export function ExportDialog({ onExport, onCancel }: ExportDialogProps) {
 }
 
 export interface ErrorDialogProps {
+  /** Dialog heading; recognition failures pass `Structure problem`. */
+  title?: string;
   message: string;
   onClose: () => void;
 }
 
-/** In-app replacement for native alerts on new save/export failures. */
-export function ErrorDialog({ message, onClose }: ErrorDialogProps) {
+/** In-app replacement for native alerts on save/export and recognition failures. */
+export function ErrorDialog({ title = "Error", message, onClose }: ErrorDialogProps) {
   return (
     <Dialog
-      title="Error"
+      title={title}
       onCancel={onClose}
       actions={
         <Button variant="primary" data-autofocus="true" onClick={onClose}>

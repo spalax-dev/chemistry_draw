@@ -130,7 +130,9 @@ Pattern rules:
   dialog. `App.tsx` removes the `hidden` button option and the sidecar
   advertises the synthetic `imago_versions` capability; Ketcher POSTs the
   image and polls the compatibility job. Failures reach `errorHandler` as JSON
-  text; `App.tsx` maps them to friendly dialogs.
+  text; `src/recognizeErrors.ts` unwraps and maps them, and `App.tsx` renders
+  every one in the in-app `ErrorDialog` (title `Structure problem`), never a
+  native OS alert.
 - Hash/`file-saver` shims exist for the webview; do not add Node-only APIs.
   `file-saver` resolves through the Vite alias described in §5.7.
 
@@ -278,6 +280,7 @@ If Save As is cancelled, the close is aborted too. `window.destroy()` bypasses
 | `src/autosaveStore.ts`       | app-data paths, atomic snapshot write, read/clear, original-file `stat`, no-op outside Tauri                                              |
 | `src/fileSaver.ts`           | Vite alias target for `file-saver`: `saveAs` delegates to the registered handler, browser download otherwise; direct text writer for Save |
 | `src/saveRoute.ts`           | pure routing of a saved blob by extension and document state (§5.7.1)                                                                     |
+| `src/recognizeErrors.ts`     | pure unwrapping/mapping of editor and recognition errors to dialog copy and title (section 7)                                             |
 | `src/ui/Dialog.tsx`          | overlay, panel, title, action row                                                                                                         |
 | `src/ui/Button.tsx`          | `primary`, `secondary`, `danger` button styles                                                                                            |
 | `src/ui/DocumentDialogs.tsx` | recovery, close-guard / replace, export and error dialogs                                                                                 |
@@ -984,26 +987,52 @@ Only the media type and the 10 MiB cap are validated at POST time.
 `{ "state": "FAILURE", "error": "<message>" }` with HTTP `200`; only an
 unknown, expired or restarted job id is `404`.
 
-| Condition                                             | FAILURE `error`                                                               | UI dialog                |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------ |
-| filter returns `no-structure`                         | `No molecule was detected in this image.`                                     | No molecule found        |
-| `incomplete` or low confidence                        | `The structure could not be read confidently. Try a sharper or larger image.` | Structure not recognized |
-| undecodable / unsupported / over-dimension image      | `Unsupported image. Use a PNG, JPEG or WebP file.`                            | Unsupported image        |
-| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Models not available     |
-| SMILES → molfile failure                              | `The recognized structure could not be prepared for the editor. Try again.`   | Recognition failed       |
-| still `PENDING` after the TTL                         | `Recognition timed out. Try again.`                                           | Recognition timed out    |
+| Condition                                             | FAILURE `error`                                                               | `ErrorDialog` copy                                                                                                                                |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| filter returns `no-structure`                         | `No molecule was detected in this image.`                                     | No chemical structure was detected in this image. Try a clear image of one drawn molecule, or draw the structure in the editor.                   |
+| `incomplete` or low confidence                        | `The structure could not be read confidently. Try a sharper or larger image.` | The structure could not be read confidently. Try a sharper or larger image of one molecule.                                                       |
+| undecodable / unsupported / over-dimension image      | `Unsupported image. Use a PNG, JPEG or WebP file.`                            | This image cannot be used. Choose a PNG, JPEG or WebP file.                                                                                       |
+| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Molecule recognition is not set up. Check that the image-classifier and OCSR models are installed (see CHEMISTRY_MODELS_DIR) and restart the app. |
+| SMILES → molfile failure                              | `The recognized structure could not be prepared for the editor. Try again.`   | The structure was recognized but could not be prepared for the editor. Please try again.                                                          |
+| still `PENDING` after the TTL                         | `Recognition timed out. Try again.`                                           | Recognition took too long. Please try again.                                                                                                      |
+| unknown, expired or restarted job id (`404`)          | `unknown recognition job`                                                     | The recognition result expired before it reached the editor. Please try again.                                                                    |
 
 A POST with an unsupported `Content-Type` is `400` and maps to the unsupported
-image dialog. An over-cap POST is the documented **plain-text exception**: axum's
+image copy. An over-cap POST is the documented **plain-text exception**: axum's
 `DefaultBodyLimit` answers `413` with `Failed to buffer the request body`, not
 `{ "error": ... }`. Ketcher parses every response with `response.json()`, so the
 plain text makes that call throw a JSON syntax error (`Unexpected token`); the UI
 maps it to "The server could not process the image. It may be too large."
-`App.tsx` maps the documented strings (including the JSON that Ketcher wraps
-around a `FAILURE`) to the dialogs above and never shows raw JSON: a JSON body
-without a usable `error`/`message` is still treated as JSON and gets the generic
-`Recognition failed.` message, and an unrecognized non-JSON failure is shown as
-the plain error.
+
+**In-app dialog, never a native alert.** Every recognition failure above — the
+no-molecule, low-confidence, model-unavailable, conversion, unsupported, timeout
+and `404` cases, including a JSON body without a usable `error`/`message` —
+renders in the Ketcher-styled in-app `ErrorDialog` (`src/ui/DocumentDialogs.tsx`
+over `src/ui/Dialog.tsx`): title **Structure problem**, the friendly copy from
+the table, a single **Close** button, and Ketcher's dimmed hatch backdrop above
+the still-mounted editor. It is a webview component, not an OS window: the
+Recognize path never calls the Tauri `message()` dialog and never falls back to
+browser `alert()`. A failure with no mapped copy and no JSON body keeps the
+generic **Error** title. Native dialogs remain only for file pickers: Tauri
+`open` / `save` for Open, Save As and Export destinations.
+
+The unwrapping and mapping live in `src/recognizeErrors.ts`, a pure module
+covered by Vitest (`docs/testing.md` section 6.1): `unwrapError` strips
+Ketcher's `Error:` wrapper and extracts the inner `error`/`message` from a
+stringified `FAILURE` body, `friendly` maps the documented substrings to the
+copy above, and the title selection picks `Structure problem` for a mapped copy
+or any JSON body and `Error` for anything else. Raw JSON is never shown: an
+unrecognized JSON body gets the generic `Recognition failed. Please try again.`
+copy, and an unrecognized non-JSON failure is shown as the plain error under
+`Error`.
+
+`describeError` is only for the editor's `errorHandler`. The document workflow
+(Save, Save As, Open, New, Export, recovery, reset and close) uses
+`errorMessage(error)`, which returns an `Error`'s message or `String(value)`:
+prefixing a document error with `describeError(...).message` would let a
+document message that happens to contain a recognition hint (for example a path
+or a server message with `Load failed`) be rewritten into unrelated structure
+copy. Document failures keep their own text under the `Error` title.
 
 **Job store and TTL.** The store is in-memory and per-process: an opaque id maps
 to one job (`PENDING`, `SUCCESS` or `FAILURE`), the uploaded bytes and
@@ -1041,8 +1070,9 @@ Ketcher protocol artifacts, not an Imago dependency. Ketcher defaults the value
 to `imagoVersions[1]`, which is `undefined` for the single synthetic entry, so
 it omits `?version=` entirely; when a version is present the shim accepts and
 ignores it. Ketcher's built-in "Import Structure from Image" dialog uploads,
-polls and inserts; no custom React upload UI is added. `handleError` gains the
-failure mapping above, with a generic fallback for unknown JSON.
+polls and inserts; no custom React upload UI is added. `handleError` renders the
+failure mapping above in the in-app `ErrorDialog`, with a generic fallback for
+unknown JSON.
 
 **Stale recognition results.** Ketcher turns every `recognize` promise into a
 dialog `setStruct` dispatch, so changing the image while the previous job is

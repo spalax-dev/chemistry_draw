@@ -9,7 +9,6 @@ import {
   type StructService,
   type StructServiceOptions,
 } from "ketcher-core";
-import { message } from "@tauri-apps/plugin-dialog";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
@@ -49,6 +48,7 @@ import {
   writeTextFileAt,
 } from "./fileSaver";
 import { routeSavedBlob } from "./saveRoute";
+import { describeError, errorMessage } from "./recognizeErrors";
 import { CloseGuardDialog, ErrorDialog, ExportDialog, RecoveryDialog } from "./ui/DocumentDialogs";
 import { EDITOR_BUTTONS } from "./ui/editorButtons";
 import { tokens } from "./ui/tokens";
@@ -67,91 +67,6 @@ interface RecoveryOffer {
   snapshot: Snapshot;
   /** Extra dialog copy, e.g. when the original file disappeared. */
   note: string | null;
-}
-
-/**
- * Substring → friendly copy for errors surfaced by Ketcher or the sidecar.
- *
- * Recognize Molecule failures arrive as the stringified `FAILURE` body
- * (`{"state":"FAILURE","error":"…"}`), so these keys are substrings of the
- * documented sidecar messages, not whole strings. The copy is UI-owned: it
- * must never echo the raw JSON.
- */
-const SIMPLE_ERRORS: Record<string, string> = {
-  "No molecule was detected in this image.":
-    "No chemical structure was detected in this image. Try a clear image of one drawn molecule, or draw the structure in the editor.",
-  "The structure could not be read confidently.":
-    "The structure could not be read confidently. Try a sharper or larger image of one molecule.",
-  "Recognition models are not available.":
-    "Molecule recognition is not set up. Check that the image-classifier and OCSR models are installed (see CHEMISTRY_MODELS_DIR) and restart the app.",
-  "The recognized structure could not be prepared for the editor.":
-    "The structure was recognized but could not be prepared for the editor. Please try again.",
-  "Unsupported image. Use a PNG, JPEG or WebP file.":
-    "This image cannot be used. Choose a PNG, JPEG or WebP file.",
-  "unsupported image content type":
-    "This image format is not supported. Choose a PNG, JPEG or WebP file.",
-  "Recognition timed out. Try again.": "Recognition took too long. Please try again.",
-  "unknown recognition job":
-    "The recognition result expired before it reached the editor. Please try again.",
-  // An over-cap upload is `413` with a plain-text body (axum's body limit, not
-  // `{ "error": … }`), so Ketcher's `response.json()` throws a parse error.
-  "Unexpected token": "The server could not process the image. It may be too large.",
-  "is not valid JSON": "The server could not process the image. It may be too large.",
-  "JSON Parse error": "The server could not process the image. It may be too large.",
-  "Failed to buffer the request body":
-    "The server could not process the image. It may be too large.",
-  "already have edge between vertices":
-    "The structure contains duplicate bonds. Please remove overlapping bonds and try again.",
-  "Indigo load error":
-    "Cannot read the structure. The data may be corrupted or in an unsupported format.",
-  "Load failed": "The chemistry server is not responding. Restart the app or check the connection.",
-  "Connection terminated unexpectedly":
-    "The chemistry server stopped unexpectedly. Restart the app.",
-};
-
-const GENERIC_FAILURE = "Recognition failed. Please try again.";
-
-/**
- * Unwraps Ketcher's stringified error body.
- *
- * `RemoteStructService` throws `new Error(JSON.stringify(response))` for a
- * `FAILURE` job, and the editor either reports `error.message` or the error
- * object (whose `String()` is `Error: {…}`). Returns the inner
- * `error`/`message` text and whether the input carried a JSON body.
- *
- * A JSON object without a usable `error`/`message` still counts as JSON: the
- * structured protocol failed, so the caller shows the generic failure instead
- * of echoing raw JSON. Only non-JSON text falls back to the plain message.
- */
-function unwrapError(msg: string): { detail: string; json: boolean } {
-  const trimmed = msg.trim().replace(/^Error:\s*/, "");
-  if (!trimmed.startsWith("{")) return { detail: msg, json: false };
-
-  try {
-    const body: unknown = JSON.parse(trimmed);
-    if (body && typeof body === "object") {
-      const record = body as Record<string, unknown>;
-      const detail = record.error ?? record.message;
-      return { detail: typeof detail === "string" ? detail : "", json: true };
-    }
-  } catch {
-    // Not JSON: fall back to the plain message.
-  }
-
-  return { detail: msg, json: false };
-}
-
-/** Returns friendly copy for an already-unwrapped message, or `""`. */
-function friendly(detail: string): string {
-  for (const [key, hint] of Object.entries(SIMPLE_ERRORS)) {
-    if (detail.includes(key)) return hint;
-  }
-  return "";
-}
-
-function describeError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.length > 0 ? message : "unknown error";
 }
 
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
@@ -250,7 +165,7 @@ function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [closePrompt, setClosePrompt] = useState(false);
   const [promptIntent, setPromptIntent] = useState<PromptIntent>("close");
-  const [errorText, setErrorText] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
 
   const closeChoiceRef = useRef<((choice: CloseChoice) => void) | null>(null);
   const dialogOpenRef = useRef(false);
@@ -263,10 +178,13 @@ function App() {
     setDocState(next);
   }, []);
 
-  const showError = useCallback((text: string) => setErrorText(text), []);
+  const showError = useCallback(
+    (text: string, title = "Error") => setError({ title, message: text }),
+    [],
+  );
 
   // Keep the keydown handler aware of the dialogs without re-subscribing.
-  const dialogsOpen = recovery !== null || exportOpen || closePrompt || errorText !== null;
+  const dialogsOpen = recovery !== null || exportOpen || closePrompt || error !== null;
   useEffect(() => {
     dialogOpenRef.current = dialogsOpen;
   }, [dialogsOpen]);
@@ -293,22 +211,18 @@ function App() {
     setReady(true);
   }, []);
 
-  const handleError = useCallback((raw: unknown) => {
-    const msg = typeof raw === "string" ? raw : String(raw);
-    console.error("Ketcher error:", msg);
-    const now = Date.now();
-    if (msg === lastError.current.msg && now - lastError.current.at < 5000) return;
-    lastError.current = { msg, at: now };
-    const { detail, json } = unwrapError(msg);
-    const hint = friendly(detail);
-    // A stringified failure gets friendly copy even when its message is unknown.
-    const known = hint !== "" || json;
-    const text = hint || (known ? GENERIC_FAILURE : msg);
-    const title = known ? "Structure problem" : "Error";
-    message(text, { title, kind: "error" }).catch(() => {
-      alert(`${title}: ${text}`);
-    });
-  }, []);
+  const handleError = useCallback(
+    (raw: unknown) => {
+      const msg = typeof raw === "string" ? raw : String(raw);
+      console.error("Ketcher error:", msg);
+      const now = Date.now();
+      if (msg === lastError.current.msg && now - lastError.current.at < 5000) return;
+      lastError.current = { msg, at: now };
+      const { title, message } = describeError(raw);
+      showError(message, title);
+    },
+    [showError],
+  );
 
   // Window title mirrors the document name plus the dirty marker.
   useEffect(() => {
@@ -405,7 +319,7 @@ function App() {
         return "saved";
       } catch (error) {
         showError(
-          `Could not save the document: ${describeError(error)}. Check that the folder is writable and try again.`,
+          `Could not save the document: ${errorMessage(error)}. Check that the folder is writable and try again.`,
         );
         return "failed";
       } finally {
@@ -469,7 +383,7 @@ function App() {
       setDoc(newDocument());
       await clearSnapshotSafely();
     } catch (error) {
-      showError(`Could not start a new document: ${describeError(error)}`);
+      showError(`Could not start a new document: ${errorMessage(error)}`);
     }
   }, [clearSnapshotSafely, confirmReplace, setDoc, showError]);
 
@@ -500,7 +414,7 @@ function App() {
       }
       await clearSnapshotSafely();
     } catch (error) {
-      showError(`Could not open the file: ${describeError(error)}`);
+      showError(`Could not open the file: ${errorMessage(error)}`);
     }
   }, [clearSnapshotSafely, confirmReplace, setDoc, showError]);
 
@@ -546,7 +460,7 @@ function App() {
         }
       } catch (error) {
         showError(
-          `Could not export ${format.toUpperCase()}: ${describeError(error)}. Try another format or another destination.`,
+          `Could not export ${format.toUpperCase()}: ${errorMessage(error)}. Try another format or another destination.`,
         );
       }
     },
@@ -585,7 +499,7 @@ function App() {
       // Recovered work is unsaved: keep it dirty so Save persists it.
       setDoc(markDirty(base));
     } catch (error) {
-      showError(`Could not restore the recovered structure: ${describeError(error)}`);
+      showError(`Could not restore the recovered structure: ${errorMessage(error)}`);
     }
   }, [recovery, setDoc, showError]);
 
@@ -599,7 +513,7 @@ function App() {
       await ketcher.setMolecule(EMPTY_STRUCTURE);
       setDoc(newDocument());
     } catch (error) {
-      showError(`Could not reset the editor: ${describeError(error)}`);
+      showError(`Could not reset the editor: ${errorMessage(error)}`);
     }
   }, [clearSnapshotSafely, setDoc, showError]);
 
@@ -607,7 +521,7 @@ function App() {
     try {
       await getCurrentWindow().destroy();
     } catch (error) {
-      showError(`Could not close the window: ${describeError(error)}`);
+      showError(`Could not close the window: ${errorMessage(error)}`);
     }
   }, [showError]);
 
@@ -641,7 +555,7 @@ function App() {
       handle: saveRoutedBlob,
       onError: (error) =>
         showError(
-          `Could not save the file: ${describeError(error)}. Check that the folder is writable and try again.`,
+          `Could not save the file: ${errorMessage(error)}. Check that the folder is writable and try again.`,
         ),
     });
 
@@ -819,7 +733,9 @@ function App() {
           onChoice={answerCloseChoice}
         />
       )}
-      {errorText !== null && <ErrorDialog message={errorText} onClose={() => setErrorText(null)} />}
+      {error !== null && (
+        <ErrorDialog title={error.title} message={error.message} onClose={() => setError(null)} />
+      )}
     </>
   );
 }

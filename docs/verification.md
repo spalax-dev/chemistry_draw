@@ -244,9 +244,26 @@ below.
   an older in-flight recognition must never overwrite or clear the new preview.
 - Repeat with `chinese_character.jpg` or `random_scatter_plot_64933.png`: the
   job ends `FAILURE` with `No molecule was detected in this image.` and the
-  dialog says no molecule was found. No raw JSON is shown. This is the known
-  multi-molecule limitation: a `no-structure` answer is not proof that no
-  structure exists.
+  failure renders in the **in-app** `ErrorDialog`, not a native OS alert. The
+  dialog sits inside the webview above the editor with Ketcher's dimmed hatch
+  backdrop (the same overlay as Export and the close guard), the title
+  **Structure problem**, the copy "No chemical structure was detected in this
+  image. Try a clear image of one drawn molecule, or draw the structure in the
+  editor." and a single **Close** button that returns to Ketcher's dialog. No
+  raw JSON is shown and no separate OS window appears: check the window
+  list/taskbar for a GTK/Win32 alert — there must be none, and `alert()` is
+  never used. This is the known multi-molecule limitation: a `no-structure`
+  answer is not proof that no structure exists.
+- The same in-app surface is expected for the other recognition failures:
+  low confidence (title `Structure problem`, "The structure could not be read
+  confidently…"), models missing ("Molecule recognition is not set up…"),
+  conversion, timeout and the plain-text `413` ("The server could not process
+  the image. It may be too large."). In every case the title is **Structure
+  problem**, the friendly copy replaces the raw message and no native alert
+  appears. When a Playwright runner drives `pnpm dev`, the same check is a DOM
+  assertion — a `[role="dialog"]` element titled `Structure problem` — plus
+  `page.on("dialog")` recording no browser `alert()`; a native Tauri
+  `message()` is an OS window outside the webview and satisfies neither.
 - Low confidence / incomplete: there is no deterministic fixture; a fragmented
   or heavily degraded sketch is the manual reproduction. The deterministic
   coverage is the gate test with a fake prediction. The dialog must say the

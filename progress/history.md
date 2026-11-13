@@ -557,3 +557,21 @@ re-review.
 - Not ported (outside this crash path): upstream's `setDoubleBondShift`,
   `stereoUpBondGetCoordinates` and `show` guards.
 - `src/ketcherPatch.test.ts` guards the hunks and the installed dist (116 tests).
+
+## 2026-11-13 — Activity 10: in-app-recognition-error-dialog
+
+- Symptom: a Recognize failure (e.g. "No chemical structure was detected...")
+  appeared as a native OS alert via `message()`/`alert`.
+- Fix: `handleError` now calls `describeError` and the existing Ketcher-styled
+  `ErrorDialog` (`showError(message, title)`), with a `Structure problem` title
+  for recognition failures and `Error` for other errors; no native
+  `message()`/`alert()` remains in `App.tsx`.
+- Extracted `src/recognizeErrors.ts` (`SIMPLE_ERRORS`, `GENERIC_FAILURE`,
+  `unwrapError`, `friendly`, `describeError`, `errorMessage`) with 39 Vitest
+  tests; document errors use the plain `errorMessage`, keeping the recognition
+  mapping out of save/open/export messages.
+- Playwright: the no-molecule case shows the in-app `[role="dialog"]` titled
+  `Structure problem` with the friendly copy and Close; `NATIVE_DIALOGS: []`,
+  no raw JSON.
+- Docs updated (architecture, conventions, testing, verification, CHECKPOINTS).
+- Gates: harness green, Vitest 156/156, sidecar 207/207, tsc/lint/build clean.
