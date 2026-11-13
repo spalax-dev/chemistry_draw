@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
@@ -38,7 +39,10 @@ const OVERLAY: CSSProperties = {
   justifyContent: "center",
   padding: "24px",
   boxSizing: "border-box",
-  backgroundColor: tokens.color.overlay,
+  backgroundImage: `url("${tokens.dialog.backdropPattern}")`,
+  backgroundRepeat: tokens.dialog.backdropRepeat,
+  backgroundSize: tokens.dialog.backdropSize,
+  transition: tokens.dialog.transition,
 };
 
 /**
@@ -49,6 +53,13 @@ const OVERLAY: CSSProperties = {
 export function Dialog({ title, children, actions, onCancel, width = 420 }: DialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  /** Starts at Ketcher's hidden wash and fades in after the first paint. */
+  const [overlayVisible, setOverlayVisible] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setOverlayVisible(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -103,7 +114,12 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
   }
 
   return (
-    <div style={OVERLAY}>
+    <div
+      style={{
+        ...OVERLAY,
+        backgroundColor: overlayVisible ? tokens.color.overlay : tokens.color.overlayHidden,
+      }}
+    >
       <div
         ref={panelRef}
         role="dialog"
@@ -116,9 +132,9 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
           maxWidth: "100%",
           boxSizing: "border-box",
           backgroundColor: tokens.color.surface,
-          border: `${tokens.borderWidth} solid ${tokens.color.border}`,
-          borderRadius: tokens.radius,
-          boxShadow: tokens.shadow,
+          border: tokens.dialog.border,
+          borderRadius: tokens.dialog.radius,
+          boxShadow: tokens.dialog.shadow,
           fontFamily: tokens.fontFamily,
           color: tokens.color.text,
         }}
@@ -151,8 +167,8 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
               padding: "12px 20px",
               backgroundColor: tokens.color.surfaceSubtle,
               borderTop: `${tokens.borderWidth} solid ${tokens.color.border}`,
-              borderBottomLeftRadius: tokens.radius,
-              borderBottomRightRadius: tokens.radius,
+              borderBottomLeftRadius: tokens.dialog.radius,
+              borderBottomRightRadius: tokens.dialog.radius,
             }}
           >
             {actions}

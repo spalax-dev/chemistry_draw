@@ -123,6 +123,35 @@ on Linux and `%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
     download files (no dialog, no path), there is no autosave, no recovery
     prompt and no close guard, and the console stays free of errors.
 
+### In-app dialog styling
+
+Run against the desktop build (`task run`).
+
+1. **Export dialog.** Draw a structure and click Export: the format dialog opens
+   and the editor behind it is only lightly dimmed (~20 % grey, still clearly
+   readable), not heavily darkened. Faint diagonal lines are visible across the
+   dimmed editor — the overlay is a 10×10 repeating hatch, not a flat wash. A
+   flat, hatch-free wash is the bug, not a styling choice. The overlay fades in
+   smoothly over about 0.3 s instead of snapping, and the hatch pattern neither
+   shimmers nor scales while the backdrop fades.
+2. **Close guard.** With unsaved changes, close the window: the close-guard
+   dialog opens with the same light dimming, the same faint diagonal hatch
+   behind it and the same smooth fade.
+3. **Panel shape.** Both dialogs show white panels with `8px` rounded corners,
+   no border and no drop shadow. Comparing Export and the close guard side by
+   side, they look identical; only their text and buttons differ.
+4. **Native parity.** Compare against Ketcher's own modal styling (overlay
+   `rgba(94,94,94,.2)` with its `10px 10px` diagonal hatch and a borderless,
+   shadowless white panel with `8px` corners): the overlay tint, the hatch, its
+   `0.3s` fade and the panel frame match.
+5. **Every dialog, both zooms.** Repeat step 1 for every in-app dialog (Export,
+   close guard, recovery prompt, error dialog): the faint diagonals are visible
+   behind each of them at 100 % **and** 125 % zoom. Diagonals missing behind any
+   one dialog, or only at one zoom, fail this check — the effective
+   `background-image` must be the token wrapped in `url("…")`, and good parity
+   stops there: the panel has no transform/opacity entrance animation and ours
+   is fixed above the whole app rather than scoped to the editor.
+
 ### Toolbar integration
 
 Run against the desktop build (`task run`) unless a step says browser.

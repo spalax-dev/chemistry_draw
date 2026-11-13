@@ -153,27 +153,59 @@ stay; new work must not add more. The same ban applies to browser
 
 ### 6.2 Ketcher design tokens
 
-| Token          | Value                                      | Use                             |
-| -------------- | ------------------------------------------ | ------------------------------- |
-| Accent         | `#167782`                                  | primary buttons, focus ring     |
-| Accent hover   | `#00838f`                                  | primary button hover            |
-| Accent active  | `#005662`                                  | primary button pressed, links   |
-| Error          | `#ff4a4a`                                  | destructive actions, error text |
-| Error wash     | `rgba(255,74,74,0.08)`                     | danger button hover             |
-| Text           | `#333`                                     | body copy                       |
-| Secondary text | `#585858`                                  | labels, secondary actions       |
-| Muted          | `#7c7c7f`                                  | hints, disabled controls        |
-| Border         | `#cad3dd`                                  | 1px borders and dividers        |
-| Subtle surface | `#eff2f5`                                  | action row / footer             |
-| Page           | `#f5f5f5`                                  | page background                 |
-| Overlay        | `rgba(94,94,94,0.8)`                       | dialog backdrop                 |
-| Surface        | `#ffffff`                                  | dialog panel                    |
-| Radius         | `3px`                                      | panels, buttons, inputs         |
-| Border width   | `1px`                                      | everywhere a border is drawn    |
-| Font           | Roboto                                     | 14px titles, 12px body          |
-| Shadow         | one soft `0 1px 1px rgba(202,211,221,0.7)` | panel elevation                 |
+| Token          | Value                                                                                                                                                                       | Use                             |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Accent         | `#167782`                                                                                                                                                                   | primary buttons, focus ring     |
+| Accent hover   | `#00838f`                                                                                                                                                                   | primary button hover            |
+| Accent active  | `#005662`                                                                                                                                                                   | primary button pressed, links   |
+| Error          | `#ff4a4a`                                                                                                                                                                   | destructive actions, error text |
+| Error wash     | `rgba(255,74,74,0.08)`                                                                                                                                                      | danger button hover             |
+| Text           | `#333`                                                                                                                                                                      | body copy                       |
+| Secondary text | `#585858`                                                                                                                                                                   | labels, secondary actions       |
+| Muted          | `#7c7c7f`                                                                                                                                                                   | hints, disabled controls        |
+| Border         | `#cad3dd`                                                                                                                                                                   | 1px dividers and control edges  |
+| Subtle surface | `#eff2f5`                                                                                                                                                                   | action row / footer             |
+| Page           | `#f5f5f5`                                                                                                                                                                   | page background                 |
+| Overlay        | `rgba(94,94,94,0.2)` wash + 10×10 diagonal hatch (`#555`, width 2, opacity 0.02), `background-repeat: repeat`, `background-size: 10px 10px`, fade `background-color` `0.3s` | dialog backdrop                 |
+| Surface        | `#ffffff`                                                                                                                                                                   | dialog panel                    |
+| Radius         | `3px`                                                                                                                                                                       | buttons, inputs, inner controls |
+| Dialog radius  | `8px`                                                                                                                                                                       | dialog panel corners            |
+| Border width   | `1px`                                                                                                                                                                       | everywhere a divider is drawn   |
+| Dialog border  | `none`                                                                                                                                                                      | dialog panel edge               |
+| Font           | Roboto                                                                                                                                                                      | 14px titles, 12px body          |
+| Dialog shadow  | `none`                                                                                                                                                                      | dialog panel elevation          |
 
 No gradients, no second shadow, no colours outside this palette.
+
+**Raw token values, CSS functions in components.** A token stores the raw value
+only: a plain colour (`rgba(94,94,94,0.2)`), a plain length (`10px 10px`) or the
+bare data URI of the hatch (`tokens.dialog.backdropPattern`, starting
+`data:image/svg+xml`). The component owns the CSS function and wraps the token at
+the point of use, e.g. `Dialog` sets
+`` backgroundImage: `url("${tokens.dialog.backdropPattern}")` ``. Never pre-wrap
+the value in the token and never inline the URI string in a component — the token
+stays the single source of truth. A bare data URI assigned to `background-image`
+is not a valid CSS value, so the declaration is dropped **silently**: no image,
+no error in the console, and the backdrop falls back to a flat 20 % wash with no
+hatch. Ketcher's own overlay uses `background-image: url("data:…")` for the same
+reason.
+
+**Native parity.** The overlay and panel values mirror Ketcher's own modals: the
+overlay tint is the editor's `--color-background-overlay` (`rgba(94,94,94,0.2)`)
+with the same `10px 10px` diagonal hatch Ketcher paints over it, and it fades in
+over `0.3s` from the pre-fade wash `rgba(94,94,94,0.01)`
+(`tokens.color.overlayHidden`, `tokens.dialog.transition`), and the panel frame
+is a white, borderless, shadowless `8px`-radius box with no padding of its own —
+the header, body and action row inside it own the spacing, as in Ketcher. Every
+in-app dialog (Export, close guard, recovery, errors) inherits these values from
+`tokens` and `Dialog`; per-dialog overrides are not allowed.
+
+**Intentional divergence.** Parity covers the overlay tint, its `10px 10px`
+diagonal hatch and its `0.3s` fade, plus the panel frame only. The panel does not
+reproduce Ketcher's transform/opacity entrance animation. The overlay is also
+`position: fixed` above the whole app (`tokens.zIndex.overlay`) rather than
+`absolute` with `z-index: 40` inside the editor, because the app's dialogs
+outlive the canvas.
 
 ### 6.3 Accessibility
 

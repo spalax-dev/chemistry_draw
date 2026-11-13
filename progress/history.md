@@ -170,3 +170,44 @@ re-review.
   use the `file-saver` alias; `Ctrl/Cmd+S` remains intercepted.
 - Review: REQUEST_CHANGES (a stale manual step still used the native image
   save) → fix → PASS. 93 frontend tests.
+
+## 2026-11-13 — Activity 5: native-modal-backdrop
+
+- Ketcher's native modal overlay is `rgba(94,94,94,0.2)` with `background-color .3s`
+  (`.Modal-module_modalOverlay` / `_animate` / `_hide`), and its panel is white
+  with an 8 px radius, no border and no shadow (`.Dialog-module_dialog`).
+- Tokens now carry `color.overlay` (0.2), `color.overlayHidden` (0.01) and
+  `dialog.{radius,border,shadow,transition}`; `Dialog` fades the backdrop in on
+  first paint (rAF, cleaned up) and builds the panel from those tokens.
+- Every in-app dialog inherits it; per-dialog overrides are forbidden.
+- Documented divergences: no panel transform/opacity entrance, flat overlay
+  (Ketcher adds a 2 % hatch) and `position: fixed` above the app instead of
+  `absolute`/`z-index: 40` inside the editor.
+- Review: REQUEST_CHANGES (two overstated doc claims, missing pre-fade
+  assertion) → fix → PASS. 98 frontend tests.
+
+## 2026-11-13 — Activity 6: dialog-hatch-pattern
+
+- Ketcher's native overlay is not a flat wash: `.Modal-module_modalOverlay`
+  paints a 10x10 repeating SVG tile of diagonals (`#555`, width 2, opacity .02)
+  over `rgba(94,94,94,.2)`. The `background:none\9` beside it is an IE9 hack.
+- The exact 211-byte data URI now lives in `tokens.dialog.backdropPattern`
+  (plus `backdropRepeat: repeat`, `backdropSize: 10px 10px`) and the shared
+  `Dialog` overlay applies it; the colour still fades 0.01 -> 0.2 over 0.3 s
+  while the image stays static.
+- Verified byte-for-byte against the Ketcher CSS and rasterised: 10 px pitch,
+  ~2 % stroke, no seam when tiled.
+- Docs: conventions/verification/testing describe the hatch; the former "flat
+  overlay" divergence is gone. 102 frontend tests.
+
+## 2026-11-13 — Activity 7: hatch-background-image-url
+
+- The hatch never painted: `Dialog` assigned the bare data URI to
+  `backgroundImage`, but CSS needs `url("…")`, so the declaration was invalid
+  and silently dropped (flat 20 % wash, no console error).
+- Fix: the token stays the raw data URI and the overlay builds
+  `url("${tokens.dialog.backdropPattern}")`. Confirmed in headless Chromium:
+  bare = 1 colour in a strip, wrapped = 2 colours (hatch at 10 px pitch).
+- Tests guard both directions (no bare assignment, token not pre-wrapped,
+  repeat/size wired); docs record the raw-token/CSS-function rule.
+- 105 frontend tests, harness green.
