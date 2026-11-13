@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
+use crate::service::jobs::JobStore;
 use crate::service::ml::registry::ModelRegistry;
 
 /// Injected into every axum handler.
@@ -14,6 +15,7 @@ use crate::service::ml::registry::ModelRegistry;
 ///   `transport::health`).
 /// * `started_at` — when the sidecar began serving, for the health uptime.
 /// * `models_dir` — root of the optional model store (`CHEMISTRY_MODELS_DIR`).
+/// * `jobs` — in-memory recognition jobs for the Ketcher compatibility routes.
 ///
 /// The model registry is loaded lazily on first use and cached — including its
 /// failure — for the process lifetime. Constructing the state never touches the
@@ -23,6 +25,7 @@ pub struct AppState {
     pub port: u16,
     pub started_at: Instant,
     pub models_dir: PathBuf,
+    jobs: Arc<JobStore>,
     registry: Arc<OnceLock<Result<Arc<ModelRegistry>, String>>>,
 }
 
@@ -34,8 +37,17 @@ impl AppState {
             port,
             started_at: Instant::now(),
             models_dir: models_dir.into(),
+            jobs: Arc::new(JobStore::new()),
             registry: Arc::new(OnceLock::new()),
         }
+    }
+
+    /// Returns the process-wide recognition job store.
+    ///
+    /// Uploads create jobs and polls read them; both handlers share this one
+    /// store through the cloned state.
+    pub fn jobs(&self) -> Arc<JobStore> {
+        Arc::clone(&self.jobs)
     }
 
     /// Returns the validated model registry, loading it on first use.

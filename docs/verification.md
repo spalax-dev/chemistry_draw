@@ -23,7 +23,9 @@
    sets `ORT_DYLIB_PATH` and `CHEMISTRY_MODELS_DIR`, and skips both gated tests
    and the info line names the missing piece otherwise. OCSR model-gated tests
    additionally need `models/ocsr-handdrawn-fp32/` (encoder, decoder step and
-   vocabulary) and self-skip when those files are absent.
+   vocabulary) and self-skip when those files are absent. The Recognize
+   Molecule success/rejection tests use the same gate; the job store, upload
+   protocol, 404 and missing-model tests always run.
 9. Review `docs/CHECKPOINTS.md` — mark the applicable boxes.
 10. `node --test scripts/lib/activity-policy.test.mjs` — policy tests green.
     The harness runs the same command in block 3 and then validates
@@ -55,11 +57,16 @@ Windows changes are validated by the `windows` job in
     `ORT_DYLIB_PATH`.
 16. `node scripts/harness.mjs` passes on Windows (ShellCheck is skipped: the
     scripts are POSIX-only).
-17. Sidecar smoke test (Windows job only): the absence contract lives in
-    `.github/actions/windows-build/action.yml` — `/v2/info` and `/v2/health`
-    contain no `imago_versions` / `imago_worker` fields, and
-    `POST /v2/imago/uploads` returns 404. Linux covers the same contract through
-    `cargo test` (`tests/imago_absent.rs`).
+17. Sidecar smoke test (Windows job only): the compatibility contract lives in
+    `.github/actions/windows-build/action.yml` — `/v2/info` answers `200` and
+    advertises the synthetic `imago_versions` capability (`local-ocsr`),
+    `/v2/health` answers `200` with neither `imago_worker` nor
+    `imago_versions`, `POST /v2/imago/uploads` with the `caffeine.png` fixture
+    (`image/png`) returns `200` and a non-empty `upload_id` (not 404), an
+    unknown id is `404`, and `GET /v2/imago/uploads/{id}` answers `200` with a
+    `state` (polled for up to 10 s; `PENDING` is accepted because the runner
+    carries no models). Linux covers the same contract through `cargo test`, in
+    the module that replaces `tests/imago_absent.rs`.
 18. `pnpm tauri build --bundles nsis` produces
     `target/release/bundle/nsis/*.exe`, uploaded by CI.
 19. `cargo check -p indigo-server --all-targets --target x86_64-pc-windows-msvc`
@@ -75,8 +82,11 @@ Windows changes are validated by the `windows` job in
 - `task run` logs `model root: /.../models` — an absolute path, not
   `model root: models` — and `POST /v2/filter/classify` answers without
   exporting `CHEMISTRY_MODELS_DIR`.
-- `curl -s http://127.0.0.1:9321/v2/info` answers 200.
-- `curl -s http://127.0.0.1:9321/v2/health` reports `"status": "ok"`.
+- `curl -s http://127.0.0.1:9321/v2/info` answers 200 and
+  `jq .imago_versions` returns `["local-ocsr"]` — the synthetic capability
+  list, not an Imago build.
+- `curl -s http://127.0.0.1:9321/v2/health` reports `"status": "ok"` and has no
+  `imago_worker` field.
 - Closing the window kills `indigo-server` (no orphan on the port).
 
 ### Logs
@@ -89,9 +99,9 @@ Windows changes are validated by the `windows` job in
 
 - Draw a molecule, run Layout and Clean: the structure stays valid.
 - Save as PNG/SVG: the file is produced and non-empty.
-- Recognize Molecule is hidden on all platforms: B1 exposes the classifier
-  endpoint and B2 defines the OCSR endpoint, but the editor UI stays off until
-  the filter pipeline, Ketcher adapter and UI activity wires it.
+- Recognize Molecule is visible on every platform. With the models installed it
+  inserts a structure end to end (see below); without them the control still
+  opens and the job fails with the model-setup dialog.
 
 ### Image filter
 
@@ -132,7 +142,9 @@ the sidecar still starts.
 - With `ORT_DYLIB_PATH` pointing at a missing file, the first classifier request
   answers `503` (not a panic, not `500`) and the message names the path and
   `scripts/fetch-onnxruntime.sh`.
-- `GET /v2/info` is unchanged: no inference fields.
+- `GET /v2/info` adds only the synthetic `imago_versions` capability list; the
+  rest of the payload (`Indigo`, `indigo_version`, `api_path`) is unchanged and
+  it carries no inference fields.
 
 ### OCSR recognition
 
@@ -196,7 +208,106 @@ gitignored and never bundled.
   fake-decoder test; a fragmented or heavily degraded sketch is the manual
   reproduction. A truncated `smiles` must never appear in a `200`.
 
-- `GET /v2/info` is unchanged by OCSR.
+- `GET /v2/info` adds only the synthetic `imago_versions` capability described
+  below: no OCSR or other inference fields, and the rest of its payload is
+  unchanged.
+
+### Recognize Molecule end to end
+
+Requires both model sets (`models/manifest.json`, the classifier file and the
+three OCSR artifacts) and a loadable ONNX Runtime. Without them the control is
+still visible and the job fails with the setup dialog; that path is checked
+below.
+
+- The toolbar shows **Recognize Molecule** and opens Ketcher's "Import
+  Structure from Image" dialog. The dialog does **not** show an "Imago version"
+  selector: `src/overrides.css` hides Ketcher's label because the local OCSR
+  model has no version choice. The capability list still enables the control,
+  and the optional version query remains accepted and ignored.
+- Choose `src-tauri/sidecar/fixtures/caffeine.png` and confirm the preview. The
+  dialog uploads, waits 300 ms and then polls every 500 ms until the job leaves
+  `PENDING`; once it is `SUCCESS`, the dialog offers **Add to Canvas**. The
+  structure appears with 2D coordinates; the job's
+  `mol_str` is a V2000 molfile whose molecule matches the fixture's known
+  SMILES `CN1C=NC2=C1C(=O)N(C)C(=O)N2C`.
+- Click **Change image** and choose a second, different structure image (for
+  example `aspirin.png` from a manual run). The original image and filename
+  update and the "Recognized structure preview" replaces the first structure;
+  an older in-flight recognition must never overwrite or clear the new preview.
+- Repeat with `chinese_character.jpg` or `random_scatter_plot_64933.png`: the
+  job ends `FAILURE` with `No molecule was detected in this image.` and the
+  dialog says no molecule was found. No raw JSON is shown. This is the known
+  multi-molecule limitation: a `no-structure` answer is not proof that no
+  structure exists.
+- Low confidence / incomplete: there is no deterministic fixture; a fragmented
+  or heavily degraded sketch is the manual reproduction. The deterministic
+  coverage is the gate test with a fake prediction. The dialog must say the
+  structure could not be read confidently and must not show a partial
+  structure.
+- Models missing: rename `models/` (or point `CHEMISTRY_MODELS_DIR` at an empty
+  directory) and retry. The job ends `FAILURE` with the model-unavailable
+  message; the dialog says the models are not available, `/v2/health` lists no
+  model and Indigo keeps working.
+- Unsupported format: choose a GIF or rename `caffeine.png` to `.gif`. The POST
+  is `400` and the dialog says the image is unsupported. The `.webp` fixture is
+  accepted.
+- A body over 10 MiB returns `413` with axum's plain-text body, not JSON.
+  Ketcher's `response.json()` throws a parse error, which the UI maps to "The
+  server could not process the image. It may be too large."; exactly 10,485,760
+  bytes is accepted by `POST` and fails later in the worker if it does not
+  decode.
+
+Curl job protocol:
+
+```bash
+BASE=http://127.0.0.1:9321
+IMG=src-tauri/sidecar/fixtures/caffeine.png
+
+# 1. Upload. The version query is accepted and ignored.
+UPLOAD=$(curl -s -X POST "$BASE/v2/imago/uploads?version=local-ocsr" \
+  -H "Content-Type: image/png" --data-binary @"$IMG")
+echo "$UPLOAD" | jq -e '.upload_id' >/dev/null
+ID=$(echo "$UPLOAD" | jq -r '.upload_id')
+
+# 2. Wait 300 ms, then poll every 500 ms until the job leaves PENDING.
+#    The loop bound belongs to this script, not to Ketcher.
+sleep 0.3
+for _ in $(seq 1 300); do
+  JOB=$(curl -s "$BASE/v2/imago/uploads/$ID")
+  STATE=$(echo "$JOB" | jq -r '.state')
+  [ "$STATE" = "PENDING" ] || break
+  sleep 0.5
+done
+echo "$JOB" | jq
+
+# 3. Expected: SUCCESS and a V2000 molfile.
+echo "$JOB" | jq -e '.state == "SUCCESS"'
+echo "$JOB" | jq -r '.metadata.mol_str' | grep -q 'V2000'
+```
+
+The same sequence with a non-structure fixture ends with:
+
+```json
+{
+  "state": "FAILURE",
+  "error": "No molecule was detected in this image."
+}
+```
+
+A `FAILURE` is always `HTTP 200` with `state: "FAILURE"`; only an unknown,
+expired or restarted id is `404`:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "$BASE/v2/imago/uploads/00000000-0000-0000-0000-000000000000"   # 404
+```
+
+`POST` with `Content-Type: text/plain` is `400`; a body over 10 MiB is `413`
+with a plain-text body. A pipeline still running after the sidecar's 120 s
+worker bound is abandoned as the timeout `FAILURE`. A job that stays `PENDING`
+for 10 minutes (a lost worker) also becomes the timeout `FAILURE` on its next
+poll, and a resolved job is pruned 10 minutes after it resolved. The worker and
+store tests cover both boundaries without waiting.
 
 ### Packaging
 
@@ -228,8 +339,12 @@ gitignored and never bundled.
   find squashfs-root \( -iname '*imago*' -o -iname '*opencv*' \)
   ```
 
-- The packaged sidecar answers `GET /v2/info` without an `imago_versions` field
-  and `POST /v2/imago/uploads` returns 404.
+- The packaged sidecar answers `GET /v2/info` with the synthetic
+  `imago_versions: ["local-ocsr"]` capability and `GET /v2/health` without
+  `imago_worker`. `POST /v2/imago/uploads` is registered and returns an
+  `upload_id`; with no models in the payload the job ends `FAILURE` (model
+  unavailable), never 404. The payload still contains no `imago-worker`,
+  `libimago.so` or OpenCV (absence grep above).
 
 #### ONNX Runtime payload
 
@@ -312,6 +427,12 @@ The reviewer agent must verify:
       script (never git), each artifact carries one real file plus its symlink
       chain, and the sidecar has no `DT_NEEDED libonnxruntime` and no
       `OrtGetApiBase` symbol (dynamic load through `ORT_DYLIB_PATH`)
+- [ ] `/v2/imago/uploads` is the compatibility shim (POST returns `upload_id`,
+      GET reports PENDING/SUCCESS/FAILURE, unknown id 404, TTL expiry covered),
+      and no Imago worker, library or native binary is shipped
+- [ ] Recognize Molecule is visible, a model-gated image inserts a V2000
+      structure, and no-molecule/low-confidence/unsupported/model-unavailable
+      failures show friendly dialogs rather than raw JSON
 - [ ] `scripts/fetch-onnxruntime.sh` is executable, checksummed and
       ShellCheck-clean
 - [ ] `docs/architecture.md` / `docs/conventions.md` respected

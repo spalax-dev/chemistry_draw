@@ -7,11 +7,11 @@ mod check;
 mod convert;
 mod filter;
 mod health;
-mod imago_absent;
 mod info;
 mod layout_clean;
 mod ocsr;
 mod paths;
+mod recognition;
 mod render;
 mod stereochemistry;
 mod structural_errors;
@@ -70,6 +70,18 @@ pub fn test_app_with_models(models_dir: std::path::PathBuf) -> axum::Router {
     init_tracing();
     let state = AppState::new(9321, models_dir);
     build_router(state)
+}
+
+/// Builds a test app together with its state.
+///
+/// Tests that stage a terminal recognition job need the same job store the
+/// router uses; going through the state's public store accessor keeps the
+/// staged job observable through the real GET route.
+pub fn test_app_and_state(models_dir: std::path::PathBuf) -> (axum::Router, AppState) {
+    init_tracing();
+    let state = AppState::new(9321, models_dir);
+    let app = build_router(state.clone());
+    (app, state)
 }
 
 pub async fn post_json(app: &axum::Router, path: &str, body: Value) -> (StatusCode, Value) {

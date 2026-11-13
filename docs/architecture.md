@@ -54,18 +54,32 @@ community packaging: it is not an official EPAM product.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The sidecar links Indigo and Indigo Renderer on every platform. It exposes no
-Imago fields: `/v2/imago/*` does not exist, and there is no job upload/polling
-contract. Phase B1 adds an ONNX Runtime classifier (`POST /v2/filter/classify`)
-that decides whether an image contains a chemical structure. Phase B2 adds OCSR
+The sidecar links Indigo and Indigo Renderer on every platform. It ships no
+Imago backend: no Imago library, worker binary or native dependency, and
+`/v2/health` has no Imago fields. Ketcher's built-in **Recognize Molecule**
+control, however, hardcodes the Imago job protocol: `POST
+{apiPath}imago/uploads` followed by `GET {apiPath}imago/uploads/:id`. The
+sidecar registers that pair as a **compatibility shim**: the route name is
+Ketcher's, the pipeline behind it is the local filter + OCSR + Indigo path, and
+the real Imago library never runs. `/v2/info` advertises one synthetic
+`imago_versions` entry (`local-ocsr`) because Ketcher disables the control when
+the list is empty; it is capability advertisement, not an Imago build.
+
+Phase B1 adds an ONNX Runtime classifier (`POST /v2/filter/classify`) that
+decides whether an image contains a chemical structure. Phase B2 adds OCSR
 inference (image → SMILES) through `POST /v2/ocsr/recognize`, the contract
-activity 8 defines; the filter-gated pipeline, the Ketcher adapter and the
-**Recognize Molecule** UI follow in the next activity, so the control stays
-hidden until then and the removed capability leaves no dead button.
+activity 8 defines. Activity 9 (`phase-b2-recognize-e2e`) wires them end to end
+— filter gate → OCSR → SMILES → V2000 molfile through Indigo — behind the
+`imago/uploads` job protocol and re-enables the **Recognize Molecule** UI. The
+flow is implemented; section 6 is its contract.
 
 The inference paths are HTTP → `transport/{filter,ocsr}.rs` → `service/ml/` →
-ONNX Runtime (CPU). They do not touch Indigo. `/v2/info` keeps its current shape
-because Ketcher parses it; the inference diagnostics live only in `/v2/health`.
+ONNX Runtime (CPU). They do not touch Indigo. The compatibility path is the one
+exception: `transport/imago.rs` → `service/recognition.rs` runs the two ML
+stages and then converts the SMILES through `ffi/` Indigo, because Ketcher needs
+a molfile, not a SMILES. `/v2/info` keeps the fields Ketcher parses (plus the
+synthetic capability list above); the inference diagnostics live only in
+`/v2/health`.
 
 The Tauri host (`src-tauri/src/lib.rs`) does **no chemistry**: it picks a free
 port, spawns `indigo-server`, tracks the port it reports, forwards its logs and
@@ -111,6 +125,11 @@ Pattern rules:
   `http://127.0.0.1:<port>/v2/`.
 - `src/logging.ts` transparently mirrors `console.*`, uncaught errors and
   unhandled rejections into the Tauri log. It is a no-op outside Tauri.
+- **Recognize Molecule** is Ketcher's built-in "Import Structure from Image"
+  dialog. `App.tsx` removes the `hidden` button option and the sidecar
+  advertises the synthetic `imago_versions` capability; Ketcher POSTs the
+  image and polls the compatibility job. Failures reach `errorHandler` as JSON
+  text; `App.tsx` maps them to friendly dialogs.
 - Hash/`file-saver` shims exist for the webview; do not add Node-only APIs.
 
 ---
@@ -127,16 +146,25 @@ Pattern rules:
 | POST   | `/v2/indigo/calculate`, `check`, `calculate_cip`, `automap`         | Indigo                                |
 | POST   | `/v2/filter/classify`                                               | ONNX Runtime classifier               |
 | POST   | `/v2/ocsr/recognize`                                                | ONNX Runtime OCSR (encoder + decoder) |
+| POST   | `/v2/imago/uploads`                                                 | compatibility shim (filter + OCSR)    |
+| GET    | `/v2/imago/uploads/{id}`                                            | in-memory recognition job store       |
 
 Errors are `AppError` → `{ "error": "..." }`: 400 invalid input (including an
-undecodable or unsupported image), 404 unknown id, 413 payload over the 10 MiB
-cap, 422 incomplete OCSR decoding (the decoder did not finish the structure),
-500 backend failure, 503 model unavailable (missing, checksum mismatch or
-contract mismatch). The `413` is the exception to the JSON shape: it comes from
-axum's `DefaultBodyLimit`, whose body is plain text, not `{ "error": ... }`.
-`/v2/info` exposes Indigo versions only; `/v2/health` adds the targeted ONNX
-Runtime API generation and the model ids whose artifacts are present on disk.
-There is no `/v2/imago/*` surface and no job upload/polling contract.
+undecodable or unsupported image), 404 unknown id (including an unknown,
+expired or restarted recognition job), 413 payload over the 10 MiB cap, 422
+incomplete OCSR decoding (the decoder did not finish the structure), 500
+backend failure, 503 model unavailable (missing, checksum mismatch or contract
+mismatch). The `413` is the exception to the JSON shape: it comes from axum's
+`DefaultBodyLimit`, whose body is plain text, not `{ "error": ... }`.
+`/v2/info` exposes Indigo versions plus the synthetic `imago_versions`
+capability list (the rest of its payload is unchanged); `/v2/health` adds the
+targeted ONNX Runtime API generation and
+the model ids whose artifacts are present on disk. The `/v2/imago/uploads`
+pair is a compatibility shim for Ketcher's built-in job protocol, not an Imago
+backend: the implementation is the local filter → OCSR → Indigo pipeline, no
+Imago library or worker ships, and `/v2/health` exposes no Imago fields. The
+only Imago-looking field is the synthetic capability list, which Ketcher needs
+to enable its Recognize control.
 
 ---
 
@@ -146,8 +174,9 @@ Phase B replaces Imago with a two-model pipeline: a **filter** (does the image
 contain a chemical structure?) and an **OCSR** model (image → SMILES). B1
 delivers the runtime foundation, the filter and the shipped ONNX Runtime. B2
 adds OCSR inference: one hand-drawn model, a separate preprocessing pipeline
-and `POST /v2/ocsr/recognize`. The filter-gated pipeline, Ketcher adapter and UI
-wiring are the next activity; model download (B3) stays out of scope.
+and `POST /v2/ocsr/recognize`. Activity 9 (`phase-b2-recognize-e2e`) adds the
+implemented filter gate, the Ketcher-compatible job adapter and the re-enabled
+Recognize UI on top of it; model download (B3) stays out of scope.
 
 ### Runtime
 
@@ -338,10 +367,10 @@ clients do not hardcode it.
 
 ### OCSR inference contract (Phase B2)
 
-> **Status:** this subsection is the contract activity 8
-> (`phase-b2-ocsr-inference`) delivers. Its test and implement tasks follow it;
-> the filter-gated pipeline, the Ketcher `imago/uploads` adapter and the
-> _Recognize Molecule_ UI are the next activity.
+> **Status:** activity 8 (`phase-b2-ocsr-inference`) delivered this contract.
+> Activity 9 (`phase-b2-recognize-e2e`) consumes it from the filter-gated
+> pipeline and the Ketcher `imago/uploads` adapter described below. The
+> endpoint itself stays a single-image API and does not gate on confidence.
 
 **Model choice.** Phase B2 pins **one** OCSR model and **no router**:
 `ocsr-handdrawn-fp32`, provenance `ocsr-handdrawn@zenodo:10781330`. The DECIMER
@@ -468,11 +497,13 @@ decoder then runs once per emitted token:
    not `end_id`; otherwise it is `false`.
 
 `confidence` is the arithmetic mean of the chosen-token probabilities over the
-steps, including the final `end_id` step. It is informational: activity 8 does
-**not** gate on it. The in-domain hand-drawn threshold measured in the
-integration report is **0.901** and the manifest records it as
-`confidence_threshold`, but a low-confidence complete decode is still a `200`.
-The filter pipeline activity may enforce a gate only after recalibrating it.
+steps, including the final `end_id` step. `/v2/ocsr/recognize` does **not**
+gate on it: a complete low-confidence decode is still a `200` with the value.
+The in-domain hand-drawn threshold measured in the integration report is
+**0.901** and the manifest records it as `confidence_threshold`. The
+Recognize Molecule compatibility flow (below) enforces that gate, but the value
+is provisional and must be recalibrated on real inputs before it is treated as
+final.
 
 Detokenization uses the two maps in `vocab.json`, `id_to_token` and
 `token_to_id`. Ids `0` (pad), `13` (start) and `14` (end) are skipped; `end_id`
@@ -557,8 +588,165 @@ result. `AppError::Unprocessable` maps this variant to `422`.
   incomplete decode, `500` unexpected inference failure, `503` model or runtime
   unavailable (missing, checksum mismatch or contract mismatch).
 
-There is no Ketcher or UI wiring in this activity: the pipeline, the Ketcher
-`imago/uploads` adapter and the _Recognize Molecule_ control follow separately.
+This endpoint is stateless and returns the SMILES with its confidence. The
+confidence gate, the filter and the molfile conversion belong to the
+compatibility flow below; `/v2/ocsr/recognize` itself keeps returning `200` for
+a complete low-confidence decode.
+
+### Recognize Molecule compatibility flow (Phase B2)
+
+> **Status:** implemented by activity 9 (`phase-b2-recognize-e2e`). This
+> subsection describes the shipped contract and the tests that pin it.
+
+**Why a shim.** Ketcher 3.18 hardcodes the Imago job protocol in
+`RemoteStructService.recognize()`: `POST {apiPath}imago/uploads` with the image
+blob, then `GET {apiPath}imago/uploads/:id` every 500 ms after a 300 ms
+delay. The route name is Ketcher's, not ours. The sidecar implements the
+protocol as a **compatibility shim** — same paths, same states, same
+`metadata.mol_str` — backed by the local filter, OCSR and Indigo. No Imago library, worker, job format or native
+dependency is involved, and the version query is accepted and ignored because
+one local OCSR model serves every request. Patching Ketcher to call a new path
+would be a second permanent fork; the shim keeps the Ketcher boundary at the
+existing `parametrizeUrl` patch only.
+
+**Ketcher protocol.**
+
+1. `POST {apiPath}imago/uploads[?version=<v>]` with the raw image as the body
+   and the blob's `Content-Type` (`application/octet-stream` is Ketcher's
+   fallback). The shim accepts `image/png`, `image/jpeg` and `image/webp`; any
+   other media type is `400`, and a body over 10 MiB (10,485,760 bytes) is
+   `413` from axum's `DefaultBodyLimit` (plain text, not `{ "error": ... }`).
+   The `version` query is ignored.
+2. `200 { "upload_id": "<id>" }` — Ketcher reads `upload_id` from the body.
+3. Ketcher waits **300 ms** before the first poll, then polls
+   `GET {apiPath}imago/uploads/<id>` every **500 ms** until the job leaves
+   `PENDING`; there is no fixed attempt limit. The bound on a stuck job is the
+   sidecar's, not the client's (see the job store below).
+4. `{ "state": "PENDING" }` keeps polling.
+5. `{ "state": "SUCCESS", "metadata": { "mol_str": "<V2000 molfile>" } }` ends
+   the poll; Ketcher parses `mol_str` and adds the structure to the canvas.
+6. `{ "state": "FAILURE", "error": "<message>" }` ends the poll. Ketcher throws
+   `new Error(JSON.stringify(response))`, so the whole JSON reaches the editor
+   error handler; the UI owns the friendly copy.
+7. An unknown, expired or restarted job id is `404 { "error": ... }`; Ketcher
+   rejects with that message, which the UI also maps.
+
+POST does not decode the image: the body is stored and a worker runs
+`spawn_blocking` (ONNX Runtime and Indigo are synchronous) so the async runtime
+keeps serving Indigo. Decode failures, including the 12,000 px / 128 MiB bounds
+and the `8,192` px central canvas, are therefore FAILURE states, not `400`.
+Only the media type and the 10 MiB cap are validated at POST time.
+
+**Pipeline.** One job runs, in order:
+
+1. **Filter gate.** `contains_molecule` from the classifier. `false` fails the
+   job with `No molecule was detected in this image.` This is the binary
+   classifier from B1: it cannot count molecules or detect reactions, and 146
+   of 250 multi-molecule images (~58%) were `no-structure` in the frozen
+   evaluation. `no-structure` is not proof that no structure exists, so the
+   copy does not tell the user they drew nothing.
+2. **OCSR.** The same encoder/decoder pair as `/v2/ocsr/recognize`. An
+   `incomplete` decode or `confidence < confidence_threshold` (manifest value
+   `0.901`, provisional) fails the job with the message
+   `The structure could not be read confidently. Try a sharper or larger image.`
+   A truncated SMILES is never converted: an unfinished structure is an error,
+   exactly as in activity 8. Unlike the single-image endpoint, the shim **does**
+   gate on confidence. The threshold is the in-domain hand-drawn value measured
+   in the integration report; it has not been calibrated on real Chemistry Draw
+   inputs. Changing it requires a measured delta, a manifest update and a docs
+   update, following the classifier-threshold rule in `docs/conventions.md` §9.
+3. **SMILES → molfile.** The SMILES goes through the same
+   `indigo_ops::convert` as `/v2/indigo/convert`, with
+   `chemical/x-mdl-molfile` (V2000) as the output format. Convert lays the
+   structure out before writing, so the molfile carries usable 2D coordinates.
+   A conversion failure (empty or rejected SMILES, Indigo error) fails the job
+   with the message
+   `The recognized structure could not be prepared for the editor. Try again.`
+4. **SUCCESS.** `{ "state": "SUCCESS", "metadata": { "mol_str": "<molfile>" } }`.
+
+**Failure states.** The `FAILURE` body is always
+`{ "state": "FAILURE", "error": "<message>" }` with HTTP `200`; only an
+unknown, expired or restarted job id is `404`.
+
+| Condition                                             | FAILURE `error`                                                               | UI dialog                |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------ |
+| filter returns `no-structure`                         | `No molecule was detected in this image.`                                     | No molecule found        |
+| `incomplete` or low confidence                        | `The structure could not be read confidently. Try a sharper or larger image.` | Structure not recognized |
+| undecodable / unsupported / over-dimension image      | `Unsupported image. Use a PNG, JPEG or WebP file.`                            | Unsupported image        |
+| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Models not available     |
+| SMILES → molfile failure                              | `The recognized structure could not be prepared for the editor. Try again.`   | Recognition failed       |
+| still `PENDING` after the TTL                         | `Recognition timed out. Try again.`                                           | Recognition timed out    |
+
+A POST with an unsupported `Content-Type` is `400` and maps to the unsupported
+image dialog. An over-cap POST is the documented **plain-text exception**: axum's
+`DefaultBodyLimit` answers `413` with `Failed to buffer the request body`, not
+`{ "error": ... }`. Ketcher parses every response with `response.json()`, so the
+plain text makes that call throw a JSON syntax error (`Unexpected token`); the UI
+maps it to "The server could not process the image. It may be too large."
+`App.tsx` maps the documented strings (including the JSON that Ketcher wraps
+around a `FAILURE`) to the dialogs above and never shows raw JSON: a JSON body
+without a usable `error`/`message` is still treated as JSON and gets the generic
+`Recognition failed.` message, and an unrecognized non-JSON failure is shown as
+the plain error.
+
+**Job store and TTL.** The store is in-memory and per-process: an opaque id maps
+to one job (`PENDING`, `SUCCESS` or `FAILURE`), the uploaded bytes and
+timestamps. A sidecar restart drops every job, so a later poll is `404`. Two
+independent bounds apply:
+
+- **Worker bound: 120 s.** A pipeline still running after 120 seconds is
+  abandoned and its job resolves as `FAILURE` with the timeout message. This is
+  a bound on processing, not a fixed delay; it is generous because the first
+  recognition loads the ~316 MB OCSR pair from disk.
+- **Store TTL: 10 minutes (600 s).** A job still `PENDING` after 10 minutes
+  (for example a lost worker) resolves as `FAILURE` with the timeout message on
+  its next poll. A resolved job is discarded 10 minutes after it resolved, so a
+  poll after that is `404` (the timeout `FAILURE` is reachable for 10 minutes).
+  The uploaded bytes are dropped as soon as the job resolves.
+
+Both the upload and the poll handler call `purge` before answering, so expired
+entries leave the map instead of accumulating for the process lifetime; there is
+no background reaper. The store is deliberately not persisted and exposes no
+listing: it exists only to bridge Ketcher's asynchronous protocol to a
+synchronous pipeline.
+
+**UI re-enabled.** `App.tsx` no longer passes
+`buttons={{ recognize: { hidden: true } }}`. The control is enabled by the
+sidecar's synthetic `imago_versions` list, not by a local option: Ketcher
+recomputes the button's `disabled` state from `app.imagoVersions` after
+`GET /v2/info` and keeps the control disabled when the list is empty.
+
+Ketcher's built-in dialog still renders an "Imago version" selector, so
+`src/overrides.css` (imported by `App.tsx` after the Ketcher stylesheet) hides
+the label with `label[class*="imagoVersion"] { display: none !important; }`.
+The selector is meaningless here: Chemistry Draw serves one local OCSR model,
+so there is no version choice; the label and the optional `?version=` query are
+Ketcher protocol artifacts, not an Imago dependency. Ketcher defaults the value
+to `imagoVersions[1]`, which is `undefined` for the single synthetic entry, so
+it omits `?version=` entirely; when a version is present the shim accepts and
+ignores it. Ketcher's built-in "Import Structure from Image" dialog uploads,
+polls and inserts; no custom React upload UI is added. `handleError` gains the
+failure mapping above, with a generic fallback for unknown JSON.
+
+**Stale recognition results.** Ketcher turns every `recognize` promise into a
+dialog `setStruct` dispatch, so changing the image while the previous job is
+still running can let the older result overwrite the new preview (or clear it
+with an old error). `App.tsx` therefore uses `StaleSafeStructServiceProvider`,
+a thin subclass of `RemoteStructServiceProvider`: each `recognize` call takes a
+monotonic token, and only the latest token may resolve or reject. Older
+resolutions and rejections return a never-settling promise, so the stale
+Ketcher thunk never dispatches; the other struct-service methods are untouched.
+Ketcher's `StructRender` additionally caches the rendered SVG by the molfile
+title line, and the sidecar writes an empty title for every structure, so the
+wrapper rewrites the latest result's title (`Recognized structure <token>`) to
+keep the cache key distinct. The title is cosmetic: atoms and bonds are
+untouched, and the editor loads the same molecule. This is app-level code, not
+a Ketcher patch.
+
+**Input and bounds.** Raw PNG/JPEG/WebP only, 10 MiB inclusive (10,485,760
+bytes), no multipart and no base64. The classifier's `12,000 px` per side and
+`128 MiB` decoder bounds and the OCSR `8,192 px` central-canvas bound still
+apply inside the worker; they fail the job as an unsupported image.
 
 ### Health and module map
 
@@ -572,13 +760,17 @@ model's encoder, decoder and vocab. With both installed it reports
 `image-classifier@Iagea/d21f4cb` and `ocsr-handdrawn@zenodo:10781330`; an OCSR
 model with only some of its files present is not listed. Health never opens an
 OCSR session.
-`/v2/info` is **unchanged**: Ketcher parses it and does not need inference
-metadata.
+`/v2/info` adds the synthetic `imago_versions` capability list; the rest of the
+payload (`Indigo`, `indigo_version`, `api_path`) is unchanged. Ketcher parses
+the capability and needs no inference metadata.
 
 ```text
 sidecar/src/
   transport/filter.rs     POST /v2/filter/classify
   transport/ocsr.rs       POST /v2/ocsr/recognize
+  transport/imago.rs      POST /v2/imago/uploads, GET /v2/imago/uploads/{id}
+  service/recognition.rs  filter → OCSR → molfile pipeline and failure mapping
+  service/jobs.rs         in-memory recognition job store and TTL
   service/ml/
     mod.rs                shared cache and entry points
     runtime.rs            dynamically loaded ONNX Runtime environment and sessions
@@ -592,7 +784,8 @@ sidecar/src/
     classifier.rs         three-input run, sigmoid, threshold
 ```
 
-The OCSR modules are the target layout delivered by activity 8.
+The OCSR modules are the layout delivered by activity 8; the compatibility
+modules are the layout delivered by activity 9.
 
 ---
 
@@ -728,6 +921,7 @@ published a release with the fix yet. Removal procedure:
 - Reimplementing Ketcher's editor UI.
 - Supporting glibc < 2.36 or webkit2gtk < 4.1.
 - Shipping Imago or OpenCV. B1 ships an ONNX classifier gate; B2 adds OCSR
-  inference through the two-model pipeline. The shipped pinned ONNX Runtime
-  1.31.0 native library (loaded dynamically) is shared by both, but model
-  weights are never bundled; downloading models is Phase B3.
+  inference through the two-model pipeline plus the Ketcher-compatible job
+  shim. No Imago code, worker or native library is shipped. The pinned ONNX
+  Runtime 1.31.0 native library (loaded dynamically) is shared by both, but
+  model weights are never bundled; downloading models is Phase B3.

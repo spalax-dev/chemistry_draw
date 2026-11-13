@@ -105,10 +105,15 @@ Rules:
   unknown route (404).
 - No real network. Native Indigo is linked, so chemistry tests are real — that
   is the point.
-- Absence is tested cross-platform in `tests/imago_absent.rs`: `/v2/info` and
-  `/v2/health` expose no `imago_versions` / `imago_worker`, and `/v2/imago/*`
-  returns 404. The same module runs on Linux and Windows CI, so no
-  `#[cfg(windows)]` variant is needed.
+- The compatibility contract is tested cross-platform in the suite that
+  replaces `tests/imago_absent.rs`: `/v2/info` (and its `/v2/indigo/info`
+  alias) advertises exactly the synthetic `imago_versions: ["local-ocsr"]`
+  capability, `/v2/health` exposes no `imago_worker`, `POST /v2/imago/uploads`
+  returns an `upload_id`, and a `GET` for an unknown id is `404`. The old
+  assertion that `/v2/imago/uploads` returns `404` is gone: the route is now
+  the compatibility shim, while the real Imago backend stays absent. The same
+  module runs on Linux and Windows CI, so no `#[cfg(windows)]` variant is
+  needed.
 - The packaging contract tests (`scripts/lib/*.test.mjs`) assert `externalBin`
   never lists `imago-worker`, and that `scripts/check-native-libs.sh` fails on a
   directory holding `libimago*`/`*opencv*` files (case-insensitively, including
@@ -133,12 +138,12 @@ ONNX model weights are gitignored and absent in CI, and the model-gated tests
 also need a loadable ONNX Runtime, so the ML suite splits in two:
 
 - **Always run** (no model, no runtime): preprocessing units, the tensor-contract
-  comparator, the 400/413/503 error paths and anything that does not open a real
-  session.
-- **Model-gated**: real inference, the tensor-contract guard and the
-  contract-mismatch path are marked `#[ignore = "requires local ONNX model"]` and
-  run only when the model root exists. They also need a loadable ONNX Runtime
-  (`ORT_DYLIB_PATH`).
+  comparator, the 400/413/503 error paths, the recognition job store and
+  upload protocol, and anything that does not open a real session.
+- **Model-gated**: real inference, the tensor-contract guard, the
+  contract-mismatch path and the end-to-end Recognize pipeline are marked
+  `#[ignore = "requires local ONNX model"]` and run only when the model root
+  exists. They also need a loadable ONNX Runtime (`ORT_DYLIB_PATH`).
 
 `node scripts/harness.mjs` sets `CHEMISTRY_MODELS_DIR` (honouring an existing
 value, else `<repo>/models`) and `ORT_DYLIB_PATH` (honouring an existing value,
@@ -328,6 +333,71 @@ only the OCSR entry and asserts a `200`, the exact SMILES
 this fixture; the confidence is pinned as a range so a different CPU or ONNX
 Runtime build cannot make the suite brittle.
 
+### Recognize Molecule compatibility tests
+
+The `/v2/imago/uploads` shim has three test layers. The suite that replaces the
+old absence contract also pins `/v2/info` to exactly
+`imago_versions: ["local-ocsr"]` and `/v2/health` to no `imago_worker`; it never
+asserts that the route returns `404`.
+
+**Always run (no model, no runtime):**
+
+- **Job store with an injected clock.** Create → `PENDING`; completion →
+  `SUCCESS` with `metadata.mol_str`; failure → `FAILURE` with the message; a
+  job still `PENDING` at the TTL boundary becomes the timeout `FAILURE`; a
+  resolved job is pruned at `resolved_at + TTL` and a later lookup is unknown
+  (`404`); ids are unique. `len`/`is_empty` make pruning observable: the purge
+  test asserts the expired entries actually leave the map, not merely that
+  `get` answers `None`. The store is a pure state machine, so there is no
+  `sleep` and no wall-clock flakiness.
+- **Production pruning.** A stale resolved job is staged through the shared
+  store, then a poll and an upload each shrink it to the expected count,
+  proving both handlers call `purge` before answering.
+- **HTTP protocol with a stub pipeline.** `POST` returns `200 { upload_id }`
+  and ignores `?version=`; an unknown `GET` is `404`; the sequence is
+  `PENDING` → terminal; the `SUCCESS` body has `state` and exactly
+  `metadata.mol_str`; the `FAILURE` body has `state` and an `error`, with no
+  `mol_str`. The test helper polls with a short interval (20 ms) and a bounded
+  deadline; the real Ketcher client waits 300 ms, then polls every 500 ms with
+  no fixed attempt limit.
+- **POST validation.** Missing or unsupported `Content-Type` is `400`; a body
+  over 10,485,760 bytes is `413` and exactly 10,485,760 bytes is accepted by
+  the route (then the worker fails if it is not an image). Undecodable bytes
+  are a job `FAILURE`, not a `400`: POST validates only the media type and the
+  cap, and the poll is asserted to end `FAILURE` with the exact unsupported
+  image copy. The image decodes before the model registry is resolved, so that
+  assertion works without a model installed.
+- **Pipeline gates with stubbed stages.** Filter `contains_molecule: false` →
+  `No molecule was detected in this image.`; a confidence just below `0.901`
+  and an `incomplete` prediction both → the low-confidence message; a
+  confidence exactly at `0.901` on a complete decode passes; a conversion error
+  → the conversion message; a missing model/registry → the model-unavailable
+  message. The exact strings are asserted because the UI matches them.
+- **Missing model.** A temp root with no manifest (or no recognizer entry)
+  yields a `FAILURE` job, not a `503`: `POST` still returns an `upload_id`, the
+  worker resolves the configuration error, and `GET` reports
+  `state: "FAILURE"` with the setup message. `/v2/filter/classify` and
+  `/v2/ocsr/recognize` keep their direct `503`.
+- **Timeout.** Two bounds are covered. The 120 s worker bound is tested through
+  the injected seam in `spawn_processing_with` (a 20 ms bound, a fake blocking
+  pipeline released after the timeout) and asserts the exact timeout `FAILURE`.
+  The 600 s store TTL transition covers the `PENDING` → timeout `FAILURE` path
+  deterministically with the injected clock.
+
+**Model-gated (both models):**
+
+- A non-structure fixture (`chinese_character.jpg` or
+  `random_scatter_plot_64933.png`) through `POST` and polling → `FAILURE` with
+  the no-molecule message and no `mol_str`.
+- `caffeine.png` through `POST` and polling → `SUCCESS`; `metadata.mol_str`
+  contains `V2000` and `M  END`, and its counts line declares caffeine's
+  `14 15` atoms/bonds header. Converting that molfile back with Indigo yields
+  the known caffeine SMILES `CN1C=NC2=C1C(=O)N(C)C(=O)N2C`. The client
+  receives a molfile, never a SMILES. The real pipeline is asynchronous, so the
+  test polls with a bounded timeout until the job leaves `PENDING`; it never
+  relies on a fixed sleep. It needs the classifier and the OCSR pair, so it
+  self-skips when either is absent.
+
 ---
 
 ## 6. Frontend
@@ -390,4 +460,8 @@ LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
 # One test
 LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
   cargo test -p indigo-server info_endpoint_returns_version
+
+# Recognize compatibility job protocol (no model needed)
+LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
+  cargo test -p indigo-server tests::recognition
 ```

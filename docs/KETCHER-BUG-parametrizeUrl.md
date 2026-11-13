@@ -150,10 +150,10 @@ As soon as a published `ketcher-core` includes the upstream fix:
 3. Remove the `patchedDependencies` entry from `pnpm-workspace.yaml`.
 4. `pnpm install` and run `node scripts/harness.mjs`.
 
-No recognition backend ships today: Imago was removed in Phase A and
-_Recognize Molecule_ is hidden. Recognition returns with the two Phase B models
-(filter + OCSR), and the patch stays applied only until Phase C ships the fixed
-Ketcher release.
+Imago was removed in Phase A. Recognition returns through the B2 local
+filter + OCSR pipeline and the `/v2/imago/uploads` compatibility shim, so the
+patch is still required for the status-poll URL; it stays applied until Phase C
+ships the fixed Ketcher release.
 
 ## Verification
 

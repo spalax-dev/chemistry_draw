@@ -162,8 +162,8 @@ never bundled.
 ## Windows 10/11 (x86_64)
 
 Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker
-builder. It runs the same sidecar as Linux; Recognize Molecule is hidden on
-every platform until B2 wires OCSR.
+builder. It runs the same sidecar as Linux; B2 re-enables Recognize Molecule
+through the local filter + OCSR pipeline and its Ketcher-compatible job shim.
 
 Prerequisites:
 

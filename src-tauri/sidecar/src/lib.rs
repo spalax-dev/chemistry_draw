@@ -27,6 +27,8 @@
 //! | POST   | `/v2/indigo/layout`             | Indigo                 |
 //! | POST   | `/v2/filter/classify`           | ONNX Runtime classifier|
 //! | POST   | `/v2/ocsr/recognize`            | ONNX Runtime OCSR      |
+//! | POST   | `/v2/imago/uploads`             | compatibility shim     |
+//! | GET    | `/v2/imago/uploads/{id}`        | recognition job store  |
 
 pub mod error;
 pub mod ffi;
@@ -41,7 +43,7 @@ pub use state::AppState;
 
 /// Builds the full [`axum::Router`] with all routes.
 pub fn build_router(state: AppState) -> axum::Router {
-    use axum::{routing::get, routing::post, Router};
+    use axum::{extract::DefaultBodyLimit, routing::get, routing::post, Router};
 
     Router::new()
         .route("/v2/info", get(transport::info::get_info))
@@ -71,5 +73,11 @@ pub fn build_router(state: AppState) -> axum::Router {
         .route("/v2/indigo/automap", post(transport::indigo::post_automap))
         .route("/v2/filter/classify", transport::filter::route())
         .route("/v2/ocsr/recognize", transport::ocsr::route())
+        .route(
+            "/v2/imago/uploads",
+            post(transport::imago::post_upload)
+                .layer(DefaultBodyLimit::max(transport::filter::MAX_BODY_BYTES)),
+        )
+        .route("/v2/imago/uploads/:id", get(transport::imago::get_upload))
         .with_state(state)
 }

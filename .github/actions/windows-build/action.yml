@@ -111,25 +111,64 @@ runs:
             }
           }
           if (-not $info) { throw "/v2/info did not become reachable on port $port" }
-          $infoText = [string]$info.Content
-          if ($infoText -match "imago_versions") {
-            throw "/v2/info still exposes imago_versions: $infoText"
+          if ($info.StatusCode -ne 200) {
+            throw "/v2/info returned $($info.StatusCode), expected 200"
+          }
+          $infoJson = $info.Content | ConvertFrom-Json
+          if (@($infoJson.imago_versions) -notcontains "local-ocsr") {
+            throw "/v2/info must advertise the synthetic local-ocsr capability: $($info.Content)"
           }
 
           $health = Invoke-WebRequest -Uri "$base/health"
+          if ($health.StatusCode -ne 200) {
+            throw "/v2/health returned $($health.StatusCode), expected 200"
+          }
           $healthJson = $health.Content | ConvertFrom-Json
           if ($null -ne $healthJson.imago_worker) {
             throw "/v2/health still exposes imago_worker"
           }
-          if ([string]$health.Content -match "imago_versions") {
+          if ($null -ne $healthJson.imago_versions) {
             throw "/v2/health still exposes imago_versions"
           }
 
+          $fixture = "src-tauri\sidecar\fixtures\caffeine.png"
+          if (-not (Test-Path $fixture)) { throw "missing fixture $fixture" }
           $upload = Invoke-WebRequest -Method POST -Uri "$base/imago/uploads" `
-            -Body "{}" -ContentType "application/json" -SkipHttpErrorCheck
-          if ($upload.StatusCode -ne 404) {
-            throw "/v2/imago/uploads returned $($upload.StatusCode), expected 404"
+            -InFile $fixture -ContentType "image/png" -SkipHttpErrorCheck
+          if ($upload.StatusCode -ne 200) {
+            throw "/v2/imago/uploads returned $($upload.StatusCode), expected 200"
           }
+          $uploadJson = $upload.Content | ConvertFrom-Json
+          $uploadId = [string]$uploadJson.upload_id
+          if (-not $uploadId) {
+            throw "/v2/imago/uploads returned no upload_id: $($upload.Content)"
+          }
+
+          $unknown = Invoke-WebRequest `
+            -Uri "$base/imago/uploads/00000000-0000-0000-0000-000000000000" `
+            -SkipHttpErrorCheck
+          if ($unknown.StatusCode -ne 404) {
+            throw "unknown upload id returned $($unknown.StatusCode), expected 404"
+          }
+
+          # Poll briefly so the job can leave PENDING. Models are not required
+          # on the runner, so a terminal FAILURE (model unavailable) is fine;
+          # a still-PENDING job is accepted rather than failed.
+          $job = $null
+          $jobDeadline = (Get-Date).AddSeconds(10)
+          do {
+            $job = Invoke-WebRequest -Uri "$base/imago/uploads/$uploadId" -SkipHttpErrorCheck
+            if ($job.StatusCode -ne 200) {
+              throw "GET /v2/imago/uploads/$uploadId returned $($job.StatusCode), expected 200"
+            }
+            $jobJson = $job.Content | ConvertFrom-Json
+            if ($jobJson.state -ne "PENDING") { break }
+            Start-Sleep -Milliseconds 500
+          } while ((Get-Date) -lt $jobDeadline)
+          if (-not $jobJson.state) {
+            throw "GET /v2/imago/uploads/$uploadId returned no state: $($job.Content)"
+          }
+          Write-Host "Recognition job $uploadId state: $($jobJson.state)"
 
           Write-Host "Sidecar smoke test passed on port $port"
         }

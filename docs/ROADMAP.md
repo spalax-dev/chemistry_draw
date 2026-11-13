@@ -1,6 +1,6 @@
 # Chemistry Draw — Roadmap
 
-> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo, the B1 ONNX classifier gate and the B2 OCSR inference contract**. Phase A shipped Imago-free builds on Windows and Linux; _Recognize Molecule_ stays hidden until the B2 pipeline wires OCSR.
+> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo, the B1 ONNX classifier gate and B2 OCSR recognition**. Phase A shipped Imago-free builds on Windows and Linux; B2 re-enables _Recognize Molecule_ through the local filter → OCSR → Indigo pipeline and its Ketcher-compatible job shim.
 
 ## Overview
 
@@ -8,7 +8,7 @@
 | ------ | ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------- |
 | **A**  | Remove Imago dependency entirely                       | —                        | Smaller, simpler packages; Imago-free release on all platforms  |
 | **B1** | Filter model: molecule present vs. not                 | A (recommended)          | ONNX foundation + classifier endpoint (in progress)             |
-| **B2** | OCSR model: image → SMILES                             | B1                       | Local end-to-end image→SMILES (replaces Imago recognition)      |
+| **B2** | OCSR model: image → structure                          | B1                       | Local end-to-end image→molfile (replaces Imago recognition)     |
 | **B3** | Remote model delivery from Hugging Face + first-run UX | B2                       | Lightweight installers; on-demand download + progress/setup UI  |
 | **C**  | Update Ketcher + enable language selector              | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config |
 | **D**  | Live local functional review                           | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next   |
@@ -97,13 +97,15 @@ package sizes are recorded below.
 **Goal:** full local conversion pipeline: filter-approved image → **SMILES**.
 
 **Status: in progress (started 2026-11-12).** Activity 8
-(`phase-b2-ocsr-inference`) delivers the inference foundation: the single-model
+(`phase-b2-ocsr-inference`) delivered the inference foundation: the single-model
 decision, the manifest extension, the DECIMER preprocessing, the
 encoder/decoder contract, greedy decoding and `POST /v2/ocsr/recognize`,
-including the `422` incomplete case. The docs task defines the contract; the
-test and implement tasks follow in the same activity. Remaining after activity
-8: the filter-gated pipeline, the Ketcher `imago/uploads` adapter and the
-_Recognize Molecule_ UI.
+including the `422` incomplete case. Activity 9 (`phase-b2-recognize-e2e`)
+implements the rest: the filter gate, OCSR confidence/incomplete gating,
+SMILES → V2000 molfile through Indigo, Ketcher's compatible
+`POST /v2/imago/uploads` + `GET /v2/imago/uploads/{id}` job protocol, and the
+_Recognize Molecule_ UI with friendly failure dialogs. All activity 9 tasks are
+done except the final review, which is pending.
 
 - **Model selection (decided 2026-11-12):** one model, the DECIMER v2
   **hand-drawn FP32** export (`ocsr-handdrawn-fp32`, provenance
@@ -125,9 +127,26 @@ _Recognize Molecule_ UI.
   (10 MiB cap) and returns `smiles`, `confidence`, `incomplete` and `model`;
   undecodable input is `400`, over-cap `413`, missing/invalid model or runtime
   `503`, and a decode that reaches `max_len` without `end_id` is `422` with an
-  actionable message. Confidence is the mean chosen-token probability and is
-  not gated in this activity (the in-domain hand-drawn threshold 0.901 is
-  recorded in the manifest only).
+  actionable message. Confidence is the mean chosen-token probability and the
+  single-image endpoint does not gate on it.
+- **Recognize compatibility flow (activity 9):** Ketcher's built-in control
+  hardcodes `POST /v2/imago/uploads` + `GET /v2/imago/uploads/{id}`. The sidecar
+  implements that protocol as a shim — same states, `metadata.mol_str` — with
+  no Imago library or worker. The worker runs the filter gate (`no-structure`
+  → FAILURE), OCSR (an `incomplete` decode or `confidence < 0.901` → FAILURE),
+  then converts the SMILES to a V2000 molfile through Indigo. Jobs run in
+  `spawn_blocking`, are in-memory and expire after 10 minutes; unknown ids are
+  `404`. `/v2/info` advertises one synthetic `imago_versions` entry
+  (`local-ocsr`) because Ketcher disables the control when the list is empty,
+  and the `?version=` query is ignored.
+- **Confidence threshold:** `confidence_threshold: 0.901` in the manifest is
+  **provisional** — it is the in-domain hand-drawn measurement and has not been
+  calibrated on real Chemistry Draw inputs. The compatibility pipeline enforces
+  it; changing it requires a measured delta plus manifest and docs updates.
+- **UI:** _Recognize Molecule_ is visible again. `App.tsx` drops the hidden
+  button option and maps no-molecule, low-confidence/incomplete,
+  unsupported-image and model-unavailable failures to friendly dialogs with a
+  generic fallback; raw JSON never reaches the user.
 - **Preprocessing:** `decimer_ocsr`, a separate pipeline from the classifier's
   `runtime_default` (white composite, contrast stretch, BGR2GRAY quirk,
   `Contrast(1.8)`, resize rules, border crop, central square, brightness 1.6,
@@ -135,11 +154,13 @@ _Recognize Molecule_ UI.
   remap `!$^<>?£¢€§` → `1234567890`.
 - **Known limits:** canonical accuracy 0.7300 on the hand-drawn evaluation;
   CPU latency p50 1115 ms / p95 2156 ms; a truncated decode is an error, never
-  a partial SMILES. Session loading is lazy, so startup and health stay fast.
-- **DoD:** image → filter → OCSR → SMILES works locally for representative
-  hand-drawn and printed cases; non-molecule images are rejected by the filter
-  with a clear state; harness + targeted tests green; UX shows clear
-  success/failure states.
+  a partial SMILES. The filter's multi-molecule false negatives (146 of 250,
+  ~58%) still apply, so "no molecule" is not proof that no structure exists.
+  Session loading is lazy, so startup and health stay fast.
+- **DoD:** Recognize Molecule takes a representative hand-drawn or printed image
+  through filter → OCSR → molfile and inserts it into the editor; non-molecule
+  images and low-confidence/incomplete decodes fail with clear states; missing
+  models produce a setup dialog; harness + targeted tests green.
 
 ### B3 — Remote model download (Hugging Face) + first-run setup
 
@@ -185,9 +206,9 @@ _Recognize Molecule_ UI.
 Phase A is complete (Imago removed, lighter artifacts published) and **B1 is in
 progress**: activity 7 ships the ONNX Runtime and its measured package-size delta
 is recorded above, so what remains is model-gated tests and real-input threshold
-calibration. **B2 is in progress**: activity 8 defines the OCSR inference
-contract and implements the hand-drawn model (encoder + decoder + vocabulary,
-`decimer_ocsr` preprocessing, greedy decode, `POST /v2/ocsr/recognize`); the
-next activity wires the filter-gated pipeline, the Ketcher adapter and the
-_Recognize Molecule_ UI. B3 remote delivery and Phase C stay behind B2, with C
-merged whenever the upstream Ketcher fix ships.
+calibration. **B2 is in progress**: activity 8 delivered the hand-drawn OCSR
+model and `POST /v2/ocsr/recognize`; activity 9 implemented the filter gate, the
+SMILES→molfile conversion, the Ketcher `imago/uploads` compatibility job and the
+_Recognize Molecule_ UI, with `0.901` as a provisional confidence gate, and is in
+review. B3 remote delivery and Phase C stay behind B2, with C merged whenever the
+upstream Ketcher fix ships.

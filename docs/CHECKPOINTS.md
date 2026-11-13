@@ -55,16 +55,20 @@
 - [ ] `progress/history.md` has an entry for the last session.
 - [ ] The last worked activity reflects its correct state.
 
-## C6 — No Imago Anywhere
+## C6 — No Imago Backend (compatibility route only)
 
 - [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.46.0, verifies SHA-256 and
       never vendors DLLs/`.lib` files.
-- [ ] No Imago code, route, worker binary, native library or packaging
-      reference remains (outside `CHANGELOG.md`, `progress/history.md`, the
-      roadmap and the checks that assert its absence).
-- [ ] `src-tauri/sidecar/src/tests/imago_absent.rs` runs on every platform:
-      `/v2/info` and `/v2/health` expose no `imago_versions` / `imago_worker`,
-      and `/v2/imago/*` returns 404.
+- [ ] No Imago code, worker binary, native library or packaging reference
+      remains (outside `CHANGELOG.md`, `progress/history.md`, the roadmap and
+      the checks that assert its absence). The `/v2/imago/uploads` pair is our
+      compatibility shim (filter → OCSR → Indigo), not Imago code; no Imago
+      library or worker runs.
+- [ ] The former Imago-absence suite runs on every platform and pins the
+      compatibility contract: `/v2/info` (and `/v2/indigo/info`) advertises
+      exactly `imago_versions: ["local-ocsr"]` as a synthetic capability,
+      `/v2/health` exposes no `imago_worker`, `POST /v2/imago/uploads` returns
+      an `upload_id`, and an unknown `GET /v2/imago/uploads/{id}` is `404`.
 - [ ] The packaging contract test asserts `externalBin` never lists
       `imago-worker`.
 - [ ] Rebuilt artifacts contain no imago-worker/libimago/OpenCV (deb/rpm/AppImage
@@ -73,8 +77,12 @@
       real `libonnxruntime.so.1.31.0` plus the `.so.1`/`.so` symlinks on Linux,
       `onnxruntime.dll` on Windows — and no model weights.
 - [ ] NSIS installer is uploaded as an artifact.
-- [ ] Docs state that Recognize Molecule is hidden until B2 wires OCSR and list
-      the Windows build commands.
+- [ ] With both model sets and a loadable runtime, Recognize Molecule is visible
+      and `caffeine.png` inserts a V2000 structure into the canvas; a
+      non-structure image, a low-confidence/incomplete decode, an unsupported
+      image and missing models each surface a friendly dialog, never raw JSON.
+- [ ] Docs state that the `/v2/imago/*` pair is a Ketcher compatibility shim,
+      that no Imago library/worker ships, and list the Windows build commands.
 - [ ] Linux harness and packaging metadata remain green.
 
 ## C7 — Docs → Test → Implement → Review
@@ -140,6 +148,39 @@
       undecodable input to `400`, over-cap to `413`, missing/invalid model or
       runtime to `503`, and a truncated decode (`incomplete: true`) to `422`
       with an actionable message and no partial SMILES.
+- [ ] `POST /v2/imago/uploads` accepts raw PNG/JPEG/WebP (10 MiB cap) and
+      returns an `upload_id`; `GET /v2/imago/uploads/{id}` reports `PENDING`,
+      `SUCCESS` with `metadata.mol_str` (V2000) or `FAILURE` with an actionable
+      message; an unknown/expired id is `404`. Jobs run in `spawn_blocking` and
+      do not survive a restart. The worker has a 120 s processing bound (a
+      pipeline over it becomes the timeout `FAILURE`); the store TTL is 10
+      minutes (a `PENDING` job becomes a timeout `FAILURE`; a resolved job is
+      pruned at `resolved_at + TTL`). Both handlers prune the store before
+      answering, so expired entries actually leave the map.
+- [ ] The compatibility pipeline is filter → OCSR → SMILES → molfile through
+      Indigo. It maps a filter rejection, an `incomplete` or low-confidence
+      decode, an unsupported image, a missing model/runtime, a conversion
+      failure and a timeout to the documented `FAILURE` messages, and never
+      returns a partial SMILES.
+- [ ] The `confidence_threshold` `0.901` is enforced only by the compatibility
+      pipeline (the single-image endpoint still returns `200` for a complete
+      low-confidence decode). The value is **provisional**: it is the in-domain
+      hand-drawn measurement and needs recalibration on real inputs before it is
+      treated as final.
+- [ ] `/v2/info` advertises exactly one synthetic `imago_versions` entry
+      (`local-ocsr`) so Ketcher enables Recognize; the real Imago backend,
+      worker and libraries remain absent, and the `?version=` query is ignored.
+- [ ] `App.tsx` no longer hides Recognize and maps no-molecule,
+      low-confidence/incomplete, unsupported-image and model-unavailable
+      failures to friendly dialogs with a generic fallback. A JSON body without
+      a usable `error`/`message` is treated as JSON and shown as the generic
+      failure, and the plain-text `413` path (a JSON parse error in Ketcher)
+      maps to the "may be too large" copy; raw JSON never reaches the user.
+- [ ] The replaced `imago_absent` contract is tested on every platform: the
+      synthetic info capability, no `imago_worker`, `POST` returning
+      `upload_id`, unknown `GET` `404`, job store states/TTL, missing-model
+      `FAILURE`, filter rejection and a model-gated caffeine `SUCCESS` with a
+      V2000 molfile.
 - [ ] OCSR sessions load lazily on the first recognition request and are
       cached; startup, `/v2/health` and `/v2/filter/classify` never open them.
       Health lists both model ids only when their required artifacts exist.
@@ -157,7 +198,9 @@
       or a fallback. The 503 is logged at WARN, not as an internal error.
 - [ ] `/v2/health` reports the targeted ONNX Runtime API generation and only
       model ids whose required artifacts exist on disk (classifier file; OCSR
-      encoder + decoder + vocab); `/v2/info` is unchanged.
+      encoder + decoder + vocab). `/v2/info` adds only the synthetic
+      `imago_versions` capability list: the rest of its payload is unchanged and
+      it exposes no inference/backend fields.
 - [ ] Non-gated temp-dir tests cover wrong checksum, missing artifact,
       unsupported schema, a manifest without `image-classifier` and a
       preprocessing mismatch; a model-gated test covers a graph/manifest shape

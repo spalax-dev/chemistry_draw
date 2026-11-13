@@ -357,3 +357,37 @@ Phase B2 OCSR inference: image → SMILES with the DECIMER hand-drawn FP32 model
 - Gates: 166 default / 176 with `--include-ignored`, 75 Node tests, policy 32/32,
   harness green, fmt/Clippy/ShellCheck clean.
 - Next: filter-gated pipeline + Ketcher `imago/uploads` adapter + Recognize UI.
+
+---
+
+## Activity 9 — phase-b2-recognize-e2e (feat, complete 2026-11-13)
+
+Recognize Molecule end to end: filter → OCSR → SMILES → molfile through the
+Ketcher-compatible job protocol, with the UI re-enabled.
+
+- Backend: `POST /v2/imago/uploads` accepts a raw image and returns an
+  `upload_id`; `GET /v2/imago/uploads/{id}` reports PENDING/SUCCESS
+  (`metadata.mol_str`)/FAILURE; unknown ids 404. The in-memory job store has a
+  600 s TTL, timeout FAILURE and production purge on both handlers; the worker
+  runs in `spawn_blocking`.
+- Pipeline: classifier is a hard gate (no molecule → clear FAILURE), OCSR uses
+  the manifest confidence threshold 0.901 and rejects incomplete decoding, and
+  Indigo converts the SMILES to a V2000 molfile.
+- `/v2/info` advertises the synthetic `imago_versions: ["local-ocsr"]` capability
+  so Ketcher enables Recognize; `/v2/health` stays free of Imago backend fields.
+  The old `imago_absent` route contract was replaced by the compatibility-route
+  contract (sidecar tests and the Windows CI smoke updated).
+- UI: Recognize enabled; friendly failure dialogs for no molecule, low
+  confidence/incomplete, model unavailable, conversion, unsupported image and
+  timeout; unknown JSON never shown raw; plain-text 413/SyntaxError mapped.
+- Manual-testing fixes: the "Imago version" selector is hidden with an app-level
+  CSS override (no Ketcher patch); the recognized preview cache is keyed by the
+  molfile title, so the app now assigns each current result a unique title and
+  ignores stale recognition results via a struct-service wrapper. Playwright
+  proved caffeine → aspirin updates the preview and Add to Canvas inserts
+  aspirin; caffeine → Chinese character clears the preview with friendly copy.
+- Tests: 207 sidecar tests with `--include-ignored` (job store/TTL/purge,
+  upload/poll/404, missing model, filter rejection, timeout, caffeine molfile,
+  non-structure); 75 Node tests; harness green.
+- Review: two REQUEST_CHANGES rounds (test/doc evidence, job-store pruning,
+  stale docs, then the UI issues) followed by PASS after the user's manual check.

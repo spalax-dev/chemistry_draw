@@ -1,0 +1,17 @@
+/*
+ * App-level overrides for the embedded Ketcher UI.
+ *
+ * Keep this file limited to hiding Ketcher protocol artifacts Chemistry Draw
+ * does not use. Never edit node_modules or patch the Ketcher packages.
+ */
+
+/*
+ * Ketcher always renders an "Imago version" selector in the Recognize dialog.
+ * Chemistry Draw ships one local OCSR model, so there is no version to pick;
+ * the selector (and its query parameter) is meaningless here.
+ * The class is CSS-module hashed (`Recognize-module_imagoVersion__nBIj6`), so
+ * match on the stable substring instead of the full class name.
+ */
+label[class*="imagoVersion"] {
+  display: none !important;
+}
