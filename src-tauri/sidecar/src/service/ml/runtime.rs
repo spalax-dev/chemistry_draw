@@ -3,7 +3,8 @@
 //! ONNX Runtime allows exactly one environment per process, so the environment
 //! is created once on first use and shared by every session. Initialisation is
 //! lazy: the sidecar starts and serves Indigo even when `libonnxruntime` or the
-//! models are missing, and only the classifier reports the problem (HTTP 503).
+//! models are missing, and only the classifier and OCSR endpoints report the
+//! problem (HTTP 503).
 //!
 //! The runtime is loaded **dynamically** (`ort`'s `load-dynamic` feature): the
 //! sidecar never links `libonnxruntime`. Activity 7 ships the pinned 1.31.0
@@ -12,7 +13,7 @@
 //! copy); otherwise it passes the bare platform name (`libonnxruntime.so` /
 //! `onnxruntime.dll`) so the normal loader search path (`LD_LIBRARY_PATH`,
 //! `PATH`) applies. A failed load is an actionable error, never a panic, and
-//! the endpoint maps it to HTTP 503.
+//! the classifier and OCSR endpoints map it to HTTP 503.
 //!
 //! `ort` 2.0.0-rc.15 does not expose the exact patch version of the loaded
 //! runtime through its safe API. [`version_string`] therefore reports the ONNX

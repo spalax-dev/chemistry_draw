@@ -110,19 +110,54 @@
       `45214:0` and `45216:0` fed zeros as float32 `[1, 1, 1, 3]`, output
       `Identity:0` float32 `[1, 1]`; `score = sigmoid(logit)` and `structure`
       when `score <= 0.000089`, else `no-structure`.
-- [ ] Contract validation accepts dynamic `-1` only on axis 0 (batch); dynamic
-      width/height/channels and static mismatches are errors, with pure unit
-      tests.
+- [ ] The classifier contract comparator accepts dynamic `-1` only on axis 0
+      (batch); dynamic width/height/channels and static mismatches are errors,
+      with pure unit tests. The OCSR decoder sequence axis (axis 1) is the only
+      additional dynamic axis.
 - [ ] Preprocessing follows DECIMER `runtime_default` and never auto-inverts,
       histogram-equalizes, sharpens or autocontrasts in the default path.
       Decoding is bounded (12,000 px per side, 128 MiB) and over-limit input is
       `400`.
+- [ ] The manifest has a second `ocsr-handdrawn` entry that pins the encoder,
+      decoder-step and vocabulary files (`artifact_sha256`), sets
+      `preprocessing: "decimer_ocsr"`, `start_id: 13`, `end_id: 14`,
+      `max_len: 302` and `confidence_threshold: 0.901`, and declares both tensor
+      contracts. The `image-classifier` entry and schema 1 stay unchanged.
+- [ ] The OCSR tensor contract holds: encoder `image` float32
+      `[1, 512, 512, 3]` → `Identity:0` float32 `[1, 256, 512]`; decoder
+      `tokens` int32 `[1, seq]` + `enc_out` float32 `[1, 256, 512]` (+ declared
+      extra inputs fed zeros) → `Identity:0` float32 `[1, seq, 156]`, already
+      softmaxed. Greedy decode seeds `[13]`, argmaxes the last position, stops
+      at `14` or `max_len = 302`, treats `last != 14` as `incomplete`, and
+      reports the mean chosen-token probability as `confidence`.
+- [ ] `decimer_ocsr` runs the exact order: RGBA on white, per-image contrast
+      stretch, BGR2GRAY quirk (`0.114*R + 0.587*G + 0.299*B`),
+      `Contrast(1.8)`, resize rules, empty-border crop, central square,
+      brightness 1.6, 512×512 LANCZOS RGB, ImageNet normalization in NHWC. The
+      tokenizer skips pad/start/end and remaps `!$^<>?£¢€§` → `1234567890`.
+- [ ] `POST /v2/ocsr/recognize` accepts raw PNG/JPEG/WebP under the 10 MiB cap,
+      returns `smiles`, `confidence`, `incomplete: false` and `model`, and maps
+      undecodable input to `400`, over-cap to `413`, missing/invalid model or
+      runtime to `503`, and a truncated decode (`incomplete: true`) to `422`
+      with an actionable message and no partial SMILES.
+- [ ] OCSR sessions load lazily on the first recognition request and are
+      cached; startup, `/v2/health` and `/v2/filter/classify` never open them.
+      Health lists both model ids only when their required artifacts exist.
+- [ ] OCSR preprocessing, vocabulary and greedy-decode tests run without the
+      model (fake decoder step); real-fixture and tensor-contract tests need
+      `models/ocsr-handdrawn-fp32/` (~316 MB, gitignored, never bundled) and
+      self-skip when absent.
+- [ ] `NOTICE` records the DECIMER v2 hand-drawn OCSR model (CC-BY-4.0,
+      Zenodo 10781330) and states the artifacts are downloaded, not bundled; the
+      docs record the single-model decision and its metrics (0.7300 hand-drawn
+      canonical; printed 0.694 vs 0.704; printed model 0.677 on hand-drawn).
 - [ ] The sidecar starts without models and without the runtime; a missing,
       corrupt or contract-mismatched model returns 503 with an actionable
       message naming the manifest path and `CHEMISTRY_MODELS_DIR`, never a panic
       or a fallback. The 503 is logged at WARN, not as an internal error.
 - [ ] `/v2/health` reports the targeted ONNX Runtime API generation and only
-      model ids whose artifact exists on disk; `/v2/info` is unchanged.
+      model ids whose required artifacts exist on disk (classifier file; OCSR
+      encoder + decoder + vocab); `/v2/info` is unchanged.
 - [ ] Non-gated temp-dir tests cover wrong checksum, missing artifact,
       unsupported schema, a manifest without `image-classifier` and a
       preprocessing mismatch; a model-gated test covers a graph/manifest shape

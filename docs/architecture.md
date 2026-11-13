@@ -22,15 +22,15 @@ Instead of Ketcher's WASM backend, the app ships a **native REST sidecar** that
 implements the Indigo v2 HTTP API on top of EPAM's C++ libraries. This is a
 community packaging: it is not an official EPAM product.
 
-| Piece             | Technology                                                                             |
-| ----------------- | -------------------------------------------------------------------------------------- |
-| Desktop shell     | Tauri v2 (Rust)                                                                        |
-| Frontend          | React 18 + TypeScript + Vite                                                           |
-| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §10)                             |
-| Chemistry backend | `indigo-server` sidecar: Rust + axum                                                   |
-| Native chemistry  | `libindigo`, `libindigo-renderer` (FFI)                                                |
-| Image inference   | ONNX Runtime 1.31.0 (shipped) via `ort` 2.0.0-rc.15 (dynamic, CPU, DECIMER classifier) |
-| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS                        |
+| Piece             | Technology                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| Desktop shell     | Tauri v2 (Rust)                                                                               |
+| Frontend          | React 18 + TypeScript + Vite                                                                  |
+| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §10)                                    |
+| Chemistry backend | `indigo-server` sidecar: Rust + axum                                                          |
+| Native chemistry  | `libindigo`, `libindigo-renderer` (FFI)                                                       |
+| Image inference   | ONNX Runtime 1.31.0 (shipped) via `ort` 2.0.0-rc.15 (dynamic, CPU, DECIMER classifier + OCSR) |
+| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS                               |
 
 ---
 
@@ -57,13 +57,14 @@ community packaging: it is not an official EPAM product.
 The sidecar links Indigo and Indigo Renderer on every platform. It exposes no
 Imago fields: `/v2/imago/*` does not exist, and there is no job upload/polling
 contract. Phase B1 adds an ONNX Runtime classifier (`POST /v2/filter/classify`)
-that decides whether an image contains a chemical structure. OCSR (image →
-SMILES) is still absent, so Ketcher's **Recognize Molecule** control stays hidden
-until B2 wires the full pipeline, and the removed capability leaves no dead
-button.
+that decides whether an image contains a chemical structure. Phase B2 adds OCSR
+inference (image → SMILES) through `POST /v2/ocsr/recognize`, the contract
+activity 8 defines; the filter-gated pipeline, the Ketcher adapter and the
+**Recognize Molecule** UI follow in the next activity, so the control stays
+hidden until then and the removed capability leaves no dead button.
 
-The classifier path is HTTP → `transport/filter.rs` → `service/ml/` → ONNX
-Runtime (CPU). It does not touch Indigo. `/v2/info` keeps its current shape
+The inference paths are HTTP → `transport/{filter,ocsr}.rs` → `service/ml/` →
+ONNX Runtime (CPU). They do not touch Indigo. `/v2/info` keeps its current shape
 because Ketcher parses it; the inference diagnostics live only in `/v2/health`.
 
 The Tauri host (`src-tauri/src/lib.rs`) does **no chemistry**: it picks a free
@@ -116,19 +117,21 @@ Pattern rules:
 
 ## 5. Sidecar API surface
 
-| Method | Path                                                                | Backend                           |
-| ------ | ------------------------------------------------------------------- | --------------------------------- |
-| GET    | `/v2/info`                                                          | versions + `api_path` (real port) |
-| GET    | `/v2/health`                                                        | diagnostics for bug reports       |
-| GET    | `/v2/indigo/info`                                                   | alias of `/v2/info`               |
-| POST   | `/v2/indigo/convert`, `aromatize`, `dearomatize`, `layout`, `clean` | Indigo                            |
-| POST   | `/v2/indigo/render`                                                 | Indigo Renderer                   |
-| POST   | `/v2/indigo/calculate`, `check`, `calculate_cip`, `automap`         | Indigo                            |
-| POST   | `/v2/filter/classify`                                               | ONNX Runtime classifier           |
+| Method | Path                                                                | Backend                               |
+| ------ | ------------------------------------------------------------------- | ------------------------------------- |
+| GET    | `/v2/info`                                                          | versions + `api_path` (real port)     |
+| GET    | `/v2/health`                                                        | diagnostics for bug reports           |
+| GET    | `/v2/indigo/info`                                                   | alias of `/v2/info`                   |
+| POST   | `/v2/indigo/convert`, `aromatize`, `dearomatize`, `layout`, `clean` | Indigo                                |
+| POST   | `/v2/indigo/render`                                                 | Indigo Renderer                       |
+| POST   | `/v2/indigo/calculate`, `check`, `calculate_cip`, `automap`         | Indigo                                |
+| POST   | `/v2/filter/classify`                                               | ONNX Runtime classifier               |
+| POST   | `/v2/ocsr/recognize`                                                | ONNX Runtime OCSR (encoder + decoder) |
 
 Errors are `AppError` → `{ "error": "..." }`: 400 invalid input (including an
 undecodable or unsupported image), 404 unknown id, 413 payload over the 10 MiB
-cap, 500 backend failure, 503 model unavailable (missing, checksum mismatch or
+cap, 422 incomplete OCSR decoding (the decoder did not finish the structure),
+500 backend failure, 503 model unavailable (missing, checksum mismatch or
 contract mismatch). The `413` is the exception to the JSON shape: it comes from
 axum's `DefaultBodyLimit`, whose body is plain text, not `{ "error": ... }`.
 `/v2/info` exposes Indigo versions only; `/v2/health` adds the targeted ONNX
@@ -141,8 +144,10 @@ There is no `/v2/imago/*` surface and no job upload/polling contract.
 
 Phase B replaces Imago with a two-model pipeline: a **filter** (does the image
 contain a chemical structure?) and an **OCSR** model (image → SMILES). B1
-delivers the runtime foundation, the filter and the shipped ONNX Runtime.
-Model download (B3), OCSR and UI wiring stay out of scope for B1.
+delivers the runtime foundation, the filter and the shipped ONNX Runtime. B2
+adds OCSR inference: one hand-drawn model, a separate preprocessing pipeline
+and `POST /v2/ocsr/recognize`. The filter-gated pipeline, Ketcher adapter and UI
+wiring are the next activity; model download (B3) stays out of scope.
 
 ### Runtime
 
@@ -196,13 +201,22 @@ models/
   manifest.json
   image-classifier-fp16/
     classifier.fp16.onnx
+  ocsr-handdrawn-fp32/
+    encoder.onnx
+    decoder_step.onnx
+    vocab.json
 ```
 
-`manifest.json` is the source of truth for each model: artifact path,
-`artifact_sha256`, provenance id and the exact tensor contract. Loading checks
-the file checksum, then validates input/output names, shapes and dtype against
+`manifest.json` is the source of truth for each model: artifact paths,
+SHA-256 checksums, provenance id and the exact tensor contracts. Loading checks
+each file checksum, then validates input/output names, shapes and dtype against
 the graph. A missing file, checksum mismatch or contract mismatch is a
 configuration error (HTTP 503), never a silent fallback.
+
+The classifier entry keeps the single-artifact schema-1 shape below. The OCSR
+entry is a second key in the same `models` map; it declares two graphs and a
+vocabulary, so it is described separately in the OCSR subsection. Adding it
+does not change the classifier entry or the schema version.
 
 ```json
 {
@@ -322,28 +336,263 @@ clients do not hardcode it.
   dimensions or decoder allocations), `413` payload over 10 MiB, `503` model
   unavailable (missing, checksum mismatch or contract mismatch).
 
+### OCSR inference contract (Phase B2)
+
+> **Status:** this subsection is the contract activity 8
+> (`phase-b2-ocsr-inference`) delivers. Its test and implement tasks follow it;
+> the filter-gated pipeline, the Ketcher `imago/uploads` adapter and the
+> _Recognize Molecule_ UI are the next activity.
+
+**Model choice.** Phase B2 pins **one** OCSR model and **no router**:
+`ocsr-handdrawn-fp32`, provenance `ocsr-handdrawn@zenodo:10781330`. The DECIMER
+v2 hand-drawn FP32 export is the single-model compromise for a drawing app:
+
+| Evaluation set       | Hand-drawn FP32 (chosen) | Printed model |
+| -------------------- | ------------------------ | ------------- |
+| Hand-drawn canonical | **0.7300 (711/974)**     | 0.677         |
+| Printed canonical    | 0.694                    | **0.704**     |
+
+The hand-drawn model gives up only **1.0 pp** on printed images, while the
+printed model loses **5.3 pp** on hand-drawn input. One model therefore serves
+every filter-approved image; a per-style router or ensemble would add a second
+failure mode without a measured win. CPU latency measured in the integration
+report is p50 **1115 ms**, p95 **2156 ms**.
+
+Artifacts are downloaded from
+`spalax-dev/chemistry-draw-ocsr` into `models/ocsr-handdrawn-fp32/`, are
+licensed **CC-BY-4.0** (Zenodo record 10781330, see `NOTICE`), and are never
+bundled or committed. The encoder + decoder pair is 315,818,957 bytes
+(~301 MiB):
+
+| Artifact            | Bytes       | SHA-256                                                            |
+| ------------------- | ----------- | ------------------------------------------------------------------ |
+| `encoder.onnx`      | 208,801,677 | `996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52` |
+| `decoder_step.onnx` | 107,017,280 | `cfff97883de80de4e55463d44d8778c351188f47f1f1c955ed7c3c6bb6d68197` |
+| `vocab.json`        | 5,316       | `62c84d901199667c171413acfbd9071c0297a9273081063df318877a1fa3c7dd` |
+
+The vocabulary hash is not derived from the graph export: the manifest records
+the SHA-256 of the downloaded `vocab.json`, so a corrupted, truncated or
+substituted vocabulary is rejected exactly like a bad graph file.
+
+**Manifest extension.** The OCSR model is a second key in the existing `models`
+map. Schema 1 and the `image-classifier` entry are unchanged; the new entry uses
+the same `file`/`artifact_sha256` spelling per artifact:
+
+```json
+"ocsr-handdrawn": {
+  "id": "ocsr-handdrawn@zenodo:10781330",
+  "source": "https://huggingface.co/spalax-dev/chemistry-draw-ocsr",
+  "license": "CC-BY-4.0",
+  "preprocessing": "decimer_ocsr",
+  "start_id": 13,
+  "end_id": 14,
+  "max_len": 302,
+  "confidence_threshold": 0.901,
+  "encoder": {
+    "file": "ocsr-handdrawn-fp32/encoder.onnx",
+    "artifact_sha256": "996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52",
+    "inputs": [
+      { "name": "image", "dtype": "float32", "shape": [1, 512, 512, 3] }
+    ],
+    "output": { "name": "Identity:0", "dtype": "float32", "shape": [1, 256, 512] }
+  },
+  "decoder": {
+    "file": "ocsr-handdrawn-fp32/decoder_step.onnx",
+    "artifact_sha256": "cfff97883de80de4e55463d44d8778c351188f47f1f1c955ed7c3c6bb6d68197",
+    "inputs": [
+      { "name": "tokens", "dtype": "int32", "shape": [1, -1] },
+      { "name": "enc_out", "dtype": "float32", "shape": [1, 256, 512] }
+    ],
+    "zero_inputs": [],
+    "output": { "name": "Identity:0", "dtype": "float32", "shape": [1, -1, 156] }
+  },
+  "vocab": {
+    "file": "ocsr-handdrawn-fp32/vocab.json",
+    "artifact_sha256": "62c84d901199667c171413acfbd9071c0297a9273081063df318877a1fa3c7dd"
+  }
+}
+```
+
+`-1` marks a dynamic graph axis. For OCSR it is the decode-sequence axis of the
+decoder (`tokens` axis 1 and `Identity:0` axis 1); batch may also be dynamic
+`-1` as for the classifier. Every non-dynamic dimension must match exactly.
+The hand-drawn export has **no additional graph inputs**: the `217602:0` and
+`217606:0` names are baked initializers, so `zero_inputs` is `[]`. The printed
+export is the one that exposes them as inputs. The loader still supports extra
+graph inputs for other exports: every name in `zero_inputs` must be an input of
+the graph, and each is fed an all-zero tensor with the dtype and shape the graph
+declares. A graph input that is neither one of the declared inputs nor listed in
+`zero_inputs` is a contract error (503), and the entry is not used.
+
+Loading is per model family and lazy: the first `/v2/ocsr/recognize` request
+verifies the three checksums, validates both graphs and creates the two
+sessions; the pair is cached for the process lifetime. Startup, `/v2/health`
+and `/v2/filter/classify` never open the OCSR graphs, so the ~316 MB pair does
+not slow them.
+
+**Tensor contract.** Encoder artifact
+`ocsr-handdrawn-fp32/encoder.onnx`:
+
+| Tensor       | Direction | dtype   | Shape              | Content                      |
+| ------------ | --------- | ------- | ------------------ | ---------------------------- |
+| `image`      | input     | float32 | `[1, 512, 512, 3]` | `decimer_ocsr` image, NHWC   |
+| `Identity:0` | output    | float32 | `[1, 256, 512]`    | encoder features (`enc_out`) |
+
+Decoder-step artifact `ocsr-handdrawn-fp32/decoder_step.onnx`:
+
+| Tensor       | Direction | dtype   | Shape           | Content                             |
+| ------------ | --------- | ------- | --------------- | ----------------------------------- |
+| `tokens`     | input     | int32   | `[1, seq]`      | start id plus generated ids         |
+| `enc_out`    | input     | float32 | `[1, 256, 512]` | encoder output, fed unchanged       |
+| `Identity:0` | output    | float32 | `[1, seq, 156]` | next-token probabilities, softmaxed |
+
+Other exports may expose additional auxiliary inputs; those are listed in
+`zero_inputs` and fed zeros. The hand-drawn export stubs only the three tensors
+above.
+
+The decoder output is **already softmaxed**: values are probabilities, `argmax`
+is taken directly, and softmax is never applied again. The vocabulary size is
+156 (output axis 2).
+
+**Greedy decode and tokenizer.** One encoder run produces `enc_out`; the
+decoder then runs once per emitted token:
+
+1. Seed the token sequence with `[start_id]`, `start_id = 13`.
+2. Feed the full sequence as `tokens` int32 `[1, seq]` plus `enc_out` and the
+   zero inputs.
+3. Take the last position's `[156]` probability row, choose its `argmax` and
+   append the id; the chosen value is that step's probability.
+4. Stop after appending `end_id = 14`, or after at most `max_len = 302` decoding
+   steps.
+5. `incomplete` is `true` when the loop stopped at `max_len` and the last id is
+   not `end_id`; otherwise it is `false`.
+
+`confidence` is the arithmetic mean of the chosen-token probabilities over the
+steps, including the final `end_id` step. It is informational: activity 8 does
+**not** gate on it. The in-domain hand-drawn threshold measured in the
+integration report is **0.901** and the manifest records it as
+`confidence_threshold`, but a low-confidence complete decode is still a `200`.
+The filter pipeline activity may enforce a gate only after recalibrating it.
+
+Detokenization uses the two maps in `vocab.json`, `id_to_token` and
+`token_to_id`. Ids `0` (pad), `13` (start) and `14` (end) are skipped; `end_id`
+terminates the string. DECIMER's digit remap is applied **after** token lookup:
+`! $ ^ < > ? £ ¢ € §` become `1 2 3 4 5 6 7 8 9 0`. The remap changes the SMILES
+text only; it never changes token ids.
+
+The loader also checks the vocabulary against the manifest before opening any
+session: `vocab.start_id` and `vocab.end_id` must equal the manifest values, and
+`vocab.vocab_size` must equal the decoder output's class axis (`156`). A
+disagreement is a configuration error (`503`), not a decode-time surprise.
+
+**Preprocessing (`decimer_ocsr`, must not drift).** This is a separate pipeline
+from `runtime_default`; the classifier path is unchanged. It is a port of the
+toolchain's `runtime/preprocess.py`, and the order is the contract:
+
+1. Open the image as RGBA and composite it on white.
+2. Contrast stretch: build a LUT mapping the current per-image minimum..maximum
+   (across all channels) to `0..255`, then apply it.
+3. BGR2GRAY quirk on the RGB array: `gray = 0.114*R + 0.587*G + 0.299*B` — the
+   OpenCV BGR weights applied **without** swapping the channels. Clip to
+   `0..255`, convert to mode `L`, then apply PIL `ImageEnhance.Contrast(1.8)`.
+4. Resize rules, in this order: a square image with side `< 512` becomes
+   `512×512`; if either side is `>= 512` it is not resized; otherwise both sides
+   are scaled by `512 / max(w, h)` with `int()` truncation and LANCZOS.
+5. Crop empty borders: pixels `> 200` are background; crop to the bounding box
+   of pixels `<= 200`; if every pixel is background, keep the image unchanged.
+6. Central square: `side = max(512, int(1.2 * max(w, h)))`, white canvas, paste
+   centered. A canvas over `8,192` px per side is rejected as an extreme aspect
+   ratio (`400`) before the allocation, so a pathological but under-cap image
+   cannot balloon into a many-hundred-megabyte canvas.
+7. Brightness ×1.6 (PIL `ImageEnhance.Brightness` semantics, clipped).
+8. Resize to exactly `512×512` with LANCZOS, RGB, float32.
+9. Convert to `0..1`, normalize per channel with ImageNet mean
+   `[0.485, 0.456, 0.406]` and std `[0.229, 0.224, 0.225]`, and emit NHWC
+   float32 `[1, 512, 512, 3]`.
+
+Decoding is bounded by the same `12,000 px` per side and `128 MiB` of decoder
+allocations as the classifier; over-limit input is `400`. The central canvas is
+additionally capped at `8,192 px` per side after the border crop (an extreme
+aspect ratio is `400`), so the intermediate allocation stays bounded. As with
+`runtime_default`, any change to this pipeline requires a measured delta on the
+frozen evaluation.
+
+**Endpoint.** `POST /v2/ocsr/recognize`
+
+- Body: raw image bytes with `Content-Type: image/png`, `image/jpeg` or
+  `image/webp`. No multipart, no base64, no job id.
+- Limit: 10 MiB (10,485,760 bytes), inclusive. Larger bodies get `413` from
+  axum's `DefaultBodyLimit`; that body is plain text, not `{ "error": ... }`.
+- The handler validates the media type and decodes the image **before**
+  resolving the model, so malformed input is `400` even without a model; a
+  well-formed image without a usable model is `503`.
+- `200` response:
+
+```json
+{
+  "smiles": "CCO",
+  "confidence": 0.93,
+  "incomplete": false,
+  "model": "ocsr-handdrawn@zenodo:10781330"
+}
+```
+
+`smiles` is the detokenized, digit-remapped string; `confidence` is the mean
+chosen-token probability; `incomplete` is `false` on success; `model` is the
+manifest provenance id.
+
+- `422` when decoding is incomplete (`incomplete: true`): the image decoded and
+  the model ran, but the decoder reached `max_len = 302` without `end_id`. The
+  body is the standard error envelope with an actionable message:
+
+```json
+{ "error": "could not finish the structure; try a sharper image" }
+```
+
+A truncated SMILES is **not** returned: an unfinished structure is not a
+result. `AppError::Unprocessable` maps this variant to `422`.
+
+- Errors: `400` undecodable or unsupported image (including over-limit
+  dimensions or decoder allocations), `413` payload over 10 MiB, `422`
+  incomplete decode, `500` unexpected inference failure, `503` model or runtime
+  unavailable (missing, checksum mismatch or contract mismatch).
+
+There is no Ketcher or UI wiring in this activity: the pipeline, the Ketcher
+`imago/uploads` adapter and the _Recognize Molecule_ control follow separately.
+
 ### Health and module map
 
 `/v2/health` adds `onnxruntime_version` and `models` to the existing
 diagnostics. `onnxruntime_version` names the ONNX Runtime **API generation**
 `ort` targets (for example `onnxruntime api 1.31.x (ort 2.0.0-rc.15)`), not the
 loaded binary's exact patch version. `models` lists only ids declared by the
-manifest **whose artifact file exists on disk** (a cheap existence check, no
-session), for example `image-classifier@Iagea/d21f4cb`.
+manifest **whose required artifact files exist on disk** (a cheap existence
+check, no checksum, no session): the classifier's single file and the OCSR
+model's encoder, decoder and vocab. With both installed it reports
+`image-classifier@Iagea/d21f4cb` and `ocsr-handdrawn@zenodo:10781330`; an OCSR
+model with only some of its files present is not listed. Health never opens an
+OCSR session.
 `/v2/info` is **unchanged**: Ketcher parses it and does not need inference
 metadata.
 
 ```text
 sidecar/src/
   transport/filter.rs     POST /v2/filter/classify
+  transport/ocsr.rs       POST /v2/ocsr/recognize
   service/ml/
     mod.rs                shared cache and entry points
     runtime.rs            dynamically loaded ONNX Runtime environment and sessions
-    registry.rs           manifest, checksum, contract validation
+    registry.rs           manifest, checksums and contract validation (both models)
     paths.rs              model-root precedence (explicit, repo, cwd)
     preprocess.rs         runtime_default image → NHWC tensor (bounded decode)
+    ocsr_preprocess.rs    decimer_ocsr image → normalized NHWC tensor
+    ocsr_vocab.rs         vocab.json, detokenization and digit remap
+    ocsr_decode.rs        greedy encoder/decoder loop and stop/incomplete rules
+    ocsr.rs               encoder/decoder sessions and prediction post-processing
     classifier.rs         three-input run, sigmoid, threshold
 ```
+
+The OCSR modules are the target layout delivered by activity 8.
 
 ---
 
@@ -478,7 +727,7 @@ published a release with the fix yet. Removal procedure:
 - Shipping prebuilt binaries in git.
 - Reimplementing Ketcher's editor UI.
 - Supporting glibc < 2.36 or webkit2gtk < 4.1.
-- Shipping Imago or OpenCV. B1 ships an ONNX classifier gate only; B2 adds OCSR
-  through the two-model pipeline. B1 ships the pinned ONNX Runtime 1.31.0
-  native library (loaded dynamically) but never model weights; downloading
-  models is Phase B3.
+- Shipping Imago or OpenCV. B1 ships an ONNX classifier gate; B2 adds OCSR
+  inference through the two-model pipeline. The shipped pinned ONNX Runtime
+  1.31.0 native library (loaded dynamically) is shared by both, but model
+  weights are never bundled; downloading models is Phase B3.

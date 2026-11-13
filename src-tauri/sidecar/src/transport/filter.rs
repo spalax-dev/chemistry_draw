@@ -106,7 +106,10 @@ fn category(classification: Classification) -> &'static str {
 }
 
 /// Accepts only the three documented media types, ignoring `;` parameters.
-fn validate_content_type(headers: &HeaderMap) -> Result<(), AppError> {
+///
+/// Shared with `POST /v2/ocsr/recognize`, which accepts the same raw image
+/// media types.
+pub(crate) fn validate_content_type(headers: &HeaderMap) -> Result<(), AppError> {
     let Some(raw) = headers.get(header::CONTENT_TYPE) else {
         return Err(unsupported_media_type(None));
     };

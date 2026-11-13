@@ -162,7 +162,9 @@ LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
 
 `tests/mod.rs::models_dir()` honours `CHEMISTRY_MODELS_DIR` when set and
 otherwise falls back to `<repo>/models`, so tests, harness and `main.rs` agree on
-the model root.
+the model root. The same command runs the OCSR model-gated tests when
+`models/ocsr-handdrawn-fp32/` holds the encoder, decoder and vocabulary;
+otherwise those tests self-skip.
 
 ### Tensor-contract guard
 
@@ -172,10 +174,15 @@ registry and asserts the graph matches the manifest: inputs `input_2` float32
 `Identity:0` float32 `[1, 1]`. It fails on artifact, manifest or loader drift
 before any inference runs.
 
-`validate_tensor_shape` is a pure comparator with unit tests: a dynamic `-1` is
-accepted **only on axis 0** (batch); a dynamic width, height or channel axis and
-any static mismatch are contract errors. A model-gated test copies the real
-artifact into a temp root with a manifest declaring `112x112` and expects `503`.
+`validate_tensor_shape` is a pure comparator with unit tests: for the classifier
+contract, a dynamic `-1` is accepted **only on axis 0** (batch); a dynamic width,
+height or channel axis and any static mismatch are contract errors. A
+model-gated test copies the real artifact into a temp root with a manifest
+declaring `112x112` and expects `503`. The OCSR decoder has a second dynamic
+axis (the decode sequence, axis 1); `validate_ocsr_shape` has its own unit
+matrix: exact match, dynamic batch, manifest-dynamic decode sequence, a dynamic
+vocabulary axis rejected, rank mismatch, static mismatch and a static graph
+dimension where the manifest is dynamic. Every static dimension must stay exact.
 
 ### Invalid-model tests (no model)
 
@@ -185,13 +192,21 @@ unsupported schema, a manifest without `image-classifier`, and an unsupported
 preprocessing name. `health_hides_models_whose_artifact_is_missing` pins the
 health rule: ids appear only when the artifact file exists.
 
+The OCSR entry has the same temp-root coverage: a missing encoder, decoder or
+vocabulary, a bad artifact checksum, and a vocabulary that disagrees with the
+manifest (`start_id`/`end_id` or `vocab_size` versus the 156 decoder classes).
+Each is a `503` naming the failing artifact and the model root. Checksum
+verification and the vocabulary/manifest check run before any session is
+created, so these tests need no ONNX Runtime and no real artifact.
+
 ### Fixtures
 
 Fixtures are MIT-licensed images from the upstream DECIMER Image Classifier
 repository. They are small enough to be committed under
 `src-tauri/sidecar/fixtures/` (attribution stays in `NOTICE`); only the ONNX
-models themselves are gitignored. The fixtures are used exclusively by
-model-gated runs. `caffeine.webp` is a WebP re-encode of `caffeine.png`.
+models themselves are gitignored. They are used by model-gated runs and by the
+endpoint tests that need a well-formed image without a model.
+`caffeine.webp` is a WebP re-encode of `caffeine.png`.
 
 | Fixture                         | Bytes  | Expected category |
 | ------------------------------- | ------ | ----------------- |
@@ -226,6 +241,92 @@ proves axum's 2 MiB default is not in effect.
 - An image wider than 12,000 px is rejected with the decoder size-limit error
   (the cap is 12,000 px per side and 128 MiB of decoder allocations; the
   endpoint maps it to `400`).
+
+### OCSR tests and the large-artifact split
+
+The OCSR model is a pair of ONNX graphs plus a vocabulary, not one file:
+`models/ocsr-handdrawn-fp32/encoder.onnx` (208,801,677 B),
+`decoder_step.onnx` (107,017,280 B) and `vocab.json` (5,316 B). Together they
+are ~316 MB (~301 MiB): gitignored, never committed and never bundled. The suite
+uses the same two-tier split as the classifier, with an extra artifact guard:
+
+- **Always run** (no model, no runtime): OCSR preprocessing units (including the
+  NumPy-derived non-identity contrast-stretch pixel, the all-background crop and
+  the extreme-aspect guard), vocabulary parsing/detokenization/digit remap, and
+  greedy decoding against a **deterministic fake decoder step**. The fake records
+  the exact token vector fed at each step and returns fixed probability rows, so
+  `argmax`, `end_id`/`max_len` stopping (including an end token exactly on the
+  last allowed step), the `confidence` mean and the `incomplete` decision are all
+  tested without ONNX. Endpoint tests cover unsupported media type and
+  undecodable bytes (`400`), over-cap bodies (`413`) and a missing/invalid model
+  (`503`); the runtime-missing path is covered by the classifier suite and
+  manual verification. The `incomplete` → `422` mapping is exercised through the
+  `ensure_complete` helper the handler uses, never by hoping the real model
+  truncates.
+- **Model-gated**: real encoder + decoder inference, the two-graph tensor
+  contract guard, a real structure fixture (`caffeine.png`) and health listing
+  both ids. These are marked `#[ignore = "requires local ONNX model"]`. The
+  contract and fixture tests build a temp model root whose manifest declares
+  only the OCSR entry and symlink the three real artifacts into it, so they run
+  with the OCSR pair installed even when the classifier is absent. Only
+  `health_lists_both_models_when_present` requires both artifacts. On Windows
+  without symlink privileges the temp-root tests self-skip with a message;
+  install the artifacts under `models/` or enable Developer Mode to run them.
+- **Artifact-gated**: every model-gated OCSR test starts by checking that the
+  encoder, decoder and vocabulary exist under the model root and returns early
+  with a message when they do not. The harness keeps `--include-ignored` when
+  the shared manifest and runtime exist, so a checkout that has the classifier
+  but not the 300 MB OCSR pair still runs the classifier gated tests and skips
+  only OCSR.
+
+### OCSR preprocessing tests (no model)
+
+- Transparent RGBA is composited on white, not black.
+- The contrast stretch maps the per-image minimum..maximum (all channels) to
+  `0..255` with NumPy's `linspace` float math (explicit `0`/`255` endpoints,
+  truncating cast), not integer floor division. The non-identity test uses a
+  composited alpha of `255` and grey levels `150..255`: the reference LUT maps
+  `171` to `50` (integer floor gives `51`) and the full pipeline yields the
+  hardcoded pixel `48` (integer floor would yield `49`).
+- The grayscale step uses the BGR2GRAY quirk: pure red `(255, 0, 0)` uses the
+  `0.114` weight (≈29) and pure blue `(0, 0, 255)` the `0.299` weight (≈76),
+  before `Contrast(1.8)`.
+- Resize rules: a 300×300 square becomes 512×512; an image with either side
+  ≥ 512 is not resized; any other image is scaled by `512 / max(w, h)` with
+  `int()` truncation.
+- White borders are cropped to the bounding box of non-background pixels; an
+  all-background image is returned unchanged (unit test on `crop_empty_borders`,
+  which checks the dimensions and every pixel).
+- The central canvas is `max(512, int(1.2 * max(w, h)))` and padding is white.
+  A canvas over `8,192` px per side is rejected as an extreme aspect ratio
+  (`400`); a `12,000×1` image trips it.
+- Brightness ×1.6 is applied before the final 512×512 LANCZOS resize.
+- The final tensor is NHWC `[1, 512, 512, 3]` float32, normalized with the
+  ImageNet mean/std (not the classifier's `0..255` range).
+
+### OCSR vocabulary and decode tests (no model)
+
+- `vocab.json` exposes `id_to_token` and `token_to_id`; ids `0` (pad), `13`
+  (start) and `14` (end) are skipped when building the SMILES.
+- The digit remap turns `! $ ^ < > ? £ ¢ € §` into `1 2 3 4 5 6 7 8 9 0`.
+- The fake decoder step proves the loop: seed `[13]`, exact token vectors fed at
+  each step, argmax of the last position, stop at `14`, stop at `max_len = 302`,
+  an end token exactly on the last allowed step is complete,
+  `incomplete = last != 14`, and `confidence = mean_confidence(...)` is the mean
+  chosen-token probability including the end token (unit-tested directly).
+- An incomplete prediction goes through the same `ensure_complete` helper as the
+  handler: it maps to `AppError::Unprocessable`, and the response is a `422`
+  with the actionable message and no `smiles` field.
+
+### OCSR fixtures
+
+The OCSR model-gated test runs `caffeine.png` against a temp root that declares
+only the OCSR entry and asserts a `200`, the exact SMILES
+`CN1C=NC2=C1C(=O)N(C)C(=O)N2C`, `incomplete == false`, `confidence` in
+`0.99..=1.0` (the measured value is `0.9957286571634227`) and
+`model == "ocsr-handdrawn@zenodo:10781330"`. The SMILES is deterministic for
+this fixture; the confidence is pinned as a range so a different CPU or ONNX
+Runtime build cannot make the suite brittle.
 
 ---
 

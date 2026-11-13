@@ -4,3 +4,4 @@ pub mod filter;
 pub mod health;
 pub mod indigo;
 pub mod info;
+pub mod ocsr;

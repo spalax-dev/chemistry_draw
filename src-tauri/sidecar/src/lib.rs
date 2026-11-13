@@ -2,14 +2,15 @@
 //!
 //! Spawned by the Tauri app, this sidecar serves the Indigo REST v2 API using
 //! native Indigo on every platform. Phase B1 adds an ONNX Runtime image
-//! classifier that gates non-structure images; OCSR is not implemented yet.
+//! classifier that gates non-structure images; Phase B2 adds OCSR inference
+//! (image to SMILES) through the encoder/decoder pair.
 //!
 //! # Architecture
 //!
 //! ```text
 //! transport/     axum handlers, one module per domain
 //! service/       business logic, orchestrates FFI and ML inference
-//! service/ml/    ONNX runtime, model registry, preprocessing, classifier
+//! service/ml/    ONNX runtime, model registry, preprocessing, classifier, OCSR
 //! ffi/           extern "C" bindings to native libraries
 //! error.rs       AppError → HTTP status code mapping
 //! state.rs       shared app state (port)
@@ -17,14 +18,15 @@
 //!
 //! # Endpoints
 //!
-//! | Method | Path                            | Backend      |
-//! |--------|----------------------------------|--------------|
-//! | GET    | `/v2/info`                      |              |
-//! | GET    | `/v2/health`                    |              |
-//! | POST   | `/v2/indigo/convert`            | Indigo       |
-//! | POST   | `/v2/indigo/aromatize`          | Indigo       |
-//! | POST   | `/v2/indigo/layout`             | Indigo       |
-//! | POST   | `/v2/filter/classify`           | ONNX Runtime |
+//! | Method | Path                            | Backend                |
+//! |--------|----------------------------------|------------------------|
+//! | GET    | `/v2/info`                      |                        |
+//! | GET    | `/v2/health`                    |                        |
+//! | POST   | `/v2/indigo/convert`            | Indigo                 |
+//! | POST   | `/v2/indigo/aromatize`          | Indigo                 |
+//! | POST   | `/v2/indigo/layout`             | Indigo                 |
+//! | POST   | `/v2/filter/classify`           | ONNX Runtime classifier|
+//! | POST   | `/v2/ocsr/recognize`            | ONNX Runtime OCSR      |
 
 pub mod error;
 pub mod ffi;
@@ -68,5 +70,6 @@ pub fn build_router(state: AppState) -> axum::Router {
         )
         .route("/v2/indigo/automap", post(transport::indigo::post_automap))
         .route("/v2/filter/classify", transport::filter::route())
+        .route("/v2/ocsr/recognize", transport::ocsr::route())
         .with_state(state)
 }

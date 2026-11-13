@@ -9,6 +9,11 @@ This product includes:
 - DECIMER Image Classifier (https://github.com/Iagea/DECIMER-Image-Classifier) - MIT License
   ONNX artifacts derived from DECIMER models are downloaded at runtime, not bundled;
   see https://huggingface.co/spalax-dev/chemistry-draw-ocsr for provenance.
+- DECIMER v2 OCSR hand-drawn model (https://zenodo.org/records/10781330) - CC BY 4.0
+  The encoder, decoder-step and vocabulary ONNX artifacts (model id
+  ocsr-handdrawn@zenodo:10781330) are downloaded locally, not bundled and not
+  committed; see https://huggingface.co/spalax-dev/chemistry-draw-ocsr for the
+  exported artifacts and their checksums.
 - ONNX Runtime (https://github.com/microsoft/onnxruntime) - MIT License
   Loaded dynamically at runtime by developers/tests in B1; the runtime library is
   not bundled with the application. Shipping it is a separate follow-up activity.

@@ -1,12 +1,18 @@
 //! Machine-learning inference service.
 //!
 //! Phase B1 ships the ONNX Runtime foundation, the `runtime_default`
-//! preprocessing and the structure classifier. This module keeps the pieces
-//! that do not depend on HTTP:
+//! preprocessing and the structure classifier. Phase B2 adds the `decimer_ocsr`
+//! pipeline and OCSR inference. This module keeps the pieces that do not depend
+//! on HTTP:
 //!
 //! - [`preprocess`] turns decoded image bytes into the classifier tensor.
-//! - [`registry`] verifies `manifest.json`, the artifact checksum and the
-//!   tensor contract, then creates the CPU session.
+//! - [`ocsr_preprocess`] turns decoded image bytes into the normalized OCSR
+//!   tensor.
+//! - [`ocsr_vocab`] loads `vocab.json` and detokenizes ids with the digit remap.
+//! - [`ocsr_decode`] runs the greedy encoder/decoder loop over abstract graphs.
+//! - [`ocsr`] owns the OCSR sessions and runs the validated pair.
+//! - [`registry`] verifies `manifest.json`, the artifact checksums and the
+//!   tensor contracts, then creates the CPU sessions.
 //! - [`runtime`] owns the process-wide, dynamically loaded ONNX Runtime
 //!   environment.
 //! - [`classifier`] runs the validated session and applies the sigmoid and the
@@ -23,6 +29,10 @@
 //! `ORT_DYLIB_PATH` at that copy.
 
 pub mod classifier;
+pub mod ocsr;
+pub mod ocsr_decode;
+pub mod ocsr_preprocess;
+pub mod ocsr_vocab;
 pub mod paths;
 pub mod preprocess;
 pub mod registry;

@@ -1,6 +1,6 @@
 # Chemistry Draw — Roadmap
 
-> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo plus the B1 ONNX classifier gate**. Phase A shipped Imago-free builds on Windows and Linux; _Recognize Molecule_ stays hidden until B2 wires OCSR.
+> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo, the B1 ONNX classifier gate and the B2 OCSR inference contract**. Phase A shipped Imago-free builds on Windows and Linux; _Recognize Molecule_ stays hidden until the B2 pipeline wires OCSR.
 
 ## Overview
 
@@ -96,11 +96,50 @@ package sizes are recorded below.
 
 **Goal:** full local conversion pipeline: filter-approved image → **SMILES**.
 
-- **Model selection (open):** pick **one** OCSR model that handles both hand-drawn and printed input, and document the choice, version, source and license. No router, no per-style switching and no ensemble rule; if a single model proves insufficient, that is a roadmap change, not an implicit second stage.
-- **Core OCSR:** run the selected model on filter-approved images to produce **SMILES** from the image.
-- Wire into the app flow that previously used Imago (sidecar endpoint or equivalent internal service), returning SMILES/structure compatible with Ketcher.
-- Local-only for now; include error handling, timeouts, and basic performance notes.
-- **DoD:** image → filter → OCSR → SMILES works locally for representative hand-drawn and printed cases; non-molecule images are rejected by the filter with a clear state; harness + targeted tests green; UX shows clear success/failure states.
+**Status: in progress (started 2026-11-12).** Activity 8
+(`phase-b2-ocsr-inference`) delivers the inference foundation: the single-model
+decision, the manifest extension, the DECIMER preprocessing, the
+encoder/decoder contract, greedy decoding and `POST /v2/ocsr/recognize`,
+including the `422` incomplete case. The docs task defines the contract; the
+test and implement tasks follow in the same activity. Remaining after activity
+8: the filter-gated pipeline, the Ketcher `imago/uploads` adapter and the
+_Recognize Molecule_ UI.
+
+- **Model selection (decided 2026-11-12):** one model, the DECIMER v2
+  **hand-drawn FP32** export (`ocsr-handdrawn-fp32`, provenance
+  `ocsr-handdrawn@zenodo:10781330`). The hand-drawn export scores **0.7300
+  canonical (711/974)** on hand-drawn input and **0.694** on printed input,
+  against **0.704** for the printed model; the printed model falls to **0.677**
+  on hand-drawn input. Hand-drawn is therefore the better single-model
+  compromise for a drawing app: it loses 1.0 pp on printed images instead of
+  losing 5.3 pp on hand-drawn ones. **No router**, no per-style switch and no
+  ensemble; a second stage would be a roadmap change.
+- **Artifacts:** `encoder.onnx` 208,801,677 B (SHA-256
+  `996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52`),
+  `decoder_step.onnx` 107,017,280 B (SHA-256
+  `cfff97883de80de4e55463d44d8778c351188f47f1f1c955ed7c3c6bb6d68197`) and
+  `vocab.json` 5,316 B. The pair is ~316 MB (~301 MiB), licensed **CC-BY-4.0**
+  (Zenodo record 10781330), downloaded locally and never bundled; B3 owns
+  delivery. No native library is added, so package size does not change.
+- **I/O contract:** `POST /v2/ocsr/recognize` takes a raw PNG/JPEG/WebP image
+  (10 MiB cap) and returns `smiles`, `confidence`, `incomplete` and `model`;
+  undecodable input is `400`, over-cap `413`, missing/invalid model or runtime
+  `503`, and a decode that reaches `max_len` without `end_id` is `422` with an
+  actionable message. Confidence is the mean chosen-token probability and is
+  not gated in this activity (the in-domain hand-drawn threshold 0.901 is
+  recorded in the manifest only).
+- **Preprocessing:** `decimer_ocsr`, a separate pipeline from the classifier's
+  `runtime_default` (white composite, contrast stretch, BGR2GRAY quirk,
+  `Contrast(1.8)`, resize rules, border crop, central square, brightness 1.6,
+  512×512 LANCZOS, ImageNet normalization). Tokenizer: skip pad/start/end and
+  remap `!$^<>?£¢€§` → `1234567890`.
+- **Known limits:** canonical accuracy 0.7300 on the hand-drawn evaluation;
+  CPU latency p50 1115 ms / p95 2156 ms; a truncated decode is an error, never
+  a partial SMILES. Session loading is lazy, so startup and health stay fast.
+- **DoD:** image → filter → OCSR → SMILES works locally for representative
+  hand-drawn and printed cases; non-molecule images are rejected by the filter
+  with a clear state; harness + targeted tests green; UX shows clear
+  success/failure states.
 
 ### B3 — Remote model download (Hugging Face) + first-run setup
 
@@ -146,6 +185,9 @@ package sizes are recorded below.
 Phase A is complete (Imago removed, lighter artifacts published) and **B1 is in
 progress**: activity 7 ships the ONNX Runtime and its measured package-size delta
 is recorded above, so what remains is model-gated tests and real-input threshold
-calibration, then move to **B2** (single OCSR model, image → SMILES, UI wiring
-for _Recognize Molecule_). B3 remote delivery and Phase C stay behind B2, with C
+calibration. **B2 is in progress**: activity 8 defines the OCSR inference
+contract and implements the hand-drawn model (encoder + decoder + vocabulary,
+`decimer_ocsr` preprocessing, greedy decode, `POST /v2/ocsr/recognize`); the
+next activity wires the filter-gated pipeline, the Ketcher adapter and the
+_Recognize Molecule_ UI. B3 remote delivery and Phase C stay behind B2, with C
 merged whenever the upstream Ketcher fix ships.

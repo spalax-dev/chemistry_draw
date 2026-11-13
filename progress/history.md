@@ -320,3 +320,40 @@ packaged apps can run the classifier instead of returning 503.
   Windows extraction and fixed stale comments; re-review PASS.
 - Gates: 75 Node tests, 125 sidecar tests, policy 32/32, harness green,
   ShellCheck/rustfmt/Clippy/Prettier clean.
+
+---
+
+## Activity 8 — phase-b2-ocsr-inference (feat, complete 2026-11-12)
+
+Phase B2 OCSR inference: image → SMILES with the DECIMER hand-drawn FP32 model.
+
+- Model choice: one model, no router — `ocsr-handdrawn-fp32`
+  (`ocsr-handdrawn@zenodo:10781330`, CC-BY-4.0). Hand-drawn 0.7300 canonical;
+  printed 0.694 vs 0.704 for the printed model, so it is the better single-model
+  compromise for a drawing app.
+- Local artifacts under gitignored `models/ocsr-handdrawn-fp32/`: encoder
+  208,801,677 B (`996727…3f52`), decoder_step 107,017,280 B (`cfff97…8197`),
+  vocab 5,316 B (`62c84d…c7dd`). The manifest records all three checksums and
+  the exact contract; the hand-drawn export bakes the auxiliary inputs, so
+  `zero_inputs` is empty (the printed export exposes them).
+- Implemented the DECIMER `decimer_ocsr` preprocessing (alpha-on-white,
+  NumPy-`linspace` contrast stretch, BGR-grey quirk, contrast 1.8, resize rules,
+  empty-border crop, central square, brightness 1.6, 512 LANCZOS, ImageNet
+  normalization), the vocab/digit remap, the encoder + decoder_step sessions and
+  the greedy decoder (start 13, end 14, max 302, last-row argmax, softmaxed
+  output, mean token confidence, incomplete detection).
+- `POST /v2/ocsr/recognize`: raw PNG/JPEG/WebP, 10 MiB, 200 with
+  `smiles`/`confidence`/`incomplete`/`model`, 400/413/422/503; lazy OCSR
+  sessions so startup, health and the classifier do not load the ~316 MB pair.
+- Real result: caffeine.png → `CN1C=NC2=C1C(=O)N(C)C(=O)N2C`, confidence
+  0.9957286571634227, incomplete false.
+- Review: first REQUEST_CHANGES on test/doc evidence (non-empty-SMILES assert,
+  missing shape/LUT/confidence/incomplete tests, docs drift); fix task pinned
+  the exact SMILES, added the comparator matrix, NumPy-parity LUT, invalid-model
+  503 tests, vocab/manifest consistency, extreme-aspect guard and docs fixes;
+  re-review PASS.
+- Docs: architecture contract, testing strategy, verification curls,
+  CHECKPOINTS C8, ROADMAP B2, NOTICE (CC-BY-4.0).
+- Gates: 166 default / 176 with `--include-ignored`, 75 Node tests, policy 32/32,
+  harness green, fmt/Clippy/ShellCheck clean.
+- Next: filter-gated pipeline + Ketcher `imago/uploads` adapter + Recognize UI.

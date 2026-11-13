@@ -10,6 +10,7 @@ mod health;
 mod imago_absent;
 mod info;
 mod layout_clean;
+mod ocsr;
 mod paths;
 mod render;
 mod stereochemistry;

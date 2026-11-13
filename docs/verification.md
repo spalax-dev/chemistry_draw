@@ -21,7 +21,9 @@
 8. Model-gated tests (`--include-ignored`) need `models/manifest.json` **and** a
    loadable ONNX Runtime. Run `scripts/fetch-onnxruntime.sh` once; the harness
    sets `ORT_DYLIB_PATH` and `CHEMISTRY_MODELS_DIR`, and skips both gated tests
-   and the info line names the missing piece otherwise.
+   and the info line names the missing piece otherwise. OCSR model-gated tests
+   additionally need `models/ocsr-handdrawn-fp32/` (encoder, decoder step and
+   vocabulary) and self-skip when those files are absent.
 9. Review `docs/CHECKPOINTS.md` — mark the applicable boxes.
 10. `node --test scripts/lib/activity-policy.test.mjs` — policy tests green.
     The harness runs the same command in block 3 and then validates
@@ -87,8 +89,9 @@ Windows changes are validated by the `windows` job in
 
 - Draw a molecule, run Layout and Clean: the structure stays valid.
 - Save as PNG/SVG: the file is produced and non-empty.
-- Recognize Molecule is hidden on all platforms: B1 exposes only the classifier
-  endpoint, and the editor UI stays off until B2 wires the OCSR pipeline.
+- Recognize Molecule is hidden on all platforms: B1 exposes the classifier
+  endpoint and B2 defines the OCSR endpoint, but the editor UI stays off until
+  the filter pipeline, Ketcher adapter and UI activity wires it.
 
 ### Image filter
 
@@ -130,6 +133,70 @@ the sidecar still starts.
   answers `503` (not a panic, not `500`) and the message names the path and
   `scripts/fetch-onnxruntime.sh`.
 - `GET /v2/info` is unchanged: no inference fields.
+
+### OCSR recognition
+
+Requires the OCSR model files `models/ocsr-handdrawn-fp32/encoder.onnx`,
+`decoder_step.onnx` and `vocab.json` (plus `models/manifest.json` with the
+`ocsr-handdrawn` entry) and a loadable ONNX Runtime. The pair is ~316 MB; it is
+gitignored and never bundled.
+
+- Model presence and integrity. The encoder and decoder hashes are pinned; the
+  vocabulary hash is the one recorded in `manifest.json`:
+
+  ```bash
+  du -ch models/ocsr-handdrawn-fp32/*
+  sha256sum models/ocsr-handdrawn-fp32/encoder.onnx \
+            models/ocsr-handdrawn-fp32/decoder_step.onnx \
+            models/ocsr-handdrawn-fp32/vocab.json
+  jq -r '.models["ocsr-handdrawn"].vocab.artifact_sha256' models/manifest.json
+  ```
+
+  Expected encoder hash
+  `996727a2c9a432a0491d6d81c0c5d5b35afb7b2f58f7405950352c0c78193f52`,
+  decoder hash
+  `cfff97883de80de4e55463d44d8778c351188f47f1f1c955ed7c3c6bb6d68197`,
+  and the vocabulary hash equal to the manifest value. A missing file or a
+  mismatch makes `POST /v2/ocsr/recognize` answer `503`; it must not affect
+  startup or the filter.
+
+- `/v2/health` lists both ids when their files exist —
+  `image-classifier@Iagea/d21f4cb` and `ocsr-handdrawn@zenodo:10781330` — and
+  returns without opening an OCSR session (it stays fast; the ~316 MB pair is
+  loaded on first recognition).
+
+- Recognition (the first call pays the checksum and session load; later calls
+  reuse the cached sessions):
+
+  ```bash
+  curl -s -X POST http://127.0.0.1:9321/v2/ocsr/recognize \
+    -H "Content-Type: image/png" \
+    --data-binary @src-tauri/sidecar/fixtures/caffeine.png | jq
+  ```
+
+  Expected `200` with all four fields: `smiles` equal to
+  `CN1C=NC2=C1C(=O)N(C)C(=O)N2C`, `confidence` around `0.9957` (in `0..=1`),
+  `incomplete: false` and `model: "ocsr-handdrawn@zenodo:10781330"`.
+
+- `400`: `Content-Type: text/plain`, undecodable bytes, or a central canvas over
+  8,192 px per side (extreme aspect ratio); exactly 10,485,760 bytes must reach
+  the decoder (`400`), one byte more returns `413` (plain text, not JSON). `503`:
+  rename the OCSR directory or point `CHEMISTRY_MODELS_DIR` at a root without
+  the `ocsr-handdrawn` entry — Indigo keeps working and the filter still
+  answers.
+
+- `422`: the decoder reached `max_len = 302` without `end_id`, so no SMILES is
+  returned:
+
+  ```json
+  { "error": "could not finish the structure; try a sharper image" }
+  ```
+
+  Truncation depends on model output, so the deterministic coverage is the
+  fake-decoder test; a fragmented or heavily degraded sketch is the manual
+  reproduction. A truncated `smiles` must never appear in a `200`.
+
+- `GET /v2/info` is unchanged by OCSR.
 
 ### Packaging
 
