@@ -23,12 +23,13 @@
  *  5. TypeScript typecheck (`pnpm exec tsc --noEmit`)
  *  6. ESLint (`pnpm run lint`)
  *  7. Prettier formatting (`pnpm run format:check`)
- *  8. Frontend build (`pnpm build`) [skipped by --fast/--skip-build]
- *  9. Rust formatting (`cargo fmt --all --check`)
- * 10. Rust lint (`cargo clippy -- -D warnings`; `cargo check` with --fast/--skip-clippy)
- * 11. Sidecar tests (`cargo test -p indigo-server`) [skipped by --fast/--skip-tests]
- * 12. ShellCheck (shell scripts, warnings and above)
- * 13. Summary
+ *  8. Frontend unit tests (`pnpm test`, Vitest)
+ *  9. Frontend build (`pnpm build`) [skipped by --fast/--skip-build]
+ * 10. Rust formatting (`cargo fmt --all --check`)
+ * 11. Rust lint (`cargo clippy -- -D warnings`; `cargo check` with --fast/--skip-clippy)
+ * 12. Sidecar tests (`cargo test -p indigo-server`) [skipped by --fast/--skip-tests]
+ * 13. ShellCheck (shell scripts, warnings and above)
+ * 14. Summary
  *
  * Exit code 0 only when every executed block passes.
  */
@@ -342,7 +343,15 @@ if (run("pnpm", ["run", "format:check"]).status === 0) {
   fail("Formatting drift (run `pnpm run format`)");
 }
 
-console.log("\n── 8. Frontend Build ─────────────────────────────────");
+console.log("\n── 8. Frontend Unit Tests ────────────────────────────");
+
+if (run("pnpm", ["test"]).status === 0) {
+  ok("Vitest suite passed");
+} else {
+  fail("Vitest suite failed");
+}
+
+console.log("\n── 9. Frontend Build ─────────────────────────────────");
 
 if (SKIP_BUILD) {
   warn("Skipped (--fast/--skip-build): frontend build not run");
@@ -352,7 +361,7 @@ if (SKIP_BUILD) {
   fail("Frontend build failed");
 }
 
-console.log("\n── 9. Rust Formatting ────────────────────────────────");
+console.log("\n── 10. Rust Formatting ───────────────────────────────");
 
 if (capture("cargo", ["fmt", "--version"]).status !== 0) {
   warn("rustfmt is not installed (run `rustup component add rustfmt`)");
@@ -362,7 +371,7 @@ if (capture("cargo", ["fmt", "--version"]).status !== 0) {
   fail("Rust formatting drift (run `cargo fmt --all`)");
 }
 
-console.log("\n── 10. Rust Lint ──────────────────────────────────────");
+console.log("\n── 11. Rust Lint ──────────────────────────────────────");
 
 if (!haveLibs) {
   warn("Skipped: native libraries are missing");
@@ -389,7 +398,7 @@ if (!haveLibs) {
   fail("Clippy warnings/errors found");
 }
 
-console.log("\n── 11. Sidecar Tests ─────────────────────────────────");
+console.log("\n── 12. Sidecar Tests ─────────────────────────────────");
 
 if (SKIP_TESTS) {
   warn("Skipped (--fast/--skip-tests): sidecar tests not run");
@@ -411,7 +420,7 @@ if (SKIP_TESTS) {
   warn("Skipped: native libraries are missing");
 }
 
-console.log("\n── 12. ShellCheck ────────────────────────────────────");
+console.log("\n── 13. ShellCheck ────────────────────────────────────");
 
 const shellScripts = readdirSync(path.join(PROJECT_ROOT, "scripts"))
   .filter((file) => file.endsWith(".sh"))
@@ -427,7 +436,7 @@ if (IS_WINDOWS) {
   fail("ShellCheck warnings found");
 }
 
-console.log("\n── 13. Summary ───────────────────────────────────────");
+console.log("\n── 14. Summary ───────────────────────────────────────");
 
 if (exitCode === 0) {
   ok("Environment ready. You can start working.");

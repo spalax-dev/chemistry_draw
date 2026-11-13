@@ -88,3 +88,85 @@
 - `scripts/lib/windows-bundle.test.mjs` now pins those choices so they are not
   changed again by accident.
 - README/docs note that systems with Edge/WebView2 removed are unsupported.
+
+## 2026-11-12 — Activity 1: ket-document-autosave
+
+Worktree `../chemistry-draw-backstage-menu`, branch `feat/file-workflow`, based on
+`main` (Imago era, `c18046c`). Six tasks: docs → test → implement → implement →
+fix → review, with one review round that returned REQUEST_CHANGES and a clean
+re-review.
+
+- **Policy:** `.ket` is the only save format. Save / Save As write `.ket`;
+  Export is the only route to Molfile V2000/V3000, SMILES, InChI, SVG and PNG
+  (`generateImage(ket, { outputFormat })`; `exportImage` is deliberately unused
+  because it downloads directly and only renders SVG in 3.18) and never changes
+  `path` or `format`.
+- **Document model:** one document per window (`{ path, format: "ket", dirty }`),
+  title `<name|Untitled>` + `*`, dirty driven by `ketcher.changeEvent`.
+- **Autosave:** `.ket` + `{path, savedAt, dirty}` metadata in
+  `<appDataDir>/recovery/`, 2 s debounce + 30 s interval, only while dirty, never
+  the user's file; a write generation counter stops an in-flight write from
+  recreating a cleared snapshot.
+- **Recovery:** on launch, a snapshot newer than the original's mtime offers
+  Restore/Discard in-app; Restore re-attaches the path and stays dirty.
+  Missing/unreadable originals still offer recovery, with copy naming a vanished
+  file.
+- **Close guard:** `onCloseRequested` + Save/Discard/Cancel; New and Open reuse
+  the same prompt, so a dirty document is never replaced silently.
+- **UI:** all new dialogs are in-app components on Ketcher tokens (`Dialog`,
+  `Button`, overlay `rgba(94,94,94,0.8)`), with `role="dialog"`, `aria-modal`,
+  focus trap and Escape (recovery = Discard, close = Cancel). No native dialogs
+  in new code.
+- **Environment:** `task libs` rebuilt the shared `chemistry-builder` image from
+  main's Dockerfile (Imago + OpenCV) and the sidecar binaries were built with
+  the target-triple names Tauri expects before Clippy.
+- **Tests:** 60 frontend tests (37 document, 23 autosave), 87 sidecar tests;
+  typecheck, ESLint, Prettier, rustfmt, Clippy and ShellCheck clean; full harness
+  green.
+
+## 2026-11-12 — Activity 2: ketcher-toolbar-integration
+
+- Removed the temporary bottom-left dock. Save, New and Export are now
+  `customButtons` entries in Ketcher's top toolbar; clicks arrive as
+  `CUSTOM_BUTTON_PRESSED` custom actions on `ketcher.eventBus`.
+- Kept Ketcher's native **Save As…** (its dialog defaults to Molfile) as the
+  click-only route to other formats. `.ket` defaulting comes from the app Save.
+- The pre-existing Vite alias `file-saver` → `src/fileSaver.ts` now routes every
+  native save: `.ket` → document save (path or Save As), other extensions →
+  export save, no Tauri/handler → download. Pure `src/saveRoute.ts`, 19 tests.
+- Shortcuts are captured on `window` (capture phase) and consume the event
+  before the dialog/busy early return, so Ketcher's `Mod+S` dialog cannot open
+  even while a save is in flight.
+- Review: first round REQUEST_CHANGES (shortcut ordering, wrong hotkey evidence
+  in docs, four inaccurate doc rows, a stray `src-tauri/untitled.ket`), fix task
+  `f`, re-review PASS; C9 ticked.
+- Gates: 79 frontend tests, 87 sidecar tests, typecheck, ESLint, Prettier,
+  rustfmt, Clippy, ShellCheck and the full harness green.
+- Still needs a GUI run: toolbar rendering/icons, live custom actions, shortcut
+  behaviour against Ketcher's handlers, Tauri dialogs and the manual checklists.
+
+## 2026-11-13 — Activity 3: toolbar-icon-native-style
+
+- The user rejected the first icons: bigger than Ketcher's and filled. Measured
+  the native ink boxes (save 4.5-19.4, open 4.0-19.8 x 5.0-18.9 → ~15x15 in a
+  24 viewBox) versus ours (17-20 units, solid fills).
+- Final design: transparent `imageLink` + CSS mask painted with
+  `background-color: currentColor`, keyed by `img[alt="Save"|"New"|"Export"]`
+  scoped to `.Ketcher-root`, so the button's colour drives default #333333,
+  hover #167782 and the active state exactly like native icons.
+- Glyphs redrawn as outlines (`fill=none`, 1.5-unit stroke, round caps) inside a
+  15x15 live area; measured ink 4.5-19.5 for all three, matching native weight.
+- Review rounds: REQUEST_CHANGES (solid fills/oversize, literal `black`, loose
+  live-area guard, docs wording) → fixes → PASS. 10 icon tests.
+
+## 2026-11-13 — Activity 4: hide-native-save-as
+
+- Hid Ketcher's native "Save As…" entry with `buttons={{ save: { hidden: true } }}`
+  (`src/ui/editorButtons.ts`, `as ButtonsConfig` because Ketcher's `ButtonName`
+  union omits `save` while `isHidden`/`FileControls` read it at runtime).
+- `recognize` stays hidden; no CSS or DOM hiding, no Ketcher edits.
+- Consequences documented: Export is the only format route; the native save
+  dialog and its image-save entry are unreachable; remaining library saves still
+  use the `file-saver` alias; `Ctrl/Cmd+S` remains intercepted.
+- Review: REQUEST_CHANGES (a stale manual step still used the native image
+  save) → fix → PASS. 93 frontend tests.

@@ -81,8 +81,63 @@
 - [ ] The harness block 3 runs the policy tests and rejects an invalid
       `activities.json`.
 
+## C8 — Document and Autosave Contract
+
+- [x] `.ket` is the only save format: Save and Save As write `.ket`, while
+      Export is the only route to Molfile V2000/V3000, SMILES, InChI, SVG and
+      PNG, and never changes the document path or format.
+- [x] The window title shows the document name (or `Untitled`) plus a dirty
+      marker; a successful Save, Open or New clears the dirty state.
+- [x] Opening a `.ket` file gives a clean document with that path; opening
+      `.mol`/`.smi`/`.sdf`/`.rxn` imports through Ketcher, leaves `path` `null`
+      and keeps the document dirty.
+- [x] Autosave writes `.ket` plus metadata into the app data dir only while
+      dirty, debounced and on a slow interval, never to the user's file, and
+      the snapshot is cleared after Save, New or Open; an in-flight write
+      cannot recreate a snapshot after that cleanup.
+- [x] A snapshot newer than the last clean save triggers an in-app
+      Restore/Discard prompt on launch; Restore re-attaches the original path
+      when known. A missing or unreadable original still offers recovery
+      (missing files are called out in the prompt).
+- [x] Closing with unsaved changes is guarded by an in-app Save/Discard/Cancel
+      dialog; Cancel keeps the window open and Save writes before closing. New
+      and Open reuse the same prompt before replacing a dirty document.
+- [x] Recovery, close guard and feature errors are in-app dialogs styled with
+      Ketcher tokens, with `role="dialog"`, `aria-modal`, focus trap, initial
+      focus and Escape handling; no new Tauri native `message`/`confirm`.
+- [x] Pure helpers (title/dirty/names, save vs export, autosave scheduling,
+      write generation, recovery decision, close guard) are covered by Vitest,
+      and the manual checklist in `docs/verification.md` §2 passes.
+- [x] Browser fallback: Save and Export download files; no autosave, recovery
+      prompt or close guard.
+
+## C9 — Ketcher Toolbar Integration
+
+- [x] No app-owned toolbar, dock or floating control group exists; Save, New
+      and Export render as Ketcher toolbar `customButtons` with sentence-case
+      titles and icons that inherit the toolbar button colour (transparent
+      `imageLink` painted by a CSS mask, Ketcher's native 28/32/40 px metrics,
+      no hard-coded icon colour).
+- [x] `CUSTOM_BUTTON_PRESSED` actions dispatch by id: Save writes `.ket` to the
+      current path (Save As when untitled), New reuses the dirty guard and
+      clears the snapshot, Export opens the in-app format dialog without
+      touching path or format.
+- [x] `Ctrl+S` is the app Save and Ketcher's `Mod+S` dialog stays shut;
+      `Ctrl+Shift+S` opens Save As; `Ctrl+O` and `Ctrl+N` still work.
+- [x] Ketcher's native **Save As…** entry is hidden through the `Editor`
+      `buttons` config (`buttons.save.hidden`, `src/ui/editorButtons.ts`; no CSS
+      or DOM hiding), so Export is the only format route; any remaining library
+      save goes through the Vite `file-saver` alias (`src/fileSaver.ts`) to the
+      Tauri filesystem or the export dialog (§5.7.1), while the native save
+      dialog and its image-save entry are hidden; `node_modules/` is untouched.
+- [x] The pure routing helper (`.ket` → document save, other extensions →
+      export save, no Tauri/no handler → download) has Vitest coverage and was
+      RED before implementation.
+- [x] The manual checklist in `docs/verification.md` §2 "Toolbar integration"
+      passes, including the browser fallback.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C7 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C9 remain empty.

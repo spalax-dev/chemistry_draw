@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-title",
+    "core:window:allow-destroy",
     "opener:default",
     "dialog:default",
     "dialog:allow-open",
@@ -16,6 +18,11 @@
     "fs:allow-write-text-file",
     "fs:allow-read-file",
     "fs:allow-write-file",
+    "fs:allow-mkdir",
+    "fs:allow-rename",
+    "fs:allow-remove",
+    "fs:allow-stat",
+    "fs:allow-exists",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "**" }]
