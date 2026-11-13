@@ -14,6 +14,22 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
+## [0.1.7](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.6...chemistry-draw-v0.1.7) (2026-11-13)
+
+
+### Features
+
+* **app:** .ket-first document workflow in Ketcher's toolbar ([981f081](https://github.com/spalax-dev/chemistry_draw/commit/981f081e5bbc73438825ebd359fb3a4e66c3727b))
+
+
+### Bug Fixes
+
+* **app:** grant fs scope for autosave and restored documents ([b65e2c2](https://github.com/spalax-dev/chemistry_draw/commit/b65e2c270e99eaba05f53b8c9785bf8a41b58e5a))
+* **app:** match Ketcher's native modal backdrop and panel ([1c77f2f](https://github.com/spalax-dev/chemistry_draw/commit/1c77f2fc20796d05af6b794347b4834864a4a9fe))
+* **build:** stop bundling host font libraries ([01a1b4f](https://github.com/spalax-dev/chemistry_draw/commit/01a1b4f2b0aa652b1ede58e8f9a46a98a3323f60))
+* **ci:** use pnpm 11 in quality workflow ([c18046c](https://github.com/spalax-dev/chemistry_draw/commit/c18046c584a32c5e90d99bc756f7a039a00aa822))
+* **ketcher:** guard missing half-bonds in ReBond ([15f4b38](https://github.com/spalax-dev/chemistry_draw/commit/15f4b38ce33434e9105615a3f95de777aa7da512))
+
 ## [0.1.6](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.5...chemistry-draw-v0.1.6) (2026-11-04)
 
 
