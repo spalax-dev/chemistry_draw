@@ -252,3 +252,53 @@ re-review.
 - Not ported (outside this crash path): upstream's `setDoubleBondShift`,
   `stereoUpBondGetCoordinates` and `show` guards.
 - `src/ketcherPatch.test.ts` guards the hunks and the installed dist (116 tests).
+
+## 2026-11-13 — Activity 11: document-tabs
+
+- Tabs hold file state only (`{id, path, ket, dirty}`); exactly one Ketcher
+  instance. Switching serializes the outgoing tab with `getKet`, flushes its
+  snapshot, sets a loading flag and loads the target with `setMolecule`, so the
+  incoming tab is never dirtied by the programmatic load.
+- Per-tab snapshots: `recovery/tabs/<id>.ket|json` + `index.json` (order +
+  active id), serialized queues per tab and for the index, per-tab write
+  generations and cleared-tab tombstones. Corrupt `.ket` snapshots are rejected
+  by `isKetDocument` and skipped; the active-tab restore falls back safely.
+- Silent restore on launch (content, paths, order, active); a missing index
+  starts with one empty tab. Overlay stays until restore finishes.
+- Ketcher-token tab strip at the top: active/regular/hover colours, dirty dot,
+  X and middle-click close, `+`, overflow, roving tabindex with arrow keys,
+  Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+W / Ctrl+T.
+- Close guard: 0 dirty closes; 1 dirty active -> Save/Discard/Cancel; 1 dirty
+  inactive or several -> Discard/Cancel only with matching copy. Discard clears
+  only dirty tabs' snapshots and rewrites the index with survivors, after
+  stopping the scheduler and clearing the `busyRef`, so an in-flight autosave
+  cannot resurrect a discarded snapshot.
+- Review: REQUEST_CHANGES twice (corrupt restore, guard copy, discard scope,
+  index race; then the discard/autosave race) -> fixes -> PASS. 162 tests.
+
+## 2026-11-13 — Activity 12: close-guard-copy
+
+- The multi-tab prompt explained implementation limits ("Saving them all is
+  not possible"). Replaced by a pure `closeGuardCopy` helper: state the
+  situation, ask a question, offer only the actions that exist.
+  - several: "Unsaved changes" / "N documents have unsaved changes." /
+    "Are you sure you want to discard them?" / Discard + Cancel.
+  - single inactive: same question with the document name / Discard + Cancel.
+  - single active: "Save changes?" / "... has unsaved changes." /
+    "Do you want to save them before closing?" / Save + Discard + Cancel.
+- CloseGuardDialog renders the helper only; tests pin title, lines and action
+  order; docs quote the new copy. 167 tests.
+
+## 2026-11-13 — Activity 13: tab-strip-chrome
+
+- Removed the doubled separator and the grey active fill. Final rule: one
+  1 px `#cad3dd` line made of two layers — the strip's `inset 0 -1px 0` shadow
+  (visible in the padding, gaps and after the last tab) and the inactive tabs'
+  bottom border — while the active tab is white with no bottom edge, so the
+  line disappears under it and the tab merges with the workspace.
+- `tokens.tab.active = #ffffff`; strip `gap: 0`, no `borderBottom`; tabs keep
+  top/left/right borders only plus the conditional bottom edge.
+- Pixel-verified in headless chromium: exactly 1 px at y=35 across the strip,
+  absent under the active tab, no 2 px band, height unchanged (36).
+- `src/tabStrip.test.ts` pins both layers. Docs updated (conventions §6.6,
+  architecture row, verification step 11, CHECKPOINTS C11). 174 tests.
