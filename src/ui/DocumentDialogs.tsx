@@ -1,11 +1,13 @@
 /**
- * In-app dialogs for the document workflow: startup recovery, the close guard,
- * Export and save/export errors. They are presentational only — App.tsx owns
- * the state and the decisions (see `docs/conventions.md` §6).
+ * In-app dialogs for the document workflow: the close guard, Export and
+ * save/export errors. They are presentational only — App.tsx owns the state and
+ * the decisions (see `docs/conventions.md` §6). Startup restore is silent, so
+ * there is no recovery dialog.
  */
 
+import { closeGuardCopy, type CloseGuardAction } from "../closeGuardCopy";
 import type { CloseChoice, ExportFormat } from "../document";
-import { Button } from "./Button";
+import { Button, type ButtonVariant } from "./Button";
 import { Dialog } from "./Dialog";
 
 const PARAGRAPH = { margin: "0 0 8px" } as const;
@@ -19,86 +21,60 @@ const EXPORT_OPTIONS: { format: ExportFormat; label: string }[] = [
   { format: "png", label: "PNG image" },
 ];
 
-export interface RecoveryDialogProps {
-  /** Base name of the document the snapshot belongs to. */
-  documentName: string;
-  /** Extra explanation, e.g. that the original file is no longer on disk. */
-  note?: string | null;
-  onRestore: () => void;
-  onDiscard: () => void;
-}
-
-/** Startup prompt for an autosave snapshot. Escape discards. */
-export function RecoveryDialog({
-  documentName,
-  note = null,
-  onRestore,
-  onDiscard,
-}: RecoveryDialogProps) {
-  return (
-    <Dialog
-      title="Recover unsaved work?"
-      onCancel={onDiscard}
-      actions={
-        <>
-          <Button variant="danger" onClick={onDiscard}>
-            Discard
-          </Button>
-          <Button variant="primary" data-autofocus="true" onClick={onRestore}>
-            Restore
-          </Button>
-        </>
-      }
-    >
-      <p style={PARAGRAPH}>
-        Chemistry Draw found unsaved changes in <strong>{documentName}</strong> from a previous
-        session.
-      </p>
-      {note ? <p style={PARAGRAPH}>{note}</p> : null}
-      <p style={PARAGRAPH}>
-        Restore loads them so you can save; Discard deletes the recovered copy.
-      </p>
-    </Dialog>
-  );
-}
-
 export interface CloseGuardDialogProps {
-  /** Base name of the document the prompt is about. */
+  /** Base name of the document the prompt is about (single dirty tab). */
   documentName: string;
-  /** What the unsaved changes are about to be replaced by. */
-  intent: "close" | "replace";
+  /** How many tabs have unsaved changes; more than one hides Save. */
+  dirtyCount: number;
+  /**
+   * Whether Save may be offered. Only a single dirty tab that is currently
+   * active can be written through the one editor.
+   */
+  allowSave: boolean;
   /** Called with the user's answer; Escape answers `cancel`. */
   onChoice: (choice: CloseChoice) => void;
 }
 
-/** Save / Discard / Cancel prompt for a dirty document. */
-export function CloseGuardDialog({ documentName, intent, onChoice }: CloseGuardDialogProps) {
-  const consequence = intent === "close" ? "closing the window" : "replacing the current document";
+/** Visual weight and label for each close-guard action. */
+const ACTION_STYLE: Record<CloseGuardAction, { label: string; variant: ButtonVariant }> = {
+  save: { label: "Save", variant: "primary" },
+  discard: { label: "Discard", variant: "danger" },
+  cancel: { label: "Cancel", variant: "secondary" },
+};
+
+/** Save / Discard / Cancel prompt for one or more dirty tabs. */
+export function CloseGuardDialog({
+  documentName,
+  dirtyCount,
+  allowSave,
+  onChoice,
+}: CloseGuardDialogProps) {
+  const copy = closeGuardCopy({ documentName, dirtyCount, allowSave });
+  const [situation, question] = copy.lines;
+
   return (
     <Dialog
-      title="Save changes?"
+      title={copy.title}
       onCancel={() => onChoice("cancel")}
       actions={
         <>
-          <Button data-autofocus="true" onClick={() => onChoice("cancel")}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={() => onChoice("discard")}>
-            Discard
-          </Button>
-          <Button variant="primary" onClick={() => onChoice("save")}>
-            Save
-          </Button>
+          {copy.actions.map((action) => (
+            <Button
+              key={action}
+              variant={ACTION_STYLE[action].variant}
+              data-autofocus={action === "cancel" ? "true" : undefined}
+              onClick={() => onChoice(action)}
+            >
+              {ACTION_STYLE[action].label}
+            </Button>
+          ))}
         </>
       }
     >
       <p style={PARAGRAPH}>
-        <strong>{documentName}</strong> has unsaved changes.
+        <strong>{situation}</strong>
       </p>
-      <p style={PARAGRAPH}>
-        Cancel keeps them, Discard drops them before {consequence}, and Save writes the document
-        first.
-      </p>
+      <p style={PARAGRAPH}>{question}</p>
     </Dialog>
   );
 }
