@@ -105,67 +105,116 @@ Pattern rules:
 - `src/logging.ts` transparently mirrors `console.*`, uncaught errors and
   unhandled rejections into the Tauri log. It is a no-op outside Tauri.
 - Hash/`file-saver` shims exist for the webview; do not add Node-only APIs.
-  `file-saver` resolves through the Vite alias described in §5.7.
+  `file-saver` resolves through the Vite alias described in §5.9.
 
 ---
 
-## 5. Document model and file workflow
+## 5. Document tabs and file workflow
 
-Chemistry Draw behaves like a word processor: **one document per window**,
-identified by its path, and `.ket` is the only format Save ever writes.
+Chemistry Draw behaves like a tabbed word processor: **several documents per
+window**, shown as tabs at the top of the window and backed by a **single
+Ketcher instance**. A tab is file state (`path`, serialized `.ket`, dirty),
+never a second editor, and `.ket` is the only format Save ever writes.
 
-### 5.1 Document state
+### 5.1 Tab state
 
 ```ts
-interface DocumentState {
+interface TabState {
+  id: string; // stable identifier, names the tab's snapshot files
   path: string | null; // user-chosen .ket file, null = never saved
-  format: "ket"; // the only save format
+  ket: string; // last committed .ket content, "" for an untouched tab
   dirty: boolean; // unsaved edits since the last save/open/new
+}
+
+interface TabSet {
+  tabs: TabState[]; // left to right; never empty
+  activeId: string; // the tab the single editor currently shows
 }
 ```
 
-- The window title shows the file's base name without the extension
-  (`benzene`), or `Untitled` when `path` is `null`, plus `*` while dirty
-  (`benzene*`). `documentTitle(state)` is a pure helper.
-- `dirty` starts `false`, becomes `true` on the first editor change and returns
-  to `false` only after a successful Save, Open or New.
+- Tab ids come from a `tab-<n>` counter (`tab-1`, `tab-2`, …), stay
+  filesystem-safe and name the tab's snapshot files.
+- `src/tabs.ts` owns the pure model: create, close, activate, commit serialized
+  content, dirty counting and the guard decisions (§5.6, §5.7).
+- The tab title is the file's base name without the extension (`benzene`) or
+  `Untitled` when `path` is `null`. Dirty tabs show a **dot**, never an
+  asterisk in the strip. `tabTitle()` still returns the base name plus `*`
+  while dirty: the strip removes it and paints the dot instead, while the
+  window title and dialog copy use `tabTitle()` verbatim.
+- An **untouched empty tab** has `path === null`, `dirty === false` and an empty
+  structure (`ket` empty or a blank Ketcher document). Open reuses it (§5.4).
+- `dirty` starts `false`, becomes `true` on the first editor change while that
+  tab is active, and returns to `false` only after a successful Save, Open or
+  New for that tab. An inactive tab cannot change: it has no editor.
 
-### 5.2 Save policy
+### 5.2 One editor, switching protocol
 
-- **Save** (`Ctrl+S`) writes `ketcher.getKet()` as UTF-8 text to `path`. With
-  `path === null` it behaves as Save As defaulting to `untitled.ket`.
+Exactly one `<Editor>` is mounted for the window's lifetime; the strip only
+changes what that editor shows. Switching is a fixed four-step sequence:
+
+1. **Serialize the outgoing tab** — `ketcher.getKet()` is stored in the outgoing
+   tab's `ket`.
+2. **Flush the outgoing tab** — its snapshot is written (§5.5) before the editor
+   changes, so the content survives a crash between the two actions.
+3. **Set a `loading` flag**, then `ketcher.setMolecule(target.ket)` loads the
+   incoming tab. An untouched tab loads an empty structure.
+4. **Clear the flag** once the load settles.
+
+- Change events emitted while `loading` is set are ignored, so a programmatic
+  load never marks the incoming tab dirty.
+- Switches are serialized by a `busyRef` guard in `App.tsx`: a switch that
+  arrives while one is still running is ignored, so two loads never interleave.
+  After every `await` the code re-checks the active id before applying state,
+  and snapshot writes capture the tab id and the text at call time instead of
+  reading the live editor again. `loadingRef` covers the programmatic load, and
+  the active-id checks discard a flush whose tab changed meanwhile, so rapid
+  switching cannot write one tab's content into another.
+- The strip is the only app chrome above Ketcher; there is no per-tab toolbar,
+  dock or second canvas (`docs/conventions.md` §6.6).
+
+### 5.3 Save policy
+
+All document commands act on the **active tab**.
+
+- **Save** (`Ctrl+S`) writes the active tab's `ketcher.getKet()` as UTF-8 text
+  to its `path`. With `path === null` it behaves as Save As defaulting to
+  `untitled.ket`.
 - **Save As** (`Ctrl+Shift+S`) asks for a destination through the Tauri `save`
   dialog filtered to `.ket`, appends the extension when missing, writes, and
-  adopts the new path. The previous file is left untouched.
-- Save never writes another format and never changes `format`.
-- Both commands are available from Ketcher's toolbar (§5.7) and the keyboard.
+  adopts the new path for the active tab. The previous file is left untouched.
+- Save never writes another format and never changes another tab.
+- Both commands are available from Ketcher's toolbar (§5.9) and the keyboard.
 
-### 5.3 Save vs Save As vs Export
+### 5.4 Save vs Save As vs Export
 
-| Command | Shortcut       | Writes                        | Changes `path`                      | Changes `format` |
-| ------- | -------------- | ----------------------------- | ----------------------------------- | ---------------- |
-| Save    | `Ctrl+S`       | `.ket` to `path` (or Save As) | on first save                       | no               |
-| Save As | `Ctrl+Shift+S` | `.ket` to the chosen path     | yes                                 | no               |
-| Export  | —              | one other format to a file    | **no**                              | **no**           |
-| New     | `Ctrl+N`       | nothing                       | set to `null`                       | stays `ket`      |
-| Open    | `Ctrl+O`       | nothing                       | the `.ket` path, `null` for imports | stays `ket`      |
+| Command | Shortcut       | Target        | Writes                                         | Changes the tab's `path`            |
+| ------- | -------------- | ------------- | ---------------------------------------------- | ----------------------------------- |
+| Save    | `Ctrl+S`       | active tab    | `.ket` to `path` (or Save As) + clean snapshot | on first save                       |
+| Save As | `Ctrl+Shift+S` | active tab    | `.ket` to the chosen path + clean snapshot     | yes                                 |
+| Export  | —              | active tab    | one other format to a file                     | **no**                              |
+| New     | `Ctrl+N`       | a **new** tab | its clean snapshot                             | new tab starts at `null`            |
+| Open    | `Ctrl+O`       | reused or new | the tab's snapshot                             | the `.ket` path, `null` for imports |
 
-Export is the only route to another format. It writes a separate file and
-never changes the document path or the save format.
+Export is the only route to another format. It writes a separate file and never
+changes the active tab's path or any other tab.
 
-**Open** behaves differently per format:
+**New** always opens a tab: a clean tab with `path === null` and an empty
+structure. It never replaces, saves or discards the active tab, so it needs no
+dirty prompt and never writes a user file; like every tab it gets a clean
+recovery snapshot (§5.5), so the tab set restores.
 
-- A `.ket` file becomes the document: `path` is the chosen file and the
-  document is clean, so the title shows its base name without `*`.
+**Open** reuses the active tab only when it is an untouched empty tab
+(`path === null`, not dirty, empty structure); otherwise it opens a new tab.
+Within the target tab it behaves differently per format:
+
+- A `.ket` file becomes that tab's document: `path` is the chosen file and the
+  tab is clean, so the title shows its base name without a dot.
 - `.mol`, `.smi`, `.sdf`, `.rxn` and any other structure format are imported
   through `ketcher.setMolecule`; no `.ket` file backs them, so `path` stays
-  `null` (`Untitled`) and the document is marked dirty.
+  `null` (`Untitled`) and the tab is marked dirty.
 
-**New** and **Open** replace the current document, so with unsaved edits they
-ask first, using the same Save / Discard / Cancel prompt as the close guard
-(§5.5): Save writes the document and then proceeds, Discard proceeds without
-saving, Cancel aborts the command. Export never replaces the document and never
-prompts.
+Open never prompts: a dirty tab is left open and untouched, and the file lands in
+a new tab instead.
 
 | Export format | Source                                                |
 | ------------- | ----------------------------------------------------- |
@@ -184,78 +233,132 @@ for `"png"`, while `generateImage` covers both through the same save route.
 `getSdf`, `getCml`, `getCDXml` and `getRxn` exist on the same API if more
 export entries are added later, but they are not part of this contract.
 
-### 5.4 Autosave and recovery
+### 5.5 Autosave, per-tab snapshots and restore
 
-Snapshots live in the Tauri app data directory, never next to the user's file:
+Every tab owns a snapshot in the Tauri app data directory, never next to the
+user's file:
 
 ```text
-<appDataDir>/recovery/autosave.ket    working structure (.ket text)
-<appDataDir>/recovery/autosave.json   { path, savedAt, dirty }
+<appDataDir>/recovery/tabs/<id>.ket    working structure (.ket text)
+<appDataDir>/recovery/tabs/<id>.json   { path, savedAt, dirty }
+<appDataDir>/recovery/tabs/index.json  { order: id[], activeId }
 ```
 
 - **Signal**: subscribe to `ketcher.changeEvent` (`Subscription.add` /
   `Subscription.remove`); the typed alternative is
   `ketcher.editor.subscribe("change", handler)`.
-- **Scheduling**: debounce about 2 s after the last change, plus a slow
-  interval (30 s) as a safety net. Both timers are pure inputs to
-  `autosave.ts`; the interval only writes while `dirty`.
-- **Writes**: the `.ket` text first, then `autosave.json` last as the commit
-  record. A `.ket` without matching metadata is never restored. When `rename`
-  is available, write `autosave.ket.part` and rename it over the snapshot.
-- **Never while clean**: no writes once the document is saved, opened or new.
+- **Scheduling**: only the **active** tab is scheduled — debounce about 2 s
+  after the last change plus a slow interval (30 s) as a safety net. Both timers
+  are pure inputs to `autosave.ts`; the interval only writes while the active tab
+  is dirty.
+- **Switch flush**: switching tabs (§5.2) writes the outgoing tab immediately
+  instead of waiting for its debounce, then the incoming tab becomes the only
+  one scheduled.
+- **Writes**: `<id>.ket` first, then `<id>.json` last as that tab's commit
+  record. A `.ket` without matching metadata is never restored. When `rename` is
+  available, write `<id>.ket.part` and rename it over the snapshot. `index.json`
+  is written last after every structural change (create, close, activate, path
+  change) so it never names a tab whose files are missing.
+- **Serialized writes**: each tab has a FIFO queue shared by its snapshot write
+  and its cleanup, and `index.json` has one queue of its own. Concurrent writers
+  therefore never share a `.part` file or finish out of order; the last
+  submitted index wins. A writer that became stale removes only its own
+  `.part` (and, for a tab, files it committed while it still held the queue),
+  so it can never delete a newer committed snapshot or the current index.
+- **Never while clean (autosave)**: the debounce and the interval never write
+  while that tab is clean. This scopes the scheduler only: Save, Open and New
+  still write a **clean** snapshot for their tab (below) so the set restores.
 - **Never touches** `path`: autosave is not a save and does not clear `dirty`.
-- **Cleared** after a successful Save, New or Open: remove the metadata first
-  (and the `.ket` file after it), so an interrupted cleanup cannot resurrect a
-  stale snapshot.
-- **Recovery decision on launch**: read `autosave.json`; offer recovery when it
-  is present, `dirty` is true and `savedAt` is newer than the last clean save
-  (the file's mtime at `path`). With no `path` the snapshot always counts as
-  newer. `shouldOfferRecovery(meta, lastCleanSave)` is pure.
-- **Unknown original file**: a `path` that is missing, moved or unreadable has
-  no mtime to compare, so the snapshot always wins — it is the only remaining
-  copy of the work and offering recovery is safe, whereas silently dropping it
-  is not. When the file is gone the prompt says so and Restore keeps the path,
-  so the next Save recreates the file; an unreadable file keeps the same
-  behaviour without the extra note.
-- **Prompt**: in-app **Restore** / **Discard**.
-  Restore loads the snapshot with `ketcher.setMolecule(text)`, re-attaches
-  `path` when metadata has one and marks the document dirty so a Save persists
-  it. Discard deletes the snapshot and leaves an empty editor.
-- **Write/cleanup race**: `clearSnapshot()` advances a write generation, and a
-  snapshot write that started earlier stops at its next commit step (and
-  removes whatever it already wrote). Saving or leaving a document can
-  therefore never be overwritten by an autosave that was already in flight.
+- **Written, not cleared, by Save/Open/New**: after a successful Save, Open or
+  New the tab's snapshot is rewritten with its new `path`, `dirty: false` and
+  content, so the tab set (paths included) restores on the next launch. The
+  user's file and the snapshot stay in sync; only a **tab close** or
+  **Discard** (single tab or window) removes snapshot files, metadata first,
+  so an interrupted cleanup cannot resurrect a stale snapshot.
+- **Per-tab write generation**: `clearSnapshot(tabId)` advances that tab's
+  generation, and a snapshot write that started earlier stops before its next
+  commit step. A flush captures the tab id and text at call time, so a write
+  that lands after its tab was closed or after a newer switch is discarded —
+  one tab's content is never written into another.
+- **Restore on launch**: read `index.json`, then each listed tab's `.json` and
+  `.ket`. The set is restored **silently** — no prompt; content, paths, order,
+  dirty flags and the active id come back as they were. A snapshot marked dirty
+  keeps `dirty`, so the next Save persists it.
+- **Corrupt or missing snapshot**: a tab whose metadata or `.ket` file is
+  missing or unreadable is dropped, and a `.ket` that does not pass
+  `isKetDocument` (empty, or JSON without a `root`) is dropped too. If the
+  restored **active** tab still fails to load into Ketcher, `App.tsx` drops it
+  and falls back to the next tab (or one empty tab), so a bad snapshot never
+  leaves an unusable window. When `index.json` is missing, unreadable or empty,
+  or no listed tab survives, launch yields one empty tab. Launch never shows an
+  error dialog for snapshot state.
+- **Unknown original file**: a `path` that is missing, moved or unreadable is
+  not an error. The restored tab keeps the path and the first Save recreates the
+  file.
 
-### 5.5 Close guard
+### 5.6 Close guard
 
-`getCurrentWindow().onCloseRequested()` is registered once the editor is
-ready. The handler is a small state machine:
+`getCurrentWindow().onCloseRequested()` is registered once the editor is ready.
+The handler decides from the set of dirty tabs, not just the active one:
 
-| Document state         | Handler behaviour                                               |
-| ---------------------- | --------------------------------------------------------------- |
-| clean                  | allow the close                                                 |
-| dirty, no decision yet | `event.preventDefault()`, show in-app Save / Discard / Cancel   |
-| dirty, **Cancel**      | do nothing — the window stays open                              |
-| dirty, **Discard**     | delete the snapshot, then `window.destroy()`                    |
-| dirty, **Save**        | run Save (Save As if `path` is `null`), then `window.destroy()` |
+| Dirty tabs                            | Handler behaviour                                                                                                                                                            |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| none                                  | allow the close                                                                                                                                                              |
+| exactly one, and it is the active tab | `event.preventDefault()`, show in-app **Save / Discard / Cancel**: title "Save changes?", "<name> has unsaved changes.", question "Do you want to save them before closing?" |
+| exactly one, and it is not active     | `event.preventDefault()`, show **Discard / Cancel only**: title "Unsaved changes", "<name> has unsaved changes.", question "Are you sure you want to discard them?"          |
+| more than one                         | `event.preventDefault()`, show **Discard / Cancel only**: title "Unsaved changes", "<n> documents have unsaved changes.", question "Are you sure you want to discard them?"  |
 
-If Save As is cancelled, the close is aborted too. `window.destroy()` bypasses
-`onCloseRequested`, so a successful Save cannot loop back into the dialog.
+Follow-up states:
 
-### 5.6 Modules and APIs
+- **Cancel** — do nothing; the window and every tab stay open.
+- **Discard** — stop the autosave scheduler and set the busy guard **before**
+  the cleanup, delete the snapshot of every **dirty** tab, drain the snapshot
+  and index queues, then rewrite `index.json` with the surviving clean tabs and
+  `window.destroy()`. `flushActiveTab` refuses to run while closing, busy or
+  loading (checked again after `getKet`), and cleared tab ids are tombstoned,
+  so an in-flight or late debounce cannot recreate a discarded snapshot or
+  overwrite the survivors index. Clean tabs keep restoring on the next launch;
+  only discarded work is dropped. When every tab is dirty the index is written
+  empty, which restores one empty tab.
+- **Save** (only offered for the single active dirty tab) — run Save (Save As if
+  `path` is `null`), then `window.destroy()`. If Save As is cancelled, the close
+  is aborted too.
 
-| Module                       | Responsibility                                                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/document.ts`            | state, titles and names, dirty transitions, save/export mapping, close-guard decisions                                                    |
-| `src/autosave.ts`            | debounce/interval scheduling, write-generation counter, recovery decision (all pure)                                                      |
-| `src/autosaveStore.ts`       | app-data paths, atomic snapshot write, read/clear, original-file `stat`, no-op outside Tauri                                              |
-| `src/fileSaver.ts`           | Vite alias target for `file-saver`: `saveAs` delegates to the registered handler, browser download otherwise; direct text writer for Save |
-| `src/saveRoute.ts`           | pure routing of a saved blob by extension and document state (§5.7.1)                                                                     |
-| `src/ui/Dialog.tsx`          | overlay, panel, title, action row                                                                                                         |
-| `src/ui/Button.tsx`          | `primary`, `secondary`, `danger` button styles                                                                                            |
-| `src/ui/DocumentDialogs.tsx` | recovery, close-guard / replace, export and error dialogs                                                                                 |
-| `src/ui/editorButtons.ts`    | `Editor` `buttons` config: hides Ketcher's native Save As and recognize entries (§5.7)                                                    |
-| `src/ui/toolbarIcons.ts`     | transparent `imageLink` + mask-painted glyphs and the generated toolbar style (§5.7)                                                      |
+`window.destroy()` bypasses `onCloseRequested`, so a successful Save cannot loop
+back into the dialog. The multi-dirty case never offers Save because the
+inactive documents cannot be written without loading each one into the editor.
+
+### 5.7 Closing a single tab
+
+The strip's close control (X) and a middle click close one tab:
+
+- A **clean** tab closes immediately.
+- A **dirty** tab activates first when it is not active, then shows Save /
+  Discard / Cancel for that tab. Save writes it, Discard deletes its snapshot,
+  Cancel keeps the tab open.
+- The next active tab is the one to its right, otherwise the one to its left;
+  closing the last tab leaves one fresh empty tab, so a window never has zero
+  tabs.
+- Closing an inactive clean tab does not touch the editor or the active tab's
+  content.
+
+### 5.8 Modules and APIs
+
+| Module                       | Responsibility                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/tabs.ts`                | pure tab model: create/close/activate, titles and dirty counting, commit content, open-target choice (`isUntouchedTab` / `importedTab`), `isKetDocument`, close-guard decisions                                                                                                                                                                                        |
+| `src/tabStore.ts`            | `recovery/tabs/` paths, per-tab snapshot write/read/clear (validated, cleared-id tombstoned), serialized `index.json` write/read, Discard cleanup by dirty tab, no-op outside Tauri                                                                                                                                                                                    |
+| `src/document.ts`            | names and export mapping shared by a tab's save/export actions                                                                                                                                                                                                                                                                                                         |
+| `src/autosave.ts`            | debounce/interval scheduling per active tab, write-generation counter and serial task queue (all pure)                                                                                                                                                                                                                                                                 |
+| `src/autosaveStore.ts`       | app-data paths, atomic snapshot write, read/clear, original-file `stat`, no-op outside Tauri                                                                                                                                                                                                                                                                           |
+| `src/fileSaver.ts`           | Vite alias target for `file-saver`: `saveAs` delegates to the registered handler, browser download otherwise; direct text writer for Save                                                                                                                                                                                                                              |
+| `src/saveRoute.ts`           | pure routing of a saved blob by extension and active-tab state (§5.9.1)                                                                                                                                                                                                                                                                                                |
+| `src/ui/TabStrip.tsx`        | top tab strip: tabs, active tab, dirty dot, close (X / middle click), `+` button; separator = two layers of the same 1 px `#cad3dd` line: the strip's full-width `inset 0 -1px 0` box shadow for padding/gaps/after the last tab, plus a `borderBottom` on every inactive tab, while the active tab sets `borderBottom: none` and its white background covers the line |
+| `src/ui/Dialog.tsx`          | overlay, panel, title, action row                                                                                                                                                                                                                                                                                                                                      |
+| `src/ui/Button.tsx`          | `primary`, `secondary`, `danger` button styles                                                                                                                                                                                                                                                                                                                         |
+| `src/ui/DocumentDialogs.tsx` | close-guard (window and single tab) and export and error dialogs                                                                                                                                                                                                                                                                                                       |
+| `src/ui/editorButtons.ts`    | `Editor` `buttons` config: hides Ketcher's native Save As and recognize entries (§5.9)                                                                                                                                                                                                                                                                                 |
+| `src/ui/toolbarIcons.ts`     | transparent `imageLink` + mask-painted glyphs and the generated toolbar style (§5.9)                                                                                                                                                                                                                                                                                   |
 
 Ketcher API used:
 
@@ -273,27 +376,27 @@ Tauri API used:
 - `appDataDir()` from `@tauri-apps/api/path` for the recovery directory.
 - `readTextFile`, `writeTextFile`, `mkdir`, `rename`, `remove`, `stat` and
   `exists` from `@tauri-apps/plugin-fs`, under the filesystem scopes in
-  section 5.6.1.
+  section 5.8.1.
 - `save` / `open` from `@tauri-apps/plugin-dialog`.
 - Ketcher's remaining library saves (image export and any internal save) go
-  through the `file-saver` alias (§5.7): a `.ket` blob writes the document
+  through the `file-saver` alias (§5.9): a `.ket` blob writes the active tab
   directly once it has a path, and every other blob goes to the export dialog
-  (§5.7.1).
+  (§5.9.1).
 - `getCurrentWindow()` from `@tauri-apps/api/window`: `setTitle()`,
   `onCloseRequested()` and `destroy()`.
 
-#### 5.6.1 Filesystem scope
+#### 5.8.1 Filesystem scope
 
 `src-tauri/capabilities/default.json` is the single source of truth for what the
 webview may touch; the Rust host adds no scope at runtime. Tauri matches a
 `fs:scope` entry against **absolute paths or a `$VAR` root**, so a bare `**`
 matches nothing useful and leaves absolute app and user paths forbidden.
 
-| Entry          | Grants                                                                                    | Why                                                                                                                                        |
-| -------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `$APPDATA/**`  | `<appDataDir>/**` — Linux `~/.local/share/<identifier>`, Windows `%APPDATA%\<identifier>` | Autosave writes `<appDataDir>/recovery/autosave.ket` and `.json` with no dialog, so it can never be granted at runtime                     |
-| `$HOME/**`     | the user's home directory, recursively                                                    | A document opened in an earlier session, or restored from a snapshot, is saved again without a dialog, so its path is never dialog-granted |
-| runtime grants | one picked file or directory                                                              | `plugin-dialog`'s `open` / `save` commands call `allow_file` / `allow_directory` on the fs scope, granting that path for the session       |
+| Entry          | Grants                                                                                    | Why                                                                                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$APPDATA/**`  | `<appDataDir>/**` — Linux `~/.local/share/<identifier>`, Windows `%APPDATA%\<identifier>` | Autosave writes `<appDataDir>/recovery/tabs/` (`<id>.ket`, `<id>.json`, `index.json`) with no dialog, so it can never be granted at runtime |
+| `$HOME/**`     | the user's home directory, recursively                                                    | A document opened in an earlier session, or restored from a snapshot, is saved again without a dialog, so its path is never dialog-granted  |
+| runtime grants | one picked file or directory                                                              | `plugin-dialog`'s `open` / `save` commands call `allow_file` / `allow_directory` on the fs scope, granting that path for the session        |
 
 `$APPDATA` resolves to Tauri's `app_data_dir()`, i.e. `data_dir()/<identifier>` —
 exactly the recovery root. Files picked through a dialog are added to the scope
@@ -307,26 +410,27 @@ entries grant no command on their own; the fs commands (`readTextFile`,
 `writeTextFile`, `mkdir`, `rename`, `remove`, `stat`, `exists`, plus the
 non-text variants) stay listed explicitly in the same capability file.
 
-**Browser fallback** (`pnpm dev` without Tauri): no autosave, no recovery
-prompt and no close guard. Save and Export fall back to a download, following
-`src/fileSaver.ts`; the document keeps `path === null` because a browser
-download has no writable path.
+**Browser fallback** (`pnpm dev` without Tauri): tabs live in memory only — no
+autosave, no restore on launch and no close guard. Save and Export fall back to a
+download, following `src/fileSaver.ts`; a tab keeps `path === null` because a
+browser download has no writable path.
 
-### 5.7 Toolbar integration
+### 5.9 Toolbar integration
 
 The document commands live in **Ketcher's own top toolbar**. The app renders no
-toolbar, dock or floating control group of its own; it adds no toolbar chrome
-over the canvas.
+toolbar, dock or floating control group of its own; the only app chrome above the
+canvas is the document tab strip (§5.1, `docs/conventions.md` §6.6), which
+carries tab management only.
 
 **Custom buttons.** `Editor` accepts
 `customButtons: Array<{ id: string; imageLink: string; title: string }>`
 (`ketcher-react` `CustomButtons.d.ts`). The app registers three:
 
-| `id`                    | `title` | Action                                                                   |
-| ----------------------- | ------- | ------------------------------------------------------------------------ |
-| `chemistry-draw:save`   | Save    | Save the document (§5.2); Save As when `path` is `null`                  |
-| `chemistry-draw:new`    | New     | replace the document under the dirty guard (§5.3) and clear the snapshot |
-| `chemistry-draw:export` | Export  | open the in-app format dialog; never changes `path` or `format`          |
+| `id`                    | `title` | Action                                                                      |
+| ----------------------- | ------- | --------------------------------------------------------------------------- |
+| `chemistry-draw:save`   | Save    | Save the active tab (§5.3); Save As when its `path` is `null`               |
+| `chemistry-draw:new`    | New     | open a new empty tab (§5.4); never replaces or saves the active tab         |
+| `chemistry-draw:export` | Export  | open the in-app format dialog for the active tab; never changes path/format |
 
 A click calls `ketcher.sendCustomAction(id)`, which emits
 `CUSTOM_BUTTON_PRESSED` with the id on `ketcher.eventBus`; `App.tsx` subscribes
@@ -374,7 +478,7 @@ Consequences:
   capture phase, so hiding the button leaves no keyboard-only path to the native
   dialog.
 
-This reverses the earlier "keep native Save As" decision (§5.7, activity 2).
+This reverses the earlier "keep native Save As" decision (§5.9, activity 2).
 
 **`file-saver` alias.** Ketcher saves through its bundled `file-saver`
 (`saveAs` for text and image blobs). `vite.config.ts` maps `file-saver` to
@@ -384,30 +488,30 @@ registers; without Tauri or without a registered handler it downloads in the
 browser. Every remaining library save therefore writes through the Tauri
 filesystem instead of a browser download.
 
-#### 5.7.1 Routing rule for the aliased saver
+#### 5.9.1 Routing rule for the aliased saver
 
-`saveRoute` is a pure helper: given the suggested filename and the current
-`DocumentState` it returns where the blob goes. The extension is
-case-insensitive.
+`saveRoute` is a pure helper: given the suggested filename and the active tab's
+`TabState` it returns where the blob goes. The extension is case-insensitive.
 
-| Blob                                                              | Route                                                                                                                                                |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| extension `.ket`                                                  | **document save**: write to `path`; when `path` is `null`, open the Save As dialog (default `untitled.ket`); clear `dirty` and the recovery snapshot |
-| any other extension (`.mol`, `.smi`, `.inchi`, `.svg`, `.png`, …) | **export save**: Tauri Save dialog defaulting to the supplied name; `path` and `format` stay unchanged                                               |
-| no Tauri, or no registered handler                                | **browser download**: no dialog and no writable path                                                                                                 |
+| Blob                                                              | Route                                                                                                                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| extension `.ket`                                                  | **document save**: write to the active tab's `path`; when `path` is `null`, open the Save As dialog (default `untitled.ket`); clear that tab's `dirty` and snapshot |
+| any other extension (`.mol`, `.smi`, `.inchi`, `.svg`, `.png`, …) | **export save**: Tauri Save dialog defaulting to the supplied name; the tab's `path` stays unchanged                                                                |
+| no Tauri, or no registered handler                                | **browser download**: no dialog and no writable path                                                                                                                |
 
 The aliased saver routes image blobs (`.svg`, `.png`) the export way, so they
-never touch the document.
+never touch the active tab.
 
 **Shortcut map.**
 
-| Keys           | Command                                                         |
-| -------------- | --------------------------------------------------------------- |
-| `Ctrl+S`       | app Save; capture-phase listener stops Ketcher's `Mod+S` dialog |
-| `Ctrl+Shift+S` | app Save As                                                     |
-| `Ctrl+O`       | Open                                                            |
-| `Ctrl+N`       | New                                                             |
-| `Mod+S`        | intercepted; opens nothing                                      |
+| Keys           | Command                                                           |
+| -------------- | ----------------------------------------------------------------- |
+| `Ctrl+S`       | app Save for the active tab; capture-phase listener stops `Mod+S` |
+| `Ctrl+Shift+S` | app Save As for the active tab                                    |
+| `Ctrl+O`       | Open (reuse an untouched empty tab, otherwise a new tab)          |
+| `Ctrl+N`       | New tab                                                           |
+| `Ctrl+Tab`     | next tab; `Ctrl+Shift+Tab` previous tab                           |
+| `Mod+S`        | intercepted; opens nothing                                        |
 
 Ketcher still binds `Mod+S` internally for its (now hidden) Save As entry.
 Ketcher binds its hotkeys on the editor container in the bubble phase

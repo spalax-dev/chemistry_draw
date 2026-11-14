@@ -32,6 +32,8 @@
   the file you chose (the native Save dialog appears the first time); **Export**
   is the way to Molfile, SMILES, InChI, PNG and SVG. Save, New and Export live
   in Ketcher's own toolbar.
+- **Document tabs** — keep several `.ket` documents open in one window; every
+  tab keeps its own unsaved content and the set is restored on relaunch.
 - **Offline-first** — runs entirely on your machine.
 
 ## Download

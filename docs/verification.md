@@ -108,54 +108,120 @@ on Linux and `%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
 
 1. **Save an unsaved document.** Draw a structure, press `Ctrl+S`. A Save As
    dialog appears with `untitled.ket`. Choose a directory: the file exists,
-   contains `.ket` JSON, the title shows the file name without `*`, and the
-   snapshot under `<appDataDir>/recovery/` is gone.
+   contains `.ket` JSON, the tab shows the file name with no dirty dot, and that
+   tab's snapshot under `<appDataDir>/recovery/tabs/` exists and now records
+   `dirty: false` with the chosen path (Save writes a clean snapshot so the tab
+   set restores).
 2. **Save again.** Edit the structure and press `Ctrl+S`: no dialog appears,
-   the same file is overwritten (mtime changes) and the title loses `*`.
+   the same file is overwritten (mtime changes) and the tab's dirty dot is gone.
 3. **Save As.** Edit, run Save As to a second path: the title changes, the new
    file has the edits and the first file is unchanged.
 4. **Export.** Export each of Molfile V2000/V3000, SMILES, InChI, SVG and PNG.
-   Every file is non-empty and opens in an independent viewer; the window title
-   and `path` do not change, and a following `Ctrl+S` still writes the `.ket`
+   Every file is non-empty and opens in an independent viewer; the tab title and
+   its `path` do not change, and a following `Ctrl+S` still writes the `.ket`
    file, not the export.
-5. **Crash simulation.** Draw or edit, wait at least 2 s, then kill the process
-   while it is dirty (e.g. `kill -9 <pid>`). `<appDataDir>/recovery/` contains
-   `autosave.ket` plus `autosave.json` with the original `path`, a timestamp
-   and `dirty: true`.
-6. **Recovery prompt.** Relaunch: an in-app Restore/Discard dialog appears (not
-   a native GTK/Win32 dialog). Restore reloads the structure, re-attaches the
-   original path when it was saved before, and shows `*`. Save, then confirm
-   the `.ket` file on disk contains the recovered edits.
-7. **Discard.** Repeat 5, choose Discard: the editor is empty and the snapshot
-   is deleted. Relaunch again: no prompt.
-8. **Clean close.** With a saved document, close the window: it closes with no
-   dialog and no snapshot is left behind.
-9. **Close guard.** With unsaved changes, close the window: the in-app
-   Save/Discard/Cancel dialog appears.
+5. **Crash simulation (forced kill).** Draw or edit, wait at least 2 s, then
+   force-kill the process while it is dirty (`kill -9 <pid>`). Do **not** close
+   the window: a close runs the guard and cleanup. `<appDataDir>/recovery/tabs/`
+   contains `<id>.ket` plus `<id>.json` with the original `path`, a timestamp
+   and `dirty: true`, and `index.json` lists the tab and the active id.
+6. **Restore on launch.** Relaunch after the forced kill: the tab set returns
+   **silently** (no dialog), the dirty tab keeps its content, path and dirty
+   dot, and Save then writes the recovered edits to the original path.
+7. **Corrupt or invalid snapshot.** Delete `index.json`, or truncate one tab's
+   `.ket` (or replace it with `{}`): the bad tab is dropped. When it was the only
+   tab the app opens one empty tab; a still-valid active tab that cannot load is
+   dropped the same way. No error dialog and no crash in the log.
+8. **Clean close.** With saved/clean tabs, close the window: it closes with no
+   dialog and **keeps** every tab snapshot. Relaunch restores the same tab set
+   (content, paths, order and active tab).
+9. **Close guard.** With unsaved changes in a single active tab, close the
+   window: the in-app Save/Discard/Cancel dialog appears.
    - Cancel: the window stays open and the structure is intact.
    - Save: the document is written before the window closes.
    - Discard: the window closes without writing and without leaving a snapshot.
    - Cancel the Save As dialog during Save: the window stays open.
-10. **New and Open.** New empties the editor, clears `path`, the title shows
-    `Untitled` and any snapshot is gone. Open a `.ket`: the path and title
-    follow it and the document is clean. Open a `.mol`/`.smi`: it imports
-    through Ketcher, the title is `Untitled` and the document is dirty. Repeat
-    both with unsaved changes: an in-app Save/Discard/Cancel prompt appears
-    first; Cancel leaves the document untouched, Discard replaces it, and Save
-    writes before replacing it (a cancelled Save As aborts the command).
-11. **Browser fallback.** `pnpm dev` in a normal browser: Save and Export
-    download files (no dialog, no path), there is no autosave, no recovery
-    prompt and no close guard, and the console stays free of errors.
+10. **New and Open.** New opens a new empty tab and leaves the previous tab
+    untouched. Open a `.ket`: the file lands in an untouched empty tab (or a new
+    one), the path and title follow it and the tab is clean. Open a
+    `.mol`/`.smi`: it imports through Ketcher, the title is `Untitled` and the
+    tab is dirty. Open never prompts for a dirty tab.
+11. **Browser fallback.** `pnpm dev` in a normal browser: tabs work in memory,
+    Save and Export download files (no dialog, no path), nothing is saved or
+    restored across reloads, there is no close guard, and the console stays
+    free of errors.
 12. **Autosave scope.** Draw or edit a structure and let the debounce fire
-    (about 2 s). `<appDataDir>/recovery/` contains `autosave.ket` and
-    `autosave.json`, and the log has no `forbidden path` WARN naming
+    (about 2 s). `<appDataDir>/recovery/tabs/` contains that tab's `.ket` and
+    `.json` plus `index.json`, and the log has no `forbidden path` WARN naming
     `recovery` or `allow-mkdir`.
 13. **Restored document scope.** Repeat step 5 with a document that has a saved
-    `path`, relaunch and choose Restore. Press `Ctrl+S` without opening a
-    dialog: the restored document is written to its original path, the title
-    loses `*`, and the log has no `forbidden path` WARN for that path. With the
-    original file deleted, Restore keeps the path and the first Save recreates
-    the file.
+    `path`, relaunch and press `Ctrl+S` without opening a dialog: the restored
+    tab is written to its original path, the dirty dot disappears, and the log
+    has no `forbidden path` WARN for that path. With the original file deleted,
+    restore keeps the path and the first Save recreates the file.
+
+### Document tabs
+
+Run against the desktop build (`task run`). `<appDataDir>` is
+`~/.local/share/dev.spalax.ChemistryDraw` on Linux and
+`%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
+
+1. **Create.** The strip sits at the top of the window, above Ketcher's toolbar.
+   The `+` button opens a new tab and activates it; every new tab shows
+   `Untitled` with no dirty dot.
+2. **Switch.** Draw different structures in two tabs, then click between them:
+   each tab shows its own structure. A clean tab that received a programmatic
+   load (switching to it) gains no dirty dot.
+3. **Autosave per tab.** Edit two tabs, switch between them, wait at least 2 s
+   per tab: `<appDataDir>/recovery/tabs/` has one `<id>.ket` and `<id>.json` per
+   tab, `index.json` lists the order and the active id, and no tab's `.ket`
+   contains another tab's structure.
+4. **Rapid switching.** Alternate quickly between tabs several times, then leave
+   each tab and return: every structure is intact, and no snapshot contains a
+   molecule belonging to another tab.
+5. **Restore on relaunch.** Open three tabs with different content, save one and
+   leave the others dirty, then **force-kill** the process (`kill -9 <pid>`; do
+   not close the window — a normal quit with dirty tabs prompts) and relaunch:
+   the same tabs return in the same order with the same active tab, content,
+   paths and dirty dots, and **no** prompt appears.
+6. **Multi-tab close guard.** With at least two dirty tabs, close the window:
+   only **Discard / Cancel** is offered, the title is `Unsaved changes`, and the
+   copy reads `<n> documents have unsaved changes.` followed by
+   `Are you sure you want to discard them?`. Cancel keeps every tab; Discard
+   closes the window, removes only the dirty tabs' snapshots and leaves the clean
+   tabs' snapshots in place (a relaunch restores the clean tabs).
+7. **Inactive dirty tab.** With one clean active tab and one dirty inactive tab,
+   close the window: again only **Discard / Cancel** is offered, the title is
+   `Unsaved changes`, and the copy reads `<name> has unsaved changes.` followed by
+   `Are you sure you want to discard them?`. Cancel keeps everything; Discard
+   keeps the clean tab's snapshot and drops the dirty one.
+8. **Single-tab close.** Close a dirty tab with its `×`: it activates first when
+   needed and the dialog has the title `Save changes?`, the line
+   `<name> has unsaved changes.` and the question
+   `Do you want to save them before closing?`, with **Save / Discard / Cancel**
+   actions. Cancel keeps it, Discard closes it and removes only its snapshot,
+   Save writes it before closing. A middle click on the tab does the same. A
+   clean tab closes with no prompt, and the next active tab is the right
+   neighbour, otherwise the left.
+9. **Open reuse.** In an untouched empty tab, Open a `.ket` file: the file fills
+   that tab and the strip does not grow. Repeat from a non-empty or saved tab:
+   Open creates a new tab and the existing tabs are untouched.
+10. **Active-tab commands.** Save writes the active tab's path only; Save As
+    changes only that tab's path; Export changes no tab; New always adds a tab
+    and never replaces or discards the active one.
+11. **Styling.** The separator is one 1 px `#cad3dd` line drawn in two layers.
+    The strip draws the free-area line as an inset box shadow
+    (`boxShadow: "inset 0 -1px 0"` with `tokens.tab.border`), spanning the left
+    padding, the gaps and the area after the last tab. Every inactive tab draws
+    its own `borderBottom` (`tokens.borderWidth solid tokens.tab.border`), flush
+    (`gap: 0`) and at the same y, so the line is continuous under the tabs with
+    no 2 px seam. The active tab sets `borderBottom: none` and is the white
+    workspace surface with no grey `#e1e5ea` fill, so it is the only tab with no
+    line under it. Hovering colours the label/close control with `#00838f`, and
+    the surface around the tabs is `#eff2f5`. Tab titles never show `*`; unsaved
+    tabs show a dot.
+12. **One editor.** With the developer console open, switching tabs never mounts
+    a second Ketcher canvas, and no per-tab toolbar or dock appears.
 
 ### In-app dialog styling
 
@@ -179,7 +245,8 @@ Run against the desktop build (`task run`).
    shadowless white panel with `8px` corners): the overlay tint, the hatch, its
    `0.3s` fade and the panel frame match.
 5. **Every dialog, both zooms.** Repeat step 1 for every in-app dialog (Export,
-   close guard, recovery prompt, error dialog): the faint diagonals are visible
+   close guard, single-tab close prompt, error dialog): the faint diagonals are
+   visible
    behind each of them at 100 % **and** 125 % zoom. Diagonals missing behind any
    one dialog, or only at one zoom, fail this check — the effective
    `background-image` must be the token wrapped in `url("…")`, and good parity
@@ -211,20 +278,20 @@ Run against the desktop build (`task run`) unless a step says browser.
      filled glyph, none edge to edge).
    - **Titles:** the tooltips are still `Save`, `New` and `Export`, and the Save
      glyph is visually distinct from a floppy disk glyph.
-3. **Save.** Draw a structure, click Save with an untitled document: the Tauri
-   Save As dialog appears with `untitled.ket`; choose a path and confirm the
-   file is `.ket` JSON and the title loses `*`. Edit and click Save again: no
+3. **Save.** Draw a structure, click Save with an untitled tab: the Tauri Save
+   As dialog appears with `untitled.ket`; choose a path and confirm the file is
+   `.ket` JSON and the tab's dirty dot is gone. Edit and click Save again: no
    dialog, the same file is overwritten.
-4. **New.** With unsaved changes, click New: the in-app Save/Discard/Cancel
-   dialog appears and the recovery snapshot under `<appDataDir>/recovery/` is
-   removed after the command. Cancel leaves the structure intact; Discard
-   empties the editor; Save writes before replacing.
+4. **New.** With unsaved changes, click New: a new empty tab opens, the previous
+   tab keeps its content and dirty dot, and no dialog appears. The previous
+   tab's snapshot under `<appDataDir>/recovery/tabs/` still exists.
 5. **Export.** Click Export: the existing in-app format dialog opens and lists
    Molfile V2000, Molfile V3000, SMILES, InChI, SVG and PNG. Export any of
-   them; the document title and its `.ket` path are unchanged and a following
-   Save still writes the `.ket` file.
-6. **Shortcuts.** `Ctrl+S` saves, `Ctrl+Shift+S` opens Save As, `Ctrl+O` opens a
-   file and `Ctrl+N` starts a new document. `Ctrl+S` does **not** open
+   them; the active tab's title and its `.ket` path are unchanged and a
+   following Save still writes the `.ket` file.
+6. **Shortcuts.** `Ctrl+S` saves the active tab, `Ctrl+Shift+S` opens Save As,
+   `Ctrl+O` opens a file (reusing an untouched empty tab) and `Ctrl+N` opens a
+   new tab. `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs. `Ctrl+S` does **not** open
    Ketcher's native Save As dialog.
 7. **No native Save As.** Ketcher's top toolbar has no **Save As…** entry, and
    no shortcut opens its Molfile save dialog. The entry is hidden through
@@ -270,6 +337,11 @@ The reviewer agent must verify:
       dock), the native Save As entry is hidden through `buttons.save.hidden`,
       remaining library saves write through Tauri, and the `file-saver` alias is
       the only third-party override
+- [ ] Documents live in tabs over a single Ketcher instance: tabs hold file
+      state, switching uses `getKet` → loading flag → `setMolecule`, per-tab
+      snapshots plus `index.json` are written/flushed safely, launch restores the
+      set silently, and the close guard follows the matrix (Save only for the
+      single active dirty tab, otherwise Discard/Cancel)
 - [ ] New dialogs are in-app components with Ketcher tokens, `role="dialog"`,
       `aria-modal`, focus trap and Escape handling — no new Tauri native dialog
 - [ ] `docs/architecture.md` / `docs/conventions.md` respected

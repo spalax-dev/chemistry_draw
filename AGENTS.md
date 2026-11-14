@@ -70,6 +70,8 @@ not contain `test` or `implement` tasks.
 - **Documents are `.ket`**: Save/Save As write `.ket` only; Export is the sole
   route to Molfile, SMILES, InChI, SVG and PNG and never changes the document
   path or format.
+- **Documents live in tabs**: one Ketcher instance, tab state in `src/tabs.ts`,
+  per-tab snapshots under `recovery/tabs/`, restored silently on launch.
 - Native Indigo/Imago are generated with `task libs` (Docker). They are never
   vendored.
 

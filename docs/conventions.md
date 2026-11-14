@@ -132,8 +132,8 @@ Rules:
 
 ## 6. In-app dialogs and document UI
 
-Every dialog this app adds — recovery prompt, close guard, save/export errors —
-is an **in-app HTML component**, never a Tauri native
+Every dialog this app adds — window close guard, single-tab close prompt,
+save/export errors — is an **in-app HTML component**, never a Tauri native
 `message` / `confirm` / `ask`. The native error dialogs already in `App.tsx` may
 stay; new work must not add more. The same ban applies to browser
 `alert()` / `confirm()`.
@@ -213,8 +213,8 @@ outlive the canvas.
   at the dialog title.
 - Focus moves into the dialog on open (the safe primary action) and is trapped:
   `Tab` / `Shift+Tab` cycle inside it. Focus returns to the trigger on close.
-- `Escape` takes the least-destructive explicit choice: **Cancel** in the close
-  guard and **Discard** in the recovery prompt. It never triggers Save.
+- `Escape` takes the least-destructive explicit choice: **Cancel** in the window
+  close guard and in the single-tab close prompt. It never triggers Save.
 - Every control has a visible label; icon-only controls need an `aria-label`.
 - The focus ring uses the accent token and stays visible against every surface.
 
@@ -224,6 +224,7 @@ Decision logic lives in pure functions that import neither Tauri nor the DOM,
 so Vitest can exercise them (`docs/testing.md` §5):
 
 - state, title and dirty formatting (`src/document.ts`);
+- the tab model and guard decisions (`src/tabs.ts`);
 - save vs export format mapping and the close-guard decision;
 - saved-blob routing by extension and document state (`src/saveRoute.ts`);
 - autosave scheduling and the recovery decision (`src/autosave.ts`).
@@ -235,7 +236,8 @@ not put decisions inline in JSX or in an event handler.
 
 - **No app-owned toolbars or docks.** Do not render a fixed control group, a
   second toolbar or a floating dock over the canvas. App-level commands belong
-  in Ketcher's own top toolbar.
+  in Ketcher's own top toolbar. The document tab strip (§6.6) is document
+  chrome above the toolbar, not a toolbar: it carries tab management only.
 - **Hide, never restyle.** Native toolbar entries the app replaces are hidden
   through the `Editor` `buttons` config: `buttons.<name>.hidden = true`
   (`src/ui/editorButtons.ts`). Cast to `ButtonsConfig` only where Ketcher's
@@ -299,6 +301,75 @@ without naming a colour. `fill` is never set to `currentColor`: the
 mask uses the glyph's alpha, so the shape is the source of truth and the colour
 comes from `background-color`. Save must stay visually distinct from a floppy
 disk glyph.
+
+### 6.6 Document tab strip
+
+The tab strip is the only app-rendered chrome above the editor. It sits at the
+top of the window, above Ketcher's toolbar, and manages tabs only — Save, New
+and Export stay in Ketcher's toolbar (§6.5).
+
+- **One editor.** The strip never mounts a second `<Editor>`, a second canvas or
+  a per-tab toolbar/dock. Selecting a tab runs the one-editor switching protocol
+  in `docs/architecture.md` §5.2; Ketcher is never unmounted.
+- **Ketcher tab tokens only.** The strip uses Ketcher's tab tokens, not new
+  colours:
+
+  | Token                 | Value     | Use                                             |
+  | --------------------- | --------- | ----------------------------------------------- |
+  | `--color-tab-active`  | `#fff`    | active tab surface: the white workspace itself  |
+  | `--color-tab-regular` | `#fff`    | background of inactive tabs at rest             |
+  | `--color-tab-hover`   | `#00838f` | hovered tab's label and close control           |
+  | `--color-tab-content` | `#eff2f5` | strip/content surface behind and below the tabs |
+
+  No token outside this table, no gradient and no per-tab inline colour. The
+  strip overrides Ketcher's `--color-tab-active` grey (`#e1e5ea`); no grey tab
+  fill remains.
+
+- **One separator, two layers.** The strip draws the same 1 px `#cad3dd` line
+  in two layers so it is continuous without a seam or a double line:
+  1. The strip draws the free-area line as an inset box shadow,
+     `boxShadow: "inset 0 -1px 0"` with `tokens.tab.border`; it runs the strip's
+     full width through the left padding, the gaps and past the last tab.
+  2. Every **inactive** tab draws its own `borderBottom` of
+     `tokens.borderWidth solid tokens.tab.border` (`1px solid #cad3dd`), at the
+     same y as the inset shadow, so the line continues under the tabs.
+     The tabs sit flush (`gap: 0`) and every tab draws top/left/right edges.
+- **The active tab paints over the line.** Its `borderBottom` is `none` and its
+  white workspace background is opaque, so the active tab is the only tab with
+  no line under it; it reads as part of the editor. Inactive tabs keep their
+  bottom edge and no tab may draw a 2 px edge or add a second separator.
+- **Inactive tabs stay quiet.** White at rest; hovering colours the label and
+  the close control with `#00838f`, never the tab background. The dirty dot is
+  unchanged.
+
+- **Dirty state is a dot.** A dirty tab shows a small filled dot next to its
+  title; the title never contains `*`. Saved tabs show no dot.
+- **Close control.** Every tab has a close control (`×`) with an `aria-label`,
+  and a middle click closes the tab too. Closing is per tab and follows
+  `docs/architecture.md` §5.7. The `+` button at the end of the strip opens a
+  new empty tab.
+- **Titles.** Base name without `.ket`, `Untitled` when the tab has no path;
+  truncated with an ellipsis rather than wrapping, so the strip stays one row.
+- **Accessibility.** The strip is `role="tablist"` and each tab is
+  `role="tab"` with `aria-selected`; the active tab is the only one with
+  `tabIndex={0}` (roving tabindex). ArrowLeft/ArrowRight move focus and
+  activation to the neighbouring tab, wrapping at the ends; Enter/Space
+  activate. The close control is a real `<button>` and every icon-only control
+  has an `aria-label`.
+
+### 6.7 Dialog copy
+
+- Ask one confirmation question that matches the actions offered:
+  `Are you sure you want to discard them?` for a Discard / Cancel dialog,
+  `Do you want to save them before closing?` when Save is offered too.
+- State the situation in one sentence: the document name or dirty count plus
+  "has/have unsaved changes". No second explanatory paragraph.
+- Never explain implementation limits or what the app cannot do. Dialog copy
+  must not contain "not possible", "on screen", "one editor" or
+  "saving them all": the dialog asks for a decision, it does not justify the
+  code behind it.
+- Titles are sentence case: `Unsaved changes` when only Discard / Cancel is
+  offered, `Save changes?` when Save is offered.
 
 ---
 

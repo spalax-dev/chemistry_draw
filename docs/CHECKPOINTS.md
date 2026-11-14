@@ -92,13 +92,13 @@
       `.mol`/`.smi`/`.sdf`/`.rxn` imports through Ketcher, leaves `path` `null`
       and keeps the document dirty.
 - [x] Autosave writes `.ket` plus metadata into the app data dir only while
-      dirty, debounced and on a slow interval, never to the user's file, and
-      the snapshot is cleared after Save, New or Open; an in-flight write
-      cannot recreate a snapshot after that cleanup.
-- [x] A snapshot newer than the last clean save triggers an in-app
-      Restore/Discard prompt on launch; Restore re-attaches the original path
-      when known. A missing or unreadable original still offers recovery
-      (missing files are called out in the prompt).
+      dirty, debounced and on a slow interval, never to the user's file; Save,
+      New and Open rewrite the snapshot as clean so the tab set restores, and
+      only closing a tab or Discard clears it. An in-flight write cannot
+      recreate a snapshot after that cleanup.
+- [x] The tab set is restored silently on launch from `index.json` and each
+      tab's snapshot; there is no recovery prompt. A missing or unreadable
+      original still restores (Save recreates the file).
 - [x] Closing with unsaved changes is guarded by an in-app Save/Discard/Cancel
       dialog; Cancel keeps the window open and Save writes before closing. New
       and Open reuse the same prompt before replacing a dirty document.
@@ -155,8 +155,47 @@
       distribution's copies, which GTK already pulls in, as documented in
       `docs/architecture.md` §7.
 
+## C11 — Document Tabs
+
+> Supersedes the single-document autosave and close-guard points in C8.
+
+- [x] Tabs hold file state (`{ id, path, ket, dirty }` plus the active id) and a
+      single Ketcher instance renders them; no second editor, canvas or per-tab
+      toolbar is mounted.
+- [x] Switching serializes the outgoing tab with `getKet`, sets a `loading`
+      flag, loads the target with `setMolecule` and clears the flag; a
+      programmatic load never marks the tab dirty.
+- [x] Each tab owns `recovery/tabs/<id>.ket`, `<id>.json` and the shared
+      `index.json` (`{ order, activeId }`); a switch flushes the outgoing tab,
+      `index.json` is written last, and a stale or late write is discarded so
+      rapid switching cannot write one tab's content into another.
+- [x] Launch restores content, paths, order, dirty flags and the active tab
+      silently; a missing or corrupt snapshot yields an empty tab and never an
+      error dialog.
+- [x] Save, Save As and Export act on the active tab; New always opens a new
+      tab; Open reuses an untouched empty tab or opens a new one and never
+      prompts for a dirty tab.
+- [x] The close guard follows the matrix: no dirty tab closes; exactly one dirty
+      **active** tab offers Save / Discard / Cancel; more than one dirty tab, or
+      the only dirty tab being inactive, offers Discard / Cancel only with copy
+      explaining several documents have unsaved changes.
+- [x] Closing a single dirty tab (`×` or middle click) activates it first when
+      needed and prompts Save / Discard / Cancel for that tab; Discard clears
+      only that tab's snapshot.
+- [x] The strip sits above Ketcher's toolbar and uses the Ketcher tab tokens
+      (`#fff` active and regular, `#00838f` hover, `#eff2f5` content) with a
+      dirty dot, a close control and a `+` button. The 1 px `#cad3dd` separator
+      is drawn in two layers: the strip's `inset 0 -1px 0` box shadow covers the
+      padding, gaps and the area after the last tab, and every inactive tab
+      draws its own `borderBottom`, while the active tab sets
+      `borderBottom: none` and its white background covers the line. The line is
+      continuous, exactly 1 px and absent only under the active tab.
+- [x] The pure tab model and the close-guard matrix are covered by Vitest and
+      were RED before implementation.
+- [x] The manual checklist in `docs/verification.md` §2 "Document tabs" passes.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C10 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C11 remain empty.
