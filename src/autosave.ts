@@ -176,3 +176,56 @@ export function createWriteGeneration(): WriteGeneration {
     isCurrent: (token) => token === generation,
   };
 }
+
+/** Tombstones for tab ids whose snapshot was cleared. */
+export interface ClearedTabs {
+  /** Marks `id` as cleared; every later snapshot write for it is refused. */
+  mark: (id: string) => void;
+  /** Whether `id` was cleared. */
+  has: (id: string) => boolean;
+}
+
+/**
+ * Tab ids are never reused, so a cleared id stays un-writable. This stops a
+ * debounce or flush that was submitted around a Discard from recreating the
+ * snapshot the cleanup just removed.
+ */
+export function createClearedTabs(): ClearedTabs {
+  const cleared = new Set<string>();
+
+  return {
+    mark: (id) => {
+      cleared.add(id);
+    },
+    has: (id) => cleared.has(id),
+  };
+}
+
+/** A FIFO queue that runs async tasks one at a time, in submission order. */
+export interface SerialQueue {
+  /** Queues `task`; resolves with its result once every earlier task settled. */
+  run: <T>(task: () => Promise<T>) => Promise<T>;
+  /** Resolves once everything queued so far has settled (success or failure). */
+  idle: () => Promise<void>;
+}
+
+/**
+ * Serializes writes to one file. Concurrent writers would otherwise share the
+ * same `.part` name and finish in an arbitrary order, so an older snapshot
+ * could overwrite a newer one. A rejected task never blocks the queue.
+ */
+export function createSerialQueue(): SerialQueue {
+  let tail: Promise<unknown> = Promise.resolve();
+
+  return {
+    run<T>(task: () => Promise<T>): Promise<T> {
+      const result = tail.then(task, task);
+      tail = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+    idle: () => tail.then(() => undefined),
+  };
+}

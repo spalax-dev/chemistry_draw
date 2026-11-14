@@ -4,6 +4,8 @@ import {
   AUTOSAVE_DEBOUNCE_MS,
   AUTOSAVE_INTERVAL_MS,
   createAutosaveScheduler,
+  createClearedTabs,
+  createSerialQueue,
   createWriteGeneration,
   parseAutosaveMeta,
   shouldOfferRecovery,
@@ -267,5 +269,85 @@ describe("snapshot write generation", () => {
     expect(generation.isCurrent(first)).toBe(false);
     expect(generation.isCurrent(second)).toBe(false);
     expect(generation.isCurrent(third)).toBe(true);
+  });
+});
+
+describe("serial write queue", () => {
+  function deferred(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
+
+  it("runs tasks one at a time in submission order", async () => {
+    const queue = createSerialQueue();
+    const first = deferred();
+    const order: string[] = [];
+
+    const one = queue.run(async () => {
+      order.push("start-1");
+      await first.promise;
+      order.push("end-1");
+      return 1;
+    });
+    const two = queue.run(async () => {
+      order.push("start-2");
+      return 2;
+    });
+
+    await Promise.resolve();
+    expect(order).toEqual(["start-1"]);
+
+    first.resolve();
+    await expect(one).resolves.toBe(1);
+    await expect(two).resolves.toBe(2);
+    expect(order).toEqual(["start-1", "end-1", "start-2"]);
+  });
+
+  it("keeps running after a task rejects", async () => {
+    const queue = createSerialQueue();
+    const order: string[] = [];
+
+    const failed = queue.run(async () => {
+      order.push("failed");
+      throw new Error("write failed");
+    });
+    const next = queue.run(async () => {
+      order.push("next");
+      return "ok";
+    });
+
+    await expect(failed).rejects.toThrow("write failed");
+    await expect(next).resolves.toBe("ok");
+    expect(order).toEqual(["failed", "next"]);
+  });
+
+  it("keeps a cleared tab marked and leaves other ids writable", () => {
+    const cleared = createClearedTabs();
+
+    cleared.mark("tab-1");
+
+    expect(cleared.has("tab-1")).toBe(true);
+    expect(cleared.has("tab-2")).toBe(false);
+  });
+
+  it("reports idle only after every submitted task settles", async () => {
+    const queue = createSerialQueue();
+    const pending = deferred();
+    let done = false;
+
+    const task = queue.run(async () => {
+      await pending.promise;
+      done = true;
+    });
+    const idle = queue.idle().then(() => done);
+
+    expect(done).toBe(false);
+    pending.resolve();
+    await task;
+
+    await expect(idle).resolves.toBe(true);
   });
 });

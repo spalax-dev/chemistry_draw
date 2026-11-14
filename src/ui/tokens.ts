@@ -41,6 +41,18 @@ export const tokens = {
     backdropRepeat: "repeat",
     backdropSize: "10px 10px",
   },
+  /** Ketcher's document tab tokens (`docs/conventions.md` §6.6). */
+  tab: {
+    active: "#ffffff",
+    regular: "#fff",
+    hover: "#00838f",
+    content: "#eff2f5",
+    border: "#cad3dd",
+    text: "#333",
+    dirty: "#167782",
+    fontSize: "12px",
+    radius: "3px",
+  },
   fontFamily: "Roboto, Helvetica, Arial, sans-serif",
   fontSize: {
     title: "14px",
