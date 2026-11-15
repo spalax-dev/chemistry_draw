@@ -323,19 +323,40 @@
 
 ## C13 — Model Setup UI (B3)
 
-- [x] Ketcher's top toolbar carries a fourth custom entry `Models`
+- [x] Ketcher's top toolbar registers a fourth custom entry `Models`
       (`chemistry-draw:models`, transparent `imageLink` plus a masked outline
-      glyph on the same 24-unit grid and metrics as Save/New/Export); no
-      app-owned toolbar or dock is added.
+      glyph on the same 24-unit grid and metrics as Save/New/Export), but it is
+      a **conditional control**, not a permanent toolbar item: it is visible
+      when `/v2/models` is unknown or not ready, when `update_available` is
+      true, when the last verify report is `ok: false`, whenever
+      `download.state` is downloading, verifying, cancelled or failed (an
+      active, interrupted or failed run on a ready install keeps its Cancel,
+      Resume and Retry reachable), and when a recognition failure reported the
+      models unavailable (the `attention` override, cleared only by proof of
+      health: accepting a download-style run does not clear it but arms the
+      proof — an already-healthy `200` no-op re-hash clears immediately, else a
+      later status read clears only when the completed run reports healthy — and
+      an `ok: true` verify clears it too; a new model-unavailable failure
+      invalidates any pending health proof before its own silent status read, so
+      an earlier run cannot clear a failure observed now); it is hidden only on a
+      healthy ready install with an `idle`/`ready` download state, no update, no
+      repair and no attention flag. The rule
+      is the pure `modelsControlVisible` helper; no app-owned toolbar or dock is
+      added.
 - [x] The in-app `Dialog`/`Button` setup dialog auto-opens exactly once on
       startup when `/v2/models` reports `ready: false`, can be reopened from
-      **Models** at any time, and **Later**/Escape closes it while drawing and
-      Indigo operations keep working. Opening it or choosing Later starts no
-      download.
-- [x] The dialog shows both model families with provenance, license, per-model
-      and total sizes (8,162,917 B / 315,824,273 B / 323,987,190 B, binary
-      formatting to ~309 MiB), installed bytes, catalog version and download
-      state; Download is opt-in.
+      **Models** while the control is visible (unknown/not ready, update,
+      repair, an active/cancelled/failed run or the recognition-unavailable
+      attention case), and **Later**/Escape closes it while drawing and Indigo
+      operations keep working. Opening it or choosing Later starts no download.
+      **Later** then reopening does not clear an `ok: false` verify report: the
+      dialog still shows Repair and the control stays visible.
+- [x] The dialog shows both model families with provenance, per-model and total
+      sizes (8,162,917 B / 315,824,273 B / 323,987,190 B, binary formatting to
+      ~309 MiB), installed bytes, catalog version and download state; it has no
+      **Licenses and source** block, Hugging Face URL or repeated license
+      paragraph (attribution stays in `NOTICE` and the docs). Download is
+      opt-in.
 - [x] Action labels match the status: Download / Resume / Retry / Repair /
       Update / Verify, Cancel only while downloading, and Later always;
       `verifying` offers no cancel (`409`), a `409`/failed request re-fetches
@@ -356,18 +377,46 @@
       `local-ocsr` is never hardcoded in the webview, and a ready install at
       startup applies the same update with no dialog.
 - [x] Pure helpers (`formatBytes`, `progressPercent`, `parseModelsStatus`,
-      `setupView`) and the HTTP adapters (with an injected fake fetch) are
-      covered by Vitest with the not-installed, downloading, verifying, paused,
-      failed, ready, update and repair cases, malformed status/verify bodies and
-      `readError`/`409`/unreachable-service handling. A temporary local
-      Playwright run against a dummy catalog and loopback server (not a
-      committed suite, no `pnpm test:e2e`) exercises auto-open, Later/reopen,
-      Download → ready, Verify, Verify-fail → Repair → ready, the in-dialog
-      error/Retry state, the action row at 1280x800 and 900x600, and the
-      capability update without a remount. Cancel/resume and Update labels are
-      covered by the `setupView` tests, their backend semantics by the sidecar
-      suite, and their click-through by the manual checklist. No flow downloads
-      the real ~324 MB models.
+      `setupView`, `modelsControlVisible`, `modelInstallHealthy`,
+      `modelAttentionNoticeVisible`) and the HTTP
+      adapters (with an
+      injected fake fetch) are covered by Vitest with the not-installed,
+      downloading, verifying, paused, failed, ready, update and repair cases,
+      the Models-control null/not-ready/ready/update/repair cases plus
+      ready+downloading, ready+verifying, ready+cancelled, ready+failed and the
+      healthy-ready + `attention` override, the install-health true case for a
+      healthy ready root and false for `null`, not-ready, update, downloading,
+      verifying, cancelled and failed, the attention note true only on a ready
+      verify-capable dialog and false without the override, on a `null`/not-ready
+      status, during an active/paused/failed run and while Repair is shown,
+      malformed
+      status/verify bodies and `readError`/`409`/unreachable-service handling,
+      plus `isModelUnavailable` for a prefixed JSON body, a bare JSON body,
+      plain text and the unrelated/no-detail negatives. A
+      temporary local Playwright run against a dummy catalog and loopback server
+      (not a committed suite, no `pnpm test:e2e`) exercises auto-open,
+      Later/reopen, Download → ready with the Models control visible on the
+      empty root and hidden after ready, Verify, Verify-fail → Later → reopen
+      still Repair/control visible → Repair → ready
+      with the control back while repair is needed, the recognition-unavailable
+      failure forcing the control visible after the in-app error is dismissed
+      (with the muted Verify note in the dialog and a prior hidden-control
+      re-assertion), a forced `500` repair request keeping the control visible
+      after Later/reopen, an accepted `202` whose body still reports
+      `downloading` (not forwarded, with the following polls answering
+      `downloading` for ~2.5 s) keeping the control visible across at least two
+      polls and the note absent because Verify is unavailable, the
+      real repair keeping the control visible while
+      `downloading` and hiding it only once the completed run reads healthy,
+      the close-during-repair → new recognition failure regression (a pending
+      proof from the earlier run must not clear the fresh attention) followed by
+      an `ok: true` Verify hiding the note and control, the
+      dialog without a license/source block, the in-dialog error/Retry
+      state, the action row at 1280x800 and 900x600, and the capability update
+      without a remount.
+      Cancel/resume and Update labels are covered by the `setupView` tests,
+      their backend semantics by the sidecar suite, and their click-through by
+      the manual checklist. No flow downloads the real ~324 MB models.
 - [x] Model weights remain unbundled, uncommitted and absent from installers;
       the dialog downloads only from the catalog's Hugging Face URLs and never
       uploads an image, drawing or document.
@@ -399,12 +448,13 @@
 - [x] Launching the packaged app with an empty app-data root
       (`XDG_DATA_HOME`/`%APPDATA%` equivalent) creates the empty models
       directory, auto-opens the **Models** dialog once and starts no download;
-      **Later** leaves the app usable and reopening from **Models** shows the
-      same state. Download progresses to ready and enables Recognize without
-      remounting the editor; the drawn structure, selection, undo history and
-      Save/Open/Export workflow survive, and no native alert or second OS
-      window appears in any setup state. A relaunch with the populated root
-      does not auto-open; a second fresh root repeats the first-run flow.
+      **Later** leaves the app usable and the **Models** control (visible while
+      the root is empty) reopens the same state. Download progresses to ready,
+      the control disappears and Recognize enables without remounting the
+      editor; the drawn structure, selection, undo history and Save/Open/Export
+      workflow survive, and no native alert or second OS window appears in any
+      setup state. A relaunch with the populated root neither auto-opens nor
+      shows the control; a second fresh root repeats the first-run flow.
 - [x] The Windows CI smoke runs the release sidecar with an empty model root
       and asserts `GET /v2/models` `ready: false`/`total_bytes: 323987190` and
       `GET /v2/info` `imago_versions: []`, while keeping the

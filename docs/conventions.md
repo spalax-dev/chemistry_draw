@@ -253,7 +253,9 @@ not put decisions inline in JSX or in an event handler.
   `ButtonName` union is incomplete (`save`), and justify the cast in a comment.
   Never hide native UI with CSS `display: none`, a DOM query or a Ketcher source
   edit. Ketcher's built-in **Recognize** entry stays visible: the app uses it
-  for the ONNX/OCSR flow; only the native Save As entry is replaced.
+  for the ONNX/OCSR flow; only the native Save As entry is replaced. (The
+  app-registered `Models` control is not native UI; its one sanctioned DOM hook
+  is in §6.5.1.)
 - Register them through the `Editor` `customButtons` prop and handle them as
   `CUSTOM_BUTTON_PRESSED` custom actions. Button ids are namespaced
   `chemistry-draw:<command>`; one listener dispatches by id.
@@ -290,11 +292,36 @@ in the image.
 - The style string is generated in `src/ui/toolbarIcons.ts` and rendered once by
   the app **scoped to** `.Ketcher-root` — the `<style>` element is a sibling of
   the `Editor`, not a descendant of the Ketcher root, so the scope comes from
-  the selector and never from DOM nesting. Ketcher source is never edited and no
-  DOM query selects the buttons.
+  the selector and never from DOM nesting. Ketcher source is never edited; the
+  only DOM query that selects a toolbar button is the sanctioned `Models`
+  visibility hook below.
 - **No hard-coded icon colours.** The style carries `currentColor` only: the
   glyph inherits Ketcher's `#333333` default, `#167782` hover and the active
   state colour from the button. A literal colour in the icon module is a bug.
+
+**Sanctioned DOM exception — the conditional `Models` entry.** Ketcher renders
+`customButtons` from its own React tree and exposes no per-button visibility
+prop, but the app-registered `Models` entry must appear only while setup needs
+attention (`docs/architecture.md` "Model setup UI"): unknown or not-ready
+status, an available update, a verify repair, a run that is downloading,
+verifying, cancelled or failed even on a ready install, or a recognition failure
+that reported the models unavailable (the attention override). Only a healthy
+ready install with an `idle`/`ready` download state, no update, no repair and no
+attention flag hides it. One DOM hook is therefore allowed, and only for that
+button:
+
+- It finds the wrapper through the stable `img[alt="Models"]` — the same alt
+  text §6.5.1 already keys the glyph on — scoped to `.Ketcher-root`, and takes
+  `closest("button")`.
+- It only sets `display` on that wrapper: `none` to hide it, `""` to restore
+  Ketcher's own layout.
+- It never selects or mutates a native toolbar entry, another custom button,
+  the toolbar container or Ketcher source; the registered button, its icon and
+  its `CUSTOM_BUTTON_PRESSED` wiring stay intact.
+- It fails open: if the node is absent the hook logs once and leaves the
+  control exactly as Ketcher rendered it; it never throws.
+- No CSS rule hides a toolbar button and no other component queries the
+  toolbar. Any second DOM hook is a bug, not a precedent.
 
 Metrics and glyphs are Ketcher's own: the toolbar button is 28/32/40 px with
 2/4/5 px padding (compact/default/large) and the icon fills the content box

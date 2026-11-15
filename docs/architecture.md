@@ -364,12 +364,12 @@ over the canvas.
 `customButtons: Array<{ id: string; imageLink: string; title: string }>`
 (`ketcher-react` `CustomButtons.d.ts`). The app registers four:
 
-| `id`                    | `title` | Action                                                                   |
-| ----------------------- | ------- | ------------------------------------------------------------------------ |
-| `chemistry-draw:save`   | Save    | Save the document (§5.2); Save As when `path` is `null`                  |
-| `chemistry-draw:new`    | New     | replace the document under the dirty guard (§5.3) and clear the snapshot |
-| `chemistry-draw:export` | Export  | open the in-app format dialog; never changes `path` or `format`          |
-| `chemistry-draw:models` | Models  | open the in-app model setup dialog (§7, "Model setup UI")                |
+| `id`                    | `title` | Action                                                                                            |
+| ----------------------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `chemistry-draw:save`   | Save    | Save the document (§5.2); Save As when `path` is `null`                                           |
+| `chemistry-draw:new`    | New     | replace the document under the dirty guard (§5.3) and clear the snapshot                          |
+| `chemistry-draw:export` | Export  | open the in-app format dialog; never changes `path` or `format`                                   |
+| `chemistry-draw:models` | Models  | open the in-app model setup dialog; shown only while setup needs attention (§7, "Model setup UI") |
 
 A click calls `ketcher.sendCustomAction(id)`, which emits
 `CUSTOM_BUTTON_PRESSED` with the id on `ketcher.eventBus`; `App.tsx` subscribes
@@ -384,8 +384,19 @@ generated once in `src/ui/toolbarIcons.ts`. Because an `<img>` cannot inherit `c
 mask is what lets each glyph take the button colour: `#333333` by default,
 `#167782` on hover and the active-state colour on press, at Ketcher's native
 28/32/40 px button metrics with the icon filling the content box. Ketcher's
-source is untouched and no DOM query selects the buttons (`docs/conventions.md`
-§6.5.1).
+source is untouched and no native button is selected by a DOM query
+(`docs/conventions.md` §6.5.1).
+
+**The one DOM exception.** The conditional `Models` entry needs per-instance
+visibility, which Ketcher exposes for native entries (`buttons.<name>.hidden`)
+but not for `customButtons`. `App.tsx` therefore finds
+`.Ketcher-root img[alt="Models"]`, takes `closest("button")` and toggles
+`display` on that wrapper only: `none` when `modelsControlVisible` is false,
+`""` to restore. It touches no native entry, no other custom button and no
+Ketcher source, keeps the registered button and its `CUSTOM_BUTTON_PRESSED`
+event intact, and fails open (one `console.warn`, control left as Ketcher
+rendered it) when the node is absent. This is the only DOM query in the app that
+selects a toolbar button (§6.5.1).
 
 **Native Save As is hidden.** Ketcher's top-toolbar entry is
 `save: { title: "Save As…", shortcut: "Mod+s", action: { dialog: "save" } }`,
@@ -404,7 +415,8 @@ that config and `FileControls` drops Save when `hiddenButtons` contains
 `"save"`. Ketcher's `ButtonName` union does not list `save`, so the object is
 cast to `ButtonsConfig`; that cast is the documented workaround and the runtime
 lookup still matches the key. The hiding is configuration only: no CSS
-`display: none`, no DOM query and no Ketcher source edit.
+`display: none` and no DOM query for the native entry, and no Ketcher source
+edit. The only DOM hook is the `Models` visibility exception above.
 
 Consequences:
 
@@ -969,35 +981,135 @@ surface is the same in-app, Ketcher-styled `Dialog` / `Button` pair used by the
 document workflow. It opens above the still-mounted editor; the canvas is never
 replaced, reloaded or unmounted.
 
-**Toolbar entry.** `chemistry-draw:models` (title `Models`) is the fourth
-`customButtons` entry, with the same transparent `imageLink` plus masked
-outline glyph as Save, New and Export (§5.7). Its `CUSTOM_BUTTON_PRESSED`
-action opens the dialog; it stays visible after the dialog is closed and after
-the models are ready, so the status can be inspected at any time. The button is
-ignored while another in-app dialog is open, like the other custom actions.
+**Models control, not a permanent entry.** `chemistry-draw:models` (title
+`Models`) is the fourth registered `customButtons` entry, with the same
+transparent `imageLink` plus masked outline glyph as Save, New and Export
+(§5.7), but it is a **conditional control**: it is shown only while the model
+setup needs attention. The decision is the pure `modelsControlVisible(status,
+verify, attention = false)` helper in `src/modelSetup.ts`:
+
+| `/v2/models` status                                                         | Verify report         | Attention | `Models` control |
+| --------------------------------------------------------------------------- | --------------------- | --------- | ---------------- |
+| any                                                                         | any                   | `true`    | visible          |
+| `null` (not read yet)                                                       | any                   | any       | visible          |
+| `ready: false` (any download state)                                         | any                   | any       | visible          |
+| `ready: true`, `download.state` downloading, verifying, cancelled or failed | any                   | any       | visible          |
+| `ready: true`, `update_available: true`                                     | no `ok: false` report | any       | visible          |
+| `ready: true`, `download.state` idle or ready                               | `ok: false` (repair)  | any       | visible          |
+| `ready: true`, `download.state` idle or ready, `update_available: false`    | `null` or `ok: true`  | `false`   | hidden           |
+
+`attention` is the recognition-failure override: a recognition failure that
+reports the models unavailable (the documented `Recognition models are not
+available.` substring, matched by `isModelUnavailable`) sets it, forcing the
+control visible even when every other signal says the install is healthy.
+Starting a run does not clear it, and an accepted `202` is not proof. Only
+proof of health clears it: a Verify report with `ok: true`, or a download-style
+run whose completion reads healthy (`modelInstallHealthy`). `App.tsx` keeps a
+ref from the accepted start until a status read observes that completed health.
+This is the only way a corrupt-but-present artifact surfaces without running
+Verify, because a status read sees `ready: true` (presence and manifest, no
+hashing).
+
+A healthy ready install (`ready: true`, an `idle`/`ready` download state, no
+catalog update, no verify report that needs a repair and no attention flag)
+therefore carries no `Models` control: the toolbar keeps only the document
+commands and Ketcher's built-in entries. The control comes back when a status
+read reports `update_available: true`, when a verify report says `ok: false`,
+when the install stops being ready (a missing or removed artifact, or an unknown
+status after a failed startup read), whenever `download.state` leaves
+`idle`/`ready`, or when a recognition failure reports the models unavailable:
+a failed Repair keeps `ready: true`, so without that case its own **Retry**
+would be hidden; a cancelled repair or update keeps `cancelled` on an otherwise
+ready install, so the same rule keeps **Resume** reachable; an active
+`downloading`/`verifying` run keeps the dialog, its progress, **Cancel** and its
+eventual error reachable instead of hiding the only path to the run's status;
+and the attention flag covers a corrupt artifact that recognition found while
+the status still looks ready. The other signals (unknown status, not ready,
+update, repair) are unchanged. Its `CUSTOM_BUTTON_PRESSED` action opens the
+dialog; the button is hidden while the rule is false and ignored while another
+in-app dialog is open, like the other custom actions.
+
+**How the control is shown or hidden.** Ketcher renders `customButtons` from its
+own tree and has no per-button visibility prop for them, so `App.tsx` applies
+`modelsControlVisible` through the single sanctioned DOM hook (§5.7,
+`docs/conventions.md` §6.5.1): it finds `.Ketcher-root img[alt="Models"]`, takes
+`closest("button")` and sets `display: none` / `""` on that wrapper. Nothing
+else in the toolbar is touched, the registered button and its event stay intact,
+and a missing node is logged once and left as rendered (fail open).
+
+**Runtime detection.** The app reads `/v2/models` at startup, when the dialog
+opens and around each action; it does not poll while the control is hidden. What
+a status read can and cannot see is worth stating plainly:
+
+- A missing or removed artifact is noticed on the next status read — startup,
+  opening the dialog or an action — because presence is part of the status.
+- A **same-size corrupt artifact is not noticed by a status read**. The status
+  checks presence and the manifest only; it never hashes the files. An explicit
+  **Verify** (`POST /v2/models/verify`) is the only **status read** that hashes;
+  a download/repair run re-hashes when it executes.
+- **After Later**: the verify report is kept, so a manifest-valid root whose
+  report is `ok: false` still shows **Repair** and keeps the control visible
+  until a new **Verify** or a download-style run resets the report (and, for the
+  attention override, until a healthy completion proves the files).
+- **After restart**: the report is gone, so a manifest-valid corrupt root reads
+  ready and the control is hidden. There is no toolbar path while it is hidden:
+  the ways back are a recognition failure that reports the models unavailable
+  (which sets the attention flag) or a dialog that is already open, where
+  **Verify** can still be run.
+- The one recognition-driven path is the attention override: a recognition
+  failure that reports the models unavailable forces the control visible and
+  triggers a silent status read, so the user can reopen the dialog and run
+  **Verify**/**Repair**. The attention flag lasts until proof of health — a
+  Verify report with `ok: true`, or a download-style run whose completion reads
+  healthy — not when the start is merely accepted (`202`) and not just until the
+  dialog is dismissed. A new recognition failure **invalidates any pending
+  health proof before its own silent status read**: a proof armed by an earlier
+  run cannot clear a failure observed now, even if the read sees a healthy
+  install. A recognition failure that arrives while a repair is already running
+  also invalidates that run's proof, so its completion no longer clears the
+  attention; only a Verify `ok: true` or a later accepted run whose completion
+  reads healthy does. See "Repair reset" below.
+
+Consequence: on an already-running healthy session the control does not reappear
+by itself when a file changes on disk; a verify that reports `ok: false`
+restores it immediately, and a recognition failure that reports the models
+unavailable does the same.
 
 **Auto-open and Later.** After the editor is ready and the API base resolved,
 the app fetches `GET /v2/models` once. When the response has `ready: false`, the
 dialog opens automatically — exactly once per launch. It closes through
 **Later** (also Escape, the least-destructive choice); nothing is cancelled and
 the app remains fully usable for drawing and Indigo operations. **Later never
-starts a download**, and reopening from **Models** shows the same status. A
-startup with installed models does not auto-open. A failed startup status
-request is logged and does not block the editor: the dialog stays closed and
-the toolbar entry retries and shows the connection error in the dialog. When a
+starts a download**, and reopening from **Models** while the control is visible
+shows the same status; on a clean root the control stays visible because the
+install is not ready. Reopening does not clear the last verify report: a
+dismissed **Repair** shows **Repair** again, and the control stays visible, until
+a new Verify or a successful download-style action resets it. A startup with
+installed models neither auto-opens the dialog nor shows the control once the
+ready status is read. A failed startup status request is logged and does not
+block the editor: the dialog stays closed, the status is unknown, so the control
+stays visible and opening it retries and shows the connection error. When a
 recovery prompt is also due, it is shown first; the Models dialog opens after
-that prompt is dismissed.
+that prompt is dismissed. The dialog is not force-closed when the install
+becomes ready: it stays open until **Later**, while the toolbar control
+disappears.
 
 **Dialog sections.** Title `Models`, one panel, no nested native windows:
 
-| Section     | Content                                                                                                                                                                                                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Intro       | What the models enable (image → structure recognition), that the download is opt-in, and that images, documents and drawings never leave the machine.                                                                                                                     |
-| Families    | One row per catalog model: `Image classifier` (`image-classifier@Iagea/d21f4cb`, MIT, 8,162,917 B / 7.8 MiB) and `Structure recognition` (`ocsr-handdrawn@zenodo:10781330`, CC-BY-4.0, 315,824,273 B / 301.2 MiB), each with installed/missing state and installed bytes. |
-| Totals      | `installed_bytes` of 323,987,190 B (309.0 MiB), the total percent, and the catalog version with an update note when `update_available` is true.                                                                                                                           |
-| Progress    | While a run is active: state label, a progress bar, `downloaded_bytes` of `total_bytes` with its integer percent, and `download.current_file` (the artifact path being fetched or installed).                                                                             |
-| Error       | `download.error` verbatim in a `role="alert"` region, prefixed by a short failure sentence. Offline, disk-space, checksum and transport messages stay here.                                                                                                               |
-| Attribution | The Hugging Face source repository and the license names; the full attributions are in `NOTICE`.                                                                                                                                                                          |
+| Section  | Content                                                                                                                                                                                                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intro    | What the models enable (image → structure recognition), that the download is opt-in, and that images, documents and drawings never leave the machine.                                                                                                                              |
+| Notice   | Only while the recognition-unavailable attention flag is set on a ready, verify-capable dialog (Verify is the action it points at) and no Repair is shown: a muted sentence that a recognition attempt reported the models unavailable and that Verify checks the installed files. |
+| Families | One row per catalog model: `Image classifier` (`image-classifier@Iagea/d21f4cb`, MIT, 8,162,917 B / 7.8 MiB) and `Structure recognition` (`ocsr-handdrawn@zenodo:10781330`, CC-BY-4.0, 315,824,273 B / 301.2 MiB), each with installed/missing state and installed bytes.          |
+| Totals   | `installed_bytes` of 323,987,190 B (309.0 MiB), the total percent, and the catalog version with an update note when `update_available` is true.                                                                                                                                    |
+| Progress | While a run is active: state label, a progress bar, `downloaded_bytes` of `total_bytes` with its integer percent, and `download.current_file` (the artifact path being fetched or installed).                                                                                      |
+| Error    | `download.error` verbatim in a `role="alert"` region, prefixed by a short failure sentence. Offline, disk-space, checksum and transport messages stay here.                                                                                                                        |
+
+There is no **Licenses and source** section: the dialog shows no Hugging Face
+URL and no repeated MIT/CC-BY-4.0 paragraph, because the license table above,
+`NOTICE` and the docs already carry the attribution. The short privacy note in
+the intro stays; model families, sizes, progress, errors and actions are the
+whole dialog.
 
 Sizes use binary units with one decimal (`formatBytes`); the total matches the
 catalog and never a rounded hardcoded string. `current_file` is shown as the
@@ -1037,7 +1149,9 @@ Repair, and the label states the intent:
   dialog as a short note; the status is re-fetched instead of assuming a
   transition.
 - **Later** is always visible, including during a run; it closes the dialog but
-  does not cancel. The toolbar entry reopens and shows live progress.
+  does not cancel. An active `download.state` (`downloading`/`verifying`) keeps
+  the toolbar control visible even when `ready: true` (a repair or update in
+  progress), so it reopens the dialog with live progress.
 
 **Polling.** There is no SSE or WebSocket. Opening the dialog fetches
 `GET /v2/models` immediately, and each action follows with a fetch. While
@@ -1097,7 +1211,8 @@ URLs only; no drawing, image, document or telemetry is uploaded. No model
 weight is bundled in an installer, committed to git or downloaded at startup.
 
 **Modules.** `src/modelSetup.ts` holds the pure helpers — `formatBytes`,
-`progressPercent`, `parseModelsStatus` and `setupView` — and the HTTP adapters
+`progressPercent`, `parseModelsStatus`, `setupView`, `modelsControlVisible`,
+`modelInstallHealthy` and `modelAttentionNoticeVisible` — and the HTTP adapters
 (`fetchModelsStatus`, `startModelDownload`, `cancelModelDownload`,
 `verifyModels`), covered by Vitest with an injected fetch (`docs/testing.md`
 §6.2). `App.tsx` owns the polling/action loop, the open/auto-open state and the
@@ -1111,7 +1226,25 @@ download-style action (Download, Resume, Retry, Update, Repair) clears it when
 it starts and when it succeeds. Without that reset a successful Repair would
 keep `setupView` on `repair`/Repair from the stale `ok: false` report even
 though the files are now ready; clearing at the action boundary returns the
-dialog to `ready`/Verify after the run.
+dialog to `ready`/Verify after the run. Closing the dialog is not an action
+boundary: **Later** keeps the report, so reopening shows the same
+Repair/control. The attention flag follows the same health rule but a stricter
+clear path: accepting a download-style run does not clear it; it arms the health
+proof. A response that is already healthy (the `200` no-op re-hash) is proof and
+clears it immediately; otherwise a later status read clears it only when the
+completed run reports healthy (`modelInstallHealthy`). A Verify report with
+`ok: true` also clears it, and `App.tsx` tracks the accepted run in a ref so an
+ordinary status read with no run in flight can never clear it. The ref is
+**invalidated before** the silent status read that follows a new
+model-unavailable recognition failure: a proof armed by an earlier run (for
+example a Repair that completed while the dialog was closed and no status read
+observed it) cannot clear the attention the fresh failure just set. A failure that arrives while a repair is running
+invalidates that run's proof too, so the attention survives its completion and
+only a Verify `ok: true` (or a later accepted run that completes healthy) clears
+it. The muted attention notice is rendered by
+`modelAttentionNoticeVisible`: only with the override set on a ready,
+verify-capable dialog (`setupView(...).canVerify`) and with no Repair report, so
+the note appears exactly when Verify is the action it points at.
 
 **Private-internals risk.** `src/ketcherOptions.ts` reaches into Ketcher 3.18's
 React fiber and Redux store because the public `editor.options()` API only
@@ -1144,7 +1277,8 @@ the contract, not an afterthought of the dev checkout:
   `/v2/info` advertises `imago_versions: []`, so Ketcher disables Recognize,
   while Indigo keeps serving. The setup UI sees `ready: false` and auto-opens
   the **Models** dialog exactly once; **Later** leaves the editor fully usable
-  and starts no download.
+  and starts no download. The **Models** control is visible in the toolbar
+  because the install is not ready.
 - **Download makes the same install ready.** An opt-in
   `POST /v2/models/download` streams the four artifacts from Hugging Face into
   `<app_data>/models`, verifies the pinned sizes and SHA-256 values, installs
@@ -1153,7 +1287,9 @@ the contract, not an afterthought of the dev checkout:
   `installed_bytes == total_bytes == 323987190`; `POST /v2/models/verify`
   reports `ok: true`; `/v2/info` advertises `["local-ocsr"]`; and the dialog
   enables Recognize in place without a remount, so the canvas, selection and
-  undo history survive (§7, "Model setup UI").
+  undo history survive (§7, "Model setup UI"). The **Models** control
+  disappears once this ready state is observed: there is no update and no last
+  verify repair.
 - **The packaged sidecar is self-sufficient.** Running
   `squashfs-root/usr/bin/indigo-server` from the AppImage payload with an empty
   `CHEMISTRY_MODELS_DIR`, the packaged `LD_LIBRARY_PATH` and no dev checkout is
@@ -1575,10 +1711,19 @@ unknown, expired or restarted job id is `404`.
 | filter returns `no-structure`                         | `No molecule was detected in this image.`                                     | No chemical structure was detected in this image. Try a clear image of one drawn molecule, or draw the structure in the editor. |
 | `incomplete` or low confidence                        | `The structure could not be read confidently. Try a sharper or larger image.` | The structure could not be read confidently. Try a sharper or larger image of one molecule.                                     |
 | undecodable / unsupported / over-dimension image      | `Unsupported image. Use a PNG, JPEG or WebP file.`                            | This image cannot be used. Choose a PNG, JPEG or WebP file.                                                                     |
-| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Molecule recognition is not set up. Open the Models entry in the toolbar and download the recognition models.                   |
+| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Molecule recognition is not set up. Open the Models entry in the toolbar to set up or repair the recognition models.            |
 | SMILES → molfile failure                              | `The recognized structure could not be prepared for the editor. Try again.`   | The structure was recognized but could not be prepared for the editor. Please try again.                                        |
 | still `PENDING` after the TTL                         | `Recognition timed out. Try again.`                                           | Recognition took too long. Please try again.                                                                                    |
 | unknown, expired or restarted job id (`404`)          | `unknown recognition job`                                                     | The recognition result expired before it reached the editor. Please try again.                                                  |
+
+A model-unavailable failure is also the one recognition error that changes the
+toolbar: `isModelUnavailable` matches the documented substring and sets the
+attention flag, so the **Models** control is forced visible even on a
+manifest-valid ready install until a Verify report with `ok: true` or a
+completed download-style run whose status is healthy proves the files healthy
+(an accepted start is not proof). This is how a
+corrupt-but-present artifact, invisible to a presence-only status read, gets a
+repair entry point.
 
 A POST with an unsupported `Content-Type` is `400` and maps to the unsupported
 image copy. An over-cap POST is the documented **plain-text exception**: axum's

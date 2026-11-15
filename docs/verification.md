@@ -215,37 +215,47 @@ CHEMISTRY_MODELS_DIR=$CLEAN task run
 ```
 
 1. **Auto-open on a clean root.** The **Models** setup dialog opens once after
-   the editor paints. It lists both families (`Image classifier`, MIT,
-   8,162,917 B; `Structure recognition`, CC-BY-4.0, 315,824,273 B), the
-   323,987,190 B (309.0 MiB) total, the state `Not installed` and the
-   Hugging Face source. **No download has started**: `GET /v2/models` reports
-   `download.state: "idle"` and the log shows no artifact request. The built-in
-   **Recognize** control is disabled (`/v2/info` advertises `[]`).
+   the editor paints, and the **Models** control is present in the toolbar. The
+   dialog lists both families (`Image classifier`, 8,162,917 B;
+   `Structure recognition`, 315,824,273 B), the 323,987,190 B (309.0 MiB)
+   total and the state `Not installed`; it has no **Licenses and source**
+   block, no Hugging Face URL and no repeated license paragraph (attribution
+   stays in `NOTICE` and the docs). **No download has started**:
+   `GET /v2/models` reports `download.state: "idle"` and the log shows no
+   artifact request. The built-in **Recognize** control is disabled
+   (`/v2/info` advertises `[]`).
 2. **Later.** Click **Later** (and repeat after reopening with Escape): the
    dialog closes, no download starts, the app draws and runs Indigo operations,
-   and the **Models** toolbar entry reopens the same state. The dialog must not
-   reopen by itself in the same session.
+   and the **Models** control (still visible because the install is not ready)
+   reopens the same state. The dialog must not reopen by itself in the same
+   session.
 3. **Download, progress and ready.** Draw a small structure first. Click
    **Download**: the dialog is the only surface that changes — the editor stays
    mounted behind it. The progress section shows the state, bytes of the total,
    an integer percent and the current artifact path; the button row is
    **Cancel** + **Later** while downloading, then only **Later** while
    verifying. At the end the status is ready, installed bytes equal
-   `323987190` and `$CLEAN/manifest.json` exists. **Recognize is enabled
-   without a restart**: the canvas is not reloaded, the structure drawn in step
-   2 is still there, and `Ctrl+Z` still undoes into the pre-download history
-   (the editor was not remounted; Ketcher's option store was updated in
-   place). `jq .imago_versions` on `/v2/info` returns `["local-ocsr"]`.
-4. **Reopen while ready.** Click **Models** again: the dialog shows `Installed`,
-   the installed bytes and a **Verify** primary action; no auto-open occurs on
-   the next launch with this root.
+   `323987190` and `$CLEAN/manifest.json` exists. The **Models** control
+   disappears from the toolbar as soon as the ready status is observed (ready,
+   no update, no verify repair); the open dialog is not force-closed and stays
+   until **Later**. **Recognize is enabled without a restart**: the canvas is
+   not reloaded, the structure drawn in step 2 is still there, and `Ctrl+Z`
+   still undoes into the pre-download history (the editor was not remounted;
+   Ketcher's option store was updated in place). `jq .imago_versions` on
+   `/v2/info` returns `["local-ocsr"]`.
+4. **Ready hides the control.** The dialog still shows `Installed`, the
+   installed bytes and a **Verify** action. Click **Later**: the toolbar no
+   longer carries **Models**, which is the intended end state for a healthy
+   install, and there is no toolbar path back to the dialog. No auto-open
+   occurs on the next launch with this root.
 5. **Cancel and resume.** Stop the app, point `CLEAN` at a fresh directory
    (`CLEAN=$(mktemp -d)`) and relaunch with
    `CHEMISTRY_MODELS_DIR=$CLEAN task run`. Wait until bytes grow, then
    **Cancel**. The dialog reports the cancelled state with **Resume** (no
    error), `find "$CLEAN" -name '*.part' -ls` shows the partial file and
-   clicking **Resume** continues rather than restarting. Repeating Cancel while
-   verifying is not offered (the backend answers `409`).
+   clicking **Resume** continues rather than restarting. The control stays
+   visible while the install is not ready. Repeating Cancel while verifying is
+   not offered (the backend answers `409`).
 6. **Offline error stays in the dialog.** Use the support catalog override in a
    temp root with every URL pointed at a closed port (never in a release):
 
@@ -256,25 +266,42 @@ CHEMISTRY_MODELS_DIR=$CLEAN task run
    CHEMISTRY_MODELS_DIR=$(mktemp -d) CHEMISTRY_MODEL_CATALOG=$CAT task run
    ```
 
-   Click **Download**: after a failed preflight/fetch the dialog keeps the
+   The **Models** control is visible (the status is not ready). Click
+   **Download**: after a failed preflight/fetch the dialog keeps the
    `role="alert"` error (it names the URL and asks to check the network) with
    **Retry** and **Later**. No OS alert or second window appears and no browser
    `alert()` fires. A full volume (a small tmpfs or quota-limited mount) shows
    the required/available byte message in the same place; the deterministic
    disk coverage is the backend test suite.
 
-7. **Retry and repair.** With a temp root that already completed a download,
-   overwrite one artifact with same-size garbage (for example the 5,316 B
-   `ocsr-handdrawn-fp32/vocab.json`), restart with that root and reopen
-   **Models** → **Verify**: the dialog reports the corrupt file and the primary
-   action becomes **Repair**. Repair re-hashes, fetches only the bad artifact,
-   rewrites the manifest and ends ready; **Verify** then reports all files
-   match.
+7. **Verify, repair and the returning control.** Keep the dialog open after the
+   step 3 download instead of clicking **Later**, and overwrite one artifact
+   with same-size garbage (for example the 5,316 B
+   `ocsr-handdrawn-fp32/vocab.json`). Click **Verify**: the dialog reports the
+   corrupt file, the primary action becomes **Repair** and the **Models**
+   control reappears in the toolbar because the verify report is `ok: false`.
+   Click **Later**, then reopen from **Models**: the dialog still shows
+   **Repair** and the control is still visible; close it again and the control
+   stays visible. Repair re-hashes, fetches only the bad artifact, rewrites the
+   manifest and ends ready; **Verify** then reports all files match and the
+   control disappears again. While that repair runs (`downloading`/`verifying`
+   on a ready install) and if it is cancelled, the **Models** control stays
+   visible with **Cancel**/**Resume**: only a healthy `idle`/`ready` install
+   hides it. A recognition failure that reports the models unavailable forces
+   the control visible until a Verify report with `ok: true` or a completed
+   download-style run whose status is healthy; an accepted `202` is not proof,
+   and the dialog shows a muted note asking for Verify while the override is
+   armed. See "Recognize Molecule end
+   to end". A healthy ready install has no toolbar path to Verify once the
+   dialog is closed; the backend verify/repair semantics stay covered by the
+   sidecar suite.
 8. **Update label.** In the same temp root only, set `catalog_version` to `0` in
-   `manifest.json`, restart and reopen: the dialog shows an update is available
-   and the primary action is **Update**. Update re-verifies the installed files
-   without refetching them and rewrites the manifest at version `1`. A newer
-   installed catalog is not offered an update.
+   `manifest.json` and restart with that root. The **Models** control is back in
+   the toolbar because `update_available` is true; opening it shows that an
+   update is available and the primary action is **Update**. Update re-verifies
+   the installed files without refetching them and rewrites the manifest at
+   version `1`; the control disappears again. A newer installed catalog is not
+   offered an update.
 9. **No native alerts anywhere.** Every setup error above stays in the dialog;
    an ad-hoc Playwright run against `pnpm dev` (not a committed suite) records
    no browser alert, and no Tauri `message()`/`confirm()` window appears in the
@@ -419,16 +446,18 @@ gated/manual smoke.
    ```
 
    1. **First launch.** The **Models** dialog opens automatically after the
-      editor paints, lists both families with licenses and sizes, shows
-      `Not installed` and `idle`, and no artifact request is made. Recognize is
-      disabled (`/v2/info` is `[]`). `$CLEAN_DATA/dev.spalax.ChemistryDraw/`
-      exists and `models/` is empty.
+      editor paints and the **Models** control is present in the toolbar. It
+      lists both families and sizes, shows `Not installed` and `idle`, and no
+      artifact request is made; there is no **Licenses and source** block or
+      source URL. Recognize is disabled (`/v2/info` is `[]`).
+      `$CLEAN_DATA/dev.spalax.ChemistryDraw/` exists and `models/` is empty.
    2. **Later and reopen.** **Later** closes it; the app draws, runs Layout and
       saves a `.ket` file. **Models** reopens the same state and the dialog does
       not reopen by itself.
    3. **Download → ready.** Draw a structure, click **Download**: progress is
       polled in the dialog; at the end it is ready with 323,987,190 installed
-      bytes and `$CLEAN_DATA/dev.spalax.ChemistryDraw/models/manifest.json`.
+      bytes and `$CLEAN_DATA/dev.spalax.ChemistryDraw/models/manifest.json`,
+      and the **Models** control disappears from the toolbar.
       **Recognize enables without a restart**: the structure, selection and
       undo history are intact (no remount). Use **Recognize Molecule** with
       `caffeine.png`: the structure is inserted (the packaged models, runtime
@@ -436,10 +465,10 @@ gated/manual smoke.
    4. **Document workflow.** Save, Save As, Open, New and an Export still work
       while the Models state changes; no native alert or second OS window
       appears for any setup step.
-   5. **Restart with installed models.** Reopen **Models**: it shows `Installed`
-      and **Verify**. Relaunch with the same `CLEAN_DATA`: no dialog auto-opens,
-      and **Models** still opens on demand. A second fresh `CLEAN_DATA` repeats
-      step 1.
+   5. **Restart with installed models.** Relaunch with the same `CLEAN_DATA`:
+      no dialog auto-opens and no **Models** control appears (ready, no update,
+      no last verify repair); Recognize stays enabled. A second fresh
+      `CLEAN_DATA` repeats step 1.
 
 5. **Windows CI smoke.** The `windows` job
    (`.github/actions/windows-build/action.yml`) runs the release sidecar with
@@ -637,7 +666,32 @@ control.
   can make the same check a DOM assertion — a `[role="dialog"]` element titled
   `Structure problem` — plus `page.on("dialog")` recording no browser `alert()`;
   a native Tauri `message()` is an OS window outside the webview and satisfies
-  neither.
+  neither. The same temporary flow, run against the dummy catalog and a
+  manifest-valid ready root whose artifacts are not loadable, checks the two
+  repair paths: (a) a Verify `ok: false` → **Later** → reopen from **Models**
+  still shows **Repair** with the control visible, and closing again leaves it
+  visible; (b) a Recognize attempt ends in the model-unavailable `FAILURE` body
+  while `/v2/info` advertises the ids, and after the `ErrorDialog` is dismissed
+  the **Models** control is visible and opens the dialog. That is the only
+  way the attention override is exercised without corrupting a real install;
+  the unit tests pin the helper and the substring match. The flow also checks
+  that the accepted start is not treated as health: a Repair POST forced to
+  `500` keeps the control visible after Later/reopen, an accepted `202` whose
+  body still reports `downloading` (not forwarded, so no run starts) keeps the
+  control visible while the following polls keep answering `downloading` for a
+  couple of seconds (checked across at least two polls, not a sub-second
+  snapshot), and the control stays visible while the real repair is
+  `downloading` and hides only when the completed run reads healthy. The dialog
+  shows the muted attention note only while the override is armed on a ready,
+  verify-capable dialog (Verify is the action it points at); the note stays
+  absent during a run and disappears with the override. A close-during-repair
+  variant is the strict-clear regression: from the attention state a real Repair
+  is started and **Later** closes the dialog before a poll sees progress, the
+  run completes with no status read, and a fresh recognition failure (past the
+  5 s dedupe) must leave the control visible and the note present after its
+  silent refresh settles; an earlier run's pending health proof may not clear a
+  failure observed now. A following **Verify** with `ok: true` hides the note
+  and the control, the other clear path.
 - Low confidence / incomplete: there is no deterministic fixture; a fragmented
   or heavily degraded sketch is the manual reproduction. The deterministic
   coverage is the gate test with a fake prediction. The dialog must say the
@@ -855,8 +909,9 @@ Run against the desktop build (`task run`) unless a step says browser.
    Ketcher's native Save As dialog.
 7. **No native Save As.** Ketcher's top toolbar has no **Save As…** entry, and
    no shortcut opens its Molfile save dialog. The entry is hidden through
-   `buttons.save.hidden`; there is no CSS `display: none` and no DOM query in
-   the app.
+   `buttons.save.hidden`; there is no CSS `display: none` and no DOM query for
+   the native entry. (The app's only DOM hook toggles the app-registered
+   `Models` control; see `docs/conventions.md` §6.5.1.)
 8. **No native save dialog.** Neither the toolbar nor any shortcut opens
    Ketcher's Save As dialog, so its built-in image-save entry is unreachable.
    Use the app **Export** once for SVG and once for PNG: each opens the Tauri
@@ -983,11 +1038,23 @@ The reviewer agent must verify:
 - [ ] Model delivery is verified: empty-root status, opt-in
       download/resume/cancel/verify, generated schema-1 manifest, app-data root,
       `/v2/info` capability gating, and no model files in packages
-- [ ] Model setup UI is verified: the Models toolbar entry, auto-open/Later,
-      opt-in Download with polling/progress, the Download/Resume/Repair/Update/
-      Verify/Cancel/Retry labels, in-dialog offline/disk errors with no native
-      alert, and Recognize enabling after ready without a remount or canvas
-      loss
+- [ ] Model setup UI is verified: the conditional **Models** control (visible
+      on an unknown/not-ready install, an available update, a verify repair, a
+      recognition failure that reports the models unavailable, or a
+      downloading/verifying/cancelled/failed run even on a ready install;
+      hidden only on a healthy `idle`/`ready` install with no attention flag;
+      accepting a download-style run does not clear the attention, it arms the
+      health proof: a response that is already healthy (the `200` no-op re-hash)
+      clears immediately, otherwise a later status read clears only when the
+      completed run reports healthy, and a new model-unavailable failure
+      invalidates any pending proof; the dialog shows the muted Verify note only
+      while the override is armed on a ready, verify-capable dialog),
+      auto-open/Later, Later → reopen keeping Repair and the control, opt-in
+      Download with polling/progress, the
+      Download/Resume/Repair/Update/Verify/Cancel/Retry
+      labels, in-dialog offline/disk errors with no native alert, the dialog
+      without a license/source block, and Recognize enabling after ready
+      without a remount or canvas loss
 - [ ] Clean install is verified: the packaged payloads carry no model weights
       and keep Indigo/ONNX Runtime, the AppImage sidecar serves the empty
       `/v2/models` + `/v2/info` contract and runs the real download/verify plus

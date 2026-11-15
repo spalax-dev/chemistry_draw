@@ -48,11 +48,13 @@ import {
   writeTextFileAt,
 } from "./fileSaver";
 import { routeSavedBlob } from "./saveRoute";
-import { describeError, errorMessage } from "./recognizeErrors";
+import { describeError, errorMessage, isModelUnavailable } from "./recognizeErrors";
 import { applyKetcherAppOptions, findKetcherRoot } from "./ketcherOptions";
 import {
   cancelModelDownload,
   fetchModelsStatus,
+  modelInstallHealthy,
+  modelsControlVisible,
   setupView,
   startModelDownload,
   verifyModels,
@@ -176,6 +178,7 @@ function App() {
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelStatus, setModelStatus] = useState<ModelsStatus | null>(null);
   const [modelVerify, setModelVerify] = useState<VerifyReport | null>(null);
+  const [modelAttention, setModelAttention] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [modelBusy, setModelBusy] = useState(false);
 
@@ -186,6 +189,9 @@ function App() {
   const modelsStartupRef = useRef(false);
   const modelAbortRef = useRef<AbortController | null>(null);
   const modelBusyRef = useRef(false);
+  // True while a download-style run was accepted but has not yet been observed
+  // healthy: only a later status read may treat that run's completion as proof.
+  const modelHealthProofRef = useRef(false);
   const imagoVersionsRef = useRef<string[] | null>(null);
 
   const [recovery, setRecovery] = useState<RecoveryOffer | null>(null);
@@ -290,6 +296,13 @@ function App() {
 
         setModelStatus(next);
         setModelError(null);
+        // A completed download-style run is proof of health only when a status
+        // read observes the result. An ordinary read with no accepted run in
+        // flight never clears the recognition-attention override.
+        if (modelHealthProofRef.current && modelInstallHealthy(next)) {
+          modelHealthProofRef.current = false;
+          setModelAttention(false);
+        }
         return next;
       } catch (error) {
         if (controller.signal.aborted) return null;
@@ -310,7 +323,6 @@ function App() {
   const openModels = useCallback(() => {
     modelsOpenRef.current = true;
     setModelsOpen(true);
-    setModelVerify(null);
     setModelError(null);
     void refreshModels({ requireOpen: true });
   }, [refreshModels]);
@@ -344,7 +356,20 @@ function App() {
       try {
         const next = await action(base);
         setModelStatus(next);
-        if (options.clearVerify) setModelVerify(null);
+        if (options.clearVerify) {
+          setModelVerify(null);
+          // An accepted start (202) is not proof of health: the worker may
+          // still fail before or during the run. Keep the attention override
+          // and let a status read of the completed, healthy install clear it.
+          // A response that is already healthy (a 200 no-op re-hash) is proof,
+          // so clear the override immediately.
+          if (modelInstallHealthy(next)) {
+            modelHealthProofRef.current = false;
+            setModelAttention(false);
+          } else {
+            modelHealthProofRef.current = true;
+          }
+        }
       } catch (error) {
         const message = errorMessage(error);
         setModelError(message);
@@ -376,7 +401,12 @@ function App() {
     setModelBusy(true);
     setModelError(null);
     try {
-      setModelVerify(await verifyModels(base));
+      const report = await verifyModels(base);
+      setModelVerify(report);
+      if (report.ok) {
+        modelHealthProofRef.current = false;
+        setModelAttention(false);
+      }
       await refreshModels({ silent: true, requireOpen: true });
     } catch (error) {
       const message = errorMessage(error);
@@ -406,6 +436,7 @@ function App() {
 
   const modelDownloadState = modelStatus?.download.state ?? null;
   const modelReady = modelStatus?.ready ?? null;
+  const modelsVisible = modelsControlVisible(modelStatus, modelVerify, modelAttention);
 
   // One status read after the editor is ready and the API base resolved.
   useEffect(() => {
@@ -444,6 +475,44 @@ function App() {
     }, 500);
     return () => clearInterval(timer);
   }, [modelsOpen, modelDownloadState, refreshModels]);
+
+  // The Models control is a conditional toolbar entry: Ketcher renders each
+  // `customButtons` entry as `<img alt={title}>` inside its own `<button>`, and
+  // React owns that toolbar. Hiding the wrapper button in place keeps the
+  // registered button and its `CUSTOM_BUTTON_PRESSED` event intact while the
+  // install is healthy. The toolbar can paint a tick after `onInit`, so a short
+  // bounded retry waits for the node; a missing node is logged, never fatal.
+  useEffect(() => {
+    if (!ready) return;
+
+    const apply = (): boolean => {
+      const image = document.querySelector('.Ketcher-root img[alt="Models"]');
+      const button = image?.closest("button");
+      if (!(button instanceof HTMLElement)) return false;
+      button.style.display = modelsVisible ? "" : "none";
+      return true;
+    };
+
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tryApply = () => {
+      if (apply()) return;
+      attempts += 1;
+      if (attempts > 20) {
+        console.warn(
+          "[chemistry-draw] could not find the Models toolbar control; " +
+            "leaving it as Ketcher rendered it.",
+        );
+        return;
+      }
+      timer = setTimeout(tryApply, 50);
+    };
+
+    tryApply();
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [ready, modelsVisible]);
 
   // Ready flips the Recognize capability without remounting the editor; a
   // non-ready status clears it. Opening the dialog on a ready install retries a
@@ -499,8 +568,19 @@ function App() {
       lastError.current = { msg, at: now };
       const { title, message } = describeError(raw);
       showError(message, title);
+      // A corrupt-but-present artifact keeps `ready: true` (a status read never
+      // hashes), so recognition is the only signal that the install needs a
+      // repair. Force the Models control until health is proven.
+      if (isModelUnavailable(raw)) {
+        // Invalidate a proof armed by an earlier run *before* the silent read:
+        // that run may have completed while the dialog was closed, so a healthy
+        // status now cannot clear the failure observed here.
+        modelHealthProofRef.current = false;
+        setModelAttention(true);
+        void refreshModels({ silent: true });
+      }
     },
-    [showError],
+    [refreshModels, showError],
   );
 
   // Window title mirrors the document name plus the dirty marker.
@@ -998,6 +1078,7 @@ function App() {
         <ModelSetupDialog
           status={modelStatus}
           verify={modelVerify}
+          attention={modelAttention}
           error={modelError}
           busy={modelBusy}
           onRefresh={refreshModelStatus}

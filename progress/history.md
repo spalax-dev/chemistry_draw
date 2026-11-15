@@ -665,3 +665,35 @@ models.
 - Minor review fixes: make-appimage in the contract test, `.manifest.json` in
   the absence greps, Windows `imago_versions` presence, C14/roadmap bookkeeping.
 - Gates: harness green, 271 Vitest, 238 sidecar, clean-install 16/16.
+
+## 2026-11-15 — Activity 14: model-setup-polish
+
+Packaged first-run feedback: hide the Models control once the models work, and
+drop the redundant licenses/source block.
+
+- The Models control is conditional: hidden only on a healthy ready install
+  (ready, download idle/ready, no update, no repair, no attention); visible for
+  unknown/not-ready, update, repair, and downloading/verifying/cancelled/failed
+  runs, so Cancel/Resume/Retry stay reachable.
+- A model-unavailable recognition failure (`Recognition models are not
+available.`) forces the control visible (attention override) because a
+  same-size corrupt artifact keeps `ready: true`; the dialog shows a Verify note.
+  Attention clears only on an `ok: true` Verify, an already-healthy 200 action
+  response, or a completed run observed healthy by a status read; a new failure
+  invalidates an earlier proof.
+- Reopening the dialog keeps the last verify report, so Verify fails -> Later ->
+  reopen still shows Repair; only a download-style action or a new Verify
+  replaces it.
+- The dialog no longer renders the Hugging Face URL or the duplicated
+  MIT/CC-BY-4.0 copy; attribution stays in `NOTICE`/docs. Families, sizes,
+  progress, actions and the privacy note remain.
+- Docs: conditional-control contract and visibility table, sanctioned
+  `.Ketcher-root img[alt="Models"]` display-only DOM exception (fail open),
+  Later-vs-restart detection limits, hashing scope, C13, README, ROADMAP.
+- Tests: 296 Vitest (modelSetup 123, recognizeErrors 44), 238 sidecar; tsc,
+  ESLint, Prettier, build, rustfmt, Clippy, ShellCheck green.
+- Browser evidence (temporary dummy-catalog Playwright, not committed): ready
+  hides the control; corrupt -> Verify -> Repair -> Later -> reopen still
+  Repair; 500 repair keeps the control; repair completion hides it; accepted
+  202 is not proof; close-during-repair then a new failure keeps it visible.
+- Review: four rounds; final PASS.

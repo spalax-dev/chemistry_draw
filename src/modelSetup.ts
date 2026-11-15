@@ -307,6 +307,71 @@ export function setupView(status: ModelsStatus, verify: VerifyReport | null = nu
   };
 }
 
+/**
+ * Whether the install reads healthy: ready, no active run and no catalog
+ * update.
+ *
+ * This is the single health predicate: `modelsControlVisible` uses it after
+ * the attention override, and `App.tsx` uses it to decide when a completed
+ * download-style run is proof of health. A `null` (unknown) status is not
+ * healthy.
+ */
+export function modelInstallHealthy(status: ModelsStatus | null): boolean {
+  return (
+    status !== null &&
+    status.ready &&
+    (status.download.state === "idle" || status.download.state === "ready") &&
+    !status.update_available
+  );
+}
+
+/**
+ * Whether the `Models` toolbar control must be shown.
+ *
+ * The control is hidden only on a healthy ready install: installed, an
+ * `idle`/`ready` download state, no catalog update, no verify report that
+ * needs a repair and no recognition-attention override. An unknown status, a
+ * not-ready install, an available update, and any run that is `downloading`,
+ * `verifying`, `cancelled` or `failed` keep the control visible even when
+ * `ready: true`: a failed Repair must keep its own Retry reachable, a cancelled
+ * repair or update must keep Resume reachable, and an active run must keep its
+ * progress, Cancel and eventual error reachable instead of hiding the only path
+ * to its status. An `ok: false` report also keeps it visible. `attention` is
+ * the recognition-failure override: a recognition failure that reports the
+ * models unavailable forces the control until a successful verify or a
+ * completed download-style run whose status is healthy proves health, because a
+ * corrupt-but-present artifact leaves `ready: true` (`docs/architecture.md`
+ * "Model setup UI").
+ */
+export function modelsControlVisible(
+  status: ModelsStatus | null,
+  verify: VerifyReport | null = null,
+  attention = false,
+): boolean {
+  if (attention) return true;
+  if (!modelInstallHealthy(status)) return true;
+  return verify !== null && !verify.ok;
+}
+
+/**
+ * Whether the dialog's muted attention note is rendered.
+ *
+ * The note points at **Verify**, so it is shown only while the attention
+ * override is armed on a ready install whose dialog can actually run Verify:
+ * not during an active, paused or failed run and not on a not-ready install
+ * (`setupView(...).canVerify` is false), and not while the verify report
+ * already needs Repair (that action says it). `App.tsx` owns the override;
+ * `ModelSetupDialog` renders this predicate.
+ */
+export function modelAttentionNoticeVisible(
+  status: ModelsStatus | null,
+  verify: VerifyReport | null,
+  attention = false,
+): boolean {
+  if (!attention || status === null) return false;
+  return setupView(status, verify).canVerify && (verify === null || verify.ok);
+}
+
 /** Parses a `POST /v2/models/verify` body; throws on a malformed report. */
 function parseVerifyReport(value: unknown): VerifyReport | null {
   if (!isObject(value)) return null;

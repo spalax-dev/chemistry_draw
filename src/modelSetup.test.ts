@@ -66,6 +66,12 @@
  *   canCancel: boolean;
  *   canVerify: boolean;
  * };
+ * export function modelsControlVisible(
+ *   status: ModelsStatus | null,
+ *   verify?: VerifyReport | null,
+ *   attention?: boolean,
+ * ): boolean;
+ * export function modelInstallHealthy(status: ModelsStatus | null): boolean;
  * export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
  * export function fetchModelsStatus(
  *   apiBase: string,
@@ -85,7 +91,17 @@
  * optional verify report to the dialog phase and primary action; the precedence
  * is active run -> failed -> cancelled -> ready (repair > update > ready) -> not
  * installed. Later is always rendered by the dialog, so it is not part of the
- * view. The adapters join `apiBase` with or without a trailing slash, surface
+ * view. `modelsControlVisible` hides the `Models` toolbar control only on a
+ * healthy ready install (ready, download state `idle`/`ready`, no catalog
+ * update, no `ok: false` report and no attention flag); an active
+ * (`downloading`/`verifying`), cancelled or failed run keeps it visible even on
+ * a ready install, and a recognition failure that reported the models
+ * unavailable forces it visible (`attention: true`) until a successful verify
+ * or a completed download whose status is healthy proves health.
+ * `modelInstallHealthy` is that healthy predicate: ready, an `idle`/`ready`
+ * download state and no catalog update. The
+ * adapters join `apiBase` with or without a trailing
+ * slash, surface
  * the sidecar's `{ "error": … }` envelope (then the plain body, then the status
  * text), throw on a malformed status/verify body and turn a rejected fetch into
  * the actionable unreachable-service message.
@@ -96,6 +112,9 @@ import {
   cancelModelDownload,
   fetchModelsStatus,
   formatBytes,
+  modelAttentionNoticeVisible,
+  modelInstallHealthy,
+  modelsControlVisible,
   parseModelsStatus,
   progressPercent,
   setupView,
@@ -635,6 +654,153 @@ describe("setupView", () => {
       expect(setupView(value, verify).canVerify).toBe(expected);
     });
   }
+});
+
+describe("modelsControlVisible", () => {
+  // RED evidence: every assertion in this block was written before the helper
+  // existed. `pnpm exec vitest run src/modelSetup.test.ts` failed with
+  // "modelsControlVisible is not a function" until `src/modelSetup.ts` exported
+  // it, and the failed-run case below was RED again until the helper handled
+  // `download.state === "failed"` on a ready install. The ready+downloading,
+  // ready+verifying and ready+cancelled cases were RED until the rule stopped
+  // hiding a ready install whose `download.state` was not `idle`/`ready`. The
+  // attention case was RED against the two-argument helper (the third argument
+  // did not exist), then GREEN once `attention: true` was honoured first.
+  it("keeps the control while the status has not been read", () => {
+    expect(modelsControlVisible(null)).toBe(true);
+    expect(modelsControlVisible(null, null)).toBe(true);
+    expect(modelsControlVisible(null, VERIFY_OK)).toBe(true);
+  });
+
+  it("keeps the control while the install is not ready", () => {
+    expect(modelsControlVisible(status())).toBe(true);
+  });
+
+  it("keeps the control when a not-ready install has a verify report", () => {
+    expect(modelsControlVisible(status(), VERIFY_CORRUPT)).toBe(true);
+    expect(modelsControlVisible(status(), VERIFY_OK)).toBe(true);
+  });
+
+  it("hides the control on a healthy ready install", () => {
+    expect(modelsControlVisible(readyStatus())).toBe(false);
+    expect(modelsControlVisible(readyStatus(), null)).toBe(false);
+  });
+
+  it("hides the control when the verify report is ok", () => {
+    expect(modelsControlVisible(readyStatus(), VERIFY_OK)).toBe(false);
+  });
+
+  it("keeps the control while an update is available", () => {
+    expect(modelsControlVisible(readyStatus({}, { update_available: true }))).toBe(true);
+  });
+
+  it("keeps the control when the verify report needs repair", () => {
+    expect(modelsControlVisible(readyStatus(), VERIFY_CORRUPT)).toBe(true);
+  });
+
+  it("keeps the control when both the update and the verify report need attention", () => {
+    expect(modelsControlVisible(readyStatus({}, { update_available: true }), VERIFY_CORRUPT)).toBe(
+      true,
+    );
+  });
+
+  it("keeps the control while a ready install is downloading", () => {
+    expect(
+      modelsControlVisible(readyStatus({ state: "downloading", downloaded_bytes: 1_024 })),
+    ).toBe(true);
+    expect(modelsControlVisible(readyStatus({ state: "downloading" }), VERIFY_OK)).toBe(true);
+  });
+
+  it("keeps the control while a ready install is verifying", () => {
+    expect(modelsControlVisible(readyStatus({ state: "verifying" }))).toBe(true);
+    expect(modelsControlVisible(readyStatus({ state: "verifying" }), VERIFY_OK)).toBe(true);
+  });
+
+  it("keeps the control when a ready install run was cancelled", () => {
+    expect(modelsControlVisible(readyStatus({ state: "cancelled" }))).toBe(true);
+    expect(modelsControlVisible(readyStatus({ state: "cancelled" }), VERIFY_CORRUPT)).toBe(true);
+  });
+
+  it("keeps the control when a ready install reports a failed run", () => {
+    expect(modelsControlVisible(readyStatus({ state: "failed", error: "the disk is full" }))).toBe(
+      true,
+    );
+    expect(
+      modelsControlVisible(
+        readyStatus({ state: "failed", error: "the disk is full" }, { update_available: true }),
+        VERIFY_OK,
+      ),
+    ).toBe(true);
+  });
+
+  it("forces the control visible while a recognition failure needs attention", () => {
+    expect(modelsControlVisible(readyStatus(), null, true)).toBe(true);
+    expect(modelsControlVisible(readyStatus(), VERIFY_OK, true)).toBe(true);
+  });
+});
+
+describe("modelInstallHealthy", () => {
+  // RED evidence: this block was written before the helper existed and failed
+  // with "modelInstallHealthy is not a function" until `src/modelSetup.ts`
+  // exported it. `modelsControlVisible` then used it without changing a single
+  // visibility assertion in the block above.
+  it("reports a healthy ready install", () => {
+    expect(modelInstallHealthy(readyStatus())).toBe(true);
+    expect(modelInstallHealthy(readyStatus({ state: "idle", downloaded_bytes: 0 }))).toBe(true);
+  });
+
+  it("rejects an unknown, not-ready or updating install", () => {
+    expect(modelInstallHealthy(null)).toBe(false);
+    expect(modelInstallHealthy(status())).toBe(false);
+    expect(modelInstallHealthy(readyStatus({}, { update_available: true }))).toBe(false);
+  });
+
+  it("rejects a run that is active, cancelled or failed", () => {
+    expect(modelInstallHealthy(readyStatus({ state: "downloading" }))).toBe(false);
+    expect(modelInstallHealthy(readyStatus({ state: "verifying" }))).toBe(false);
+    expect(modelInstallHealthy(readyStatus({ state: "cancelled" }))).toBe(false);
+    expect(modelInstallHealthy(readyStatus({ state: "failed" }))).toBe(false);
+  });
+});
+
+describe("modelAttentionNoticeVisible", () => {
+  // RED evidence: this block was written before the helper existed and failed
+  // with "modelAttentionNoticeVisible is not a function" until `src/modelSetup.ts`
+  // exported it. The downloading/verifying/cancelled/failed and Repair cases
+  // pin the fourth-round review fix: the dialog's previous inline rule
+  // (`attention && ready && (verify === null || verify.ok)`) would show the
+  // note while `setupView` has no Verify action, and the helper requires
+  // `canVerify` because the note points at Verify.
+  it("shows the note while attention is armed on a ready, verify-capable dialog", () => {
+    expect(modelAttentionNoticeVisible(readyStatus(), null, true)).toBe(true);
+    expect(modelAttentionNoticeVisible(readyStatus(), VERIFY_OK, true)).toBe(true);
+    expect(
+      modelAttentionNoticeVisible(readyStatus({}, { update_available: true }), null, true),
+    ).toBe(true);
+  });
+
+  it("hides the note without the override or without a status", () => {
+    expect(modelAttentionNoticeVisible(readyStatus(), null, false)).toBe(false);
+    expect(modelAttentionNoticeVisible(null, null, true)).toBe(false);
+    expect(modelAttentionNoticeVisible(status(), null, true)).toBe(false);
+  });
+
+  it("hides the note while the dialog cannot run Verify", () => {
+    expect(modelAttentionNoticeVisible(readyStatus({ state: "downloading" }), null, true)).toBe(
+      false,
+    );
+    expect(modelAttentionNoticeVisible(readyStatus({ state: "verifying" }), VERIFY_OK, true)).toBe(
+      false,
+    );
+    expect(modelAttentionNoticeVisible(readyStatus({ state: "cancelled" }), null, true)).toBe(
+      false,
+    );
+    expect(modelAttentionNoticeVisible(readyStatus({ state: "failed" }), null, true)).toBe(false);
+  });
+
+  it("hides the note while the verify report needs Repair", () => {
+    expect(modelAttentionNoticeVisible(readyStatus(), VERIFY_CORRUPT, true)).toBe(false);
+  });
 });
 
 const API = "http://127.0.0.1:9321/v2";

@@ -4,6 +4,8 @@
  *
  * ```ts
  * export const GENERIC_FAILURE: string;
+ * export const MODEL_UNAVAILABLE: string;
+ * export function isModelUnavailable(raw: unknown): boolean;
  * export function unwrapError(msg: string): { detail: string; json: boolean };
  * export function friendly(detail: string): string;
  * export function describeError(raw: unknown): { title: string; message: string };
@@ -12,14 +14,16 @@
  *
  * `unwrapError` strips an `Error: ` prefix, parses a stringified `FAILURE`
  * body and returns its `error`/`message` string; `json` is `true` only when a
- * JSON body parsed. `friendly` maps a documented sidecar hint to the UI copy
- * and returns `""` for anything else. `describeError` accepts a string, an
- * `Error` or any unknown value and picks the dialog title: `Structure problem`
- * for a recognized failure or any parsed JSON body, `Error` for plain text with
- * no known hint. `errorMessage` extracts the raw message for the document
- * workflow, where a document error that happens to contain a recognition hint
- * must keep its own copy. The copy is UI-owned, so tests pin the title exactly
- * and the copy by a stable substring.
+ * JSON body parsed. `isModelUnavailable` unwraps any thrown value and matches
+ * the exported `MODEL_UNAVAILABLE` substring, so only the documented
+ * model-unavailable failure triggers the Models control. `friendly` maps a
+ * documented sidecar hint to the UI copy and returns `""` for anything else.
+ * `describeError` accepts a string, an `Error` or any unknown value and picks
+ * the dialog title: `Structure problem` for a recognized failure or any parsed
+ * JSON body, `Error` for plain text with no known hint. `errorMessage` extracts
+ * the raw message for the document workflow, where a document error that
+ * happens to contain a recognition hint must keep its own copy. The copy is
+ * UI-owned, so tests pin the title exactly and the copy by a stable substring.
  */
 import { describe, expect, it } from "vitest";
 
@@ -28,6 +32,8 @@ import {
   errorMessage,
   friendly,
   GENERIC_FAILURE,
+  isModelUnavailable,
+  MODEL_UNAVAILABLE,
   unwrapError,
 } from "./recognizeErrors";
 
@@ -39,7 +45,7 @@ const TOO_LARGE = "may be too large";
 const FRIENDLY_HINTS: Array<[string, string]> = [
   [NO_MOLECULE, "No chemical structure was detected"],
   [LOW_CONFIDENCE, "could not be read confidently"],
-  ["Recognition models are not available.", "not set up"],
+  ["Recognition models are not available.", "set up or repair"],
   ["The recognized structure could not be prepared for the editor.", "could not be prepared"],
   ["Unsupported image. Use a PNG, JPEG or WebP file.", "PNG, JPEG or WebP"],
   ["unsupported image content type", "not supported"],
@@ -102,6 +108,33 @@ describe("friendly", () => {
 
   it("returns empty copy for an unknown detail", () => {
     expect(friendly("unrelated")).toBe("");
+  });
+});
+
+describe("isModelUnavailable", () => {
+  it("matches a JSON FAILURE body with an Error: prefix", () => {
+    const raw = `Error: {"state":"FAILURE","error":"${MODEL_UNAVAILABLE} Check the model setup."}`;
+
+    expect(isModelUnavailable(raw)).toBe(true);
+  });
+
+  it("matches a bare JSON FAILURE body", () => {
+    expect(
+      isModelUnavailable('{"state":"FAILURE","error":"Recognition models are not available."}'),
+    ).toBe(true);
+  });
+
+  it("matches a plain-text model-unavailable message", () => {
+    expect(isModelUnavailable(`${MODEL_UNAVAILABLE} Set CHEMISTRY_MODELS_DIR.`)).toBe(true);
+  });
+
+  it("does not match an unrelated failure", () => {
+    expect(isModelUnavailable(`Error: {"state":"FAILURE","error":"${NO_MOLECULE}"}`)).toBe(false);
+    expect(isModelUnavailable("boom")).toBe(false);
+  });
+
+  it("does not match a JSON body without a usable detail", () => {
+    expect(isModelUnavailable('{"state":"FAILURE"}')).toBe(false);
   });
 });
 

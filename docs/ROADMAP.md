@@ -176,10 +176,14 @@ offline handling, cancel/retry/verify); the `/v2/models`
 status/download/cancel/verify endpoints; the generated `models/manifest.json`;
 the `/v2/info` capability gate; and the release `<app_data>/models` root.
 Activity 12 (`phase-b3-setup-ui`) delivered the first-run setup UI: the
-**Models** toolbar entry, the auto-opened in-app dialog with opt-in
+conditional **Models** toolbar entry (visible only while setup needs attention),
+the auto-opened in-app dialog with opt-in
 Download/Resume/Repair/Update/Verify, progress polling, in-dialog errors,
 Later, and the in-place `imago_versions` update that enables Recognize without
-losing the canvas. Activity 13 (`phase-b3-clean-install`) validated the
+losing the canvas. The post-B3 polish hides the control on a healthy install,
+keeps it while an update, repair, run or recognition-reported model failure
+needs attention, and removes the redundant licenses/source block (attribution
+stays in `NOTICE`). Activity 13 (`phase-b3-clean-install`) validated the
 packaged clean install: rebuilt `.deb`/`.rpm`/AppImage and NSIS payloads
 without model weights, the packaged sidecar on an empty app-data root through
 the real Hugging Face download/verify and filter/OCSR smoke, the **Models**

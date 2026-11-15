@@ -9,6 +9,7 @@
 
 import {
   formatBytes,
+  modelAttentionNoticeVisible,
   progressPercent,
   setupView,
   type ModelsStatus,
@@ -19,9 +20,6 @@ import {
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
 import { tokens } from "./tokens";
-
-/** Public source repository; the catalog pins the per-artifact URLs. */
-const SOURCE_URL = "https://huggingface.co/spalax-dev/chemistry-draw-ocsr";
 
 const PARAGRAPH = { margin: "0 0 8px" } as const;
 const SECTION = {
@@ -67,6 +65,12 @@ export interface ModelSetupDialogProps {
   status: ModelsStatus | null;
   /** Last `POST /v2/models/verify` report, or `null`. */
   verify: VerifyReport | null;
+  /**
+   * Recognition-unavailable override. On a ready install whose dialog can run
+   * Verify and has no Repair to show, the dialog explains that Verify checks
+   * the installed files.
+   */
+  attention?: boolean;
   /** Connection/action error kept inside the dialog. */
   error: string | null;
   /** True while an action request is in flight; disables double actions. */
@@ -145,12 +149,13 @@ function FamilyRow({ model }: { model: ModelsStatusModel }) {
 }
 
 /**
- * Modal model setup panel: families, totals, progress, errors and attribution.
+ * Modal model setup panel: families, totals, progress and errors.
  * Download is opt-in; Later closes without cancelling.
  */
 export function ModelSetupDialog({
   status,
   verify,
+  attention = false,
   error,
   busy,
   onRefresh,
@@ -165,6 +170,12 @@ export function ModelSetupDialog({
       ? (status.download.error ?? "The download failed. Check the network and try again.")
       : null;
   const alert = error ?? downloadFailure;
+  // A recognition failure left the override armed, but the install reads ready
+  // and there is no Repair to show: point at Verify instead of a bare "Models
+  // ready". Only while the dialog can actually run Verify; during a run (or on
+  // a paused/failed run) there is no Verify action, and once Repair is shown
+  // the note would only repeat it.
+  const attentionNotice = modelAttentionNoticeVisible(status, verify, attention);
   const active =
     status !== null &&
     (status.download.state === "downloading" || status.download.state === "verifying");
@@ -227,6 +238,13 @@ export function ModelSetupDialog({
         optional and only starts when you choose it. Images, documents and drawings never leave this
         machine.
       </p>
+
+      {attentionNotice ? (
+        <p style={{ ...PARAGRAPH, ...MUTED }}>
+          A recognition attempt reported the models unavailable. Run Verify to check the installed
+          files.
+        </p>
+      ) : null}
 
       {alert ? (
         <div
@@ -330,17 +348,6 @@ export function ModelSetupDialog({
           </div>
         </>
       )}
-
-      <div style={SECTION}>
-        <h3 style={SECTION_TITLE}>Licenses and source</h3>
-        <p style={{ ...PARAGRAPH, ...MUTED }}>
-          Models are downloaded from Hugging Face: <span style={CODE}>{SOURCE_URL}</span>
-        </p>
-        <p style={{ ...PARAGRAPH, ...MUTED }}>
-          Image classifier: MIT (DECIMER Image Classifier). Structure recognition: CC-BY-4.0
-          (DECIMER v2 hand-drawn export). Full attributions are in NOTICE.
-        </p>
-      </div>
     </Dialog>
   );
 }

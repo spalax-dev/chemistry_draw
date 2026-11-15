@@ -11,6 +11,16 @@
  */
 
 /**
+ * The documented model-unavailable substring.
+ *
+ * The sidecar appends an operator hint after this sentence, so the frontend
+ * matches the substring rather than the whole message. `isModelUnavailable`
+ * uses it to force the Models control visible when recognition fails for a
+ * corrupt-but-present install.
+ */
+export const MODEL_UNAVAILABLE = "Recognition models are not available.";
+
+/**
  * Substring → friendly copy for errors surfaced by Ketcher or the sidecar.
  *
  * Recognize Molecule failures arrive as the stringified `FAILURE` body
@@ -23,8 +33,8 @@ export const SIMPLE_ERRORS: Record<string, string> = {
     "No chemical structure was detected in this image. Try a clear image of one drawn molecule, or draw the structure in the editor.",
   "The structure could not be read confidently.":
     "The structure could not be read confidently. Try a sharper or larger image of one molecule.",
-  "Recognition models are not available.":
-    "Molecule recognition is not set up. Open the Models entry in the toolbar and download the recognition models.",
+  [MODEL_UNAVAILABLE]:
+    "Molecule recognition is not set up. Open the Models entry in the toolbar to set up or repair the recognition models.",
   "The recognized structure could not be prepared for the editor.":
     "The structure was recognized but could not be prepared for the editor. Please try again.",
   "Unsupported image. Use a PNG, JPEG or WebP file.":
@@ -94,6 +104,18 @@ export function friendly(detail: string): string {
 /** Returns an `Error`'s message, or the string form of any other thrown value. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Whether a thrown editor error is the documented model-unavailable failure.
+ *
+ * Unwraps Ketcher's stringified body the same way `describeError` does, then
+ * matches the documented substring. `App.tsx` uses this to force the Models
+ * control visible on a corrupt-but-present install, whose `ready` status still
+ * looks healthy because a status read never hashes the files.
+ */
+export function isModelUnavailable(raw: unknown): boolean {
+  return unwrapError(errorMessage(raw)).detail.includes(MODEL_UNAVAILABLE);
 }
 
 /**
