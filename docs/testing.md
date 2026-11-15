@@ -333,6 +333,33 @@ The model-gated inference tests described at the start of this section are
 unchanged: they still need a local model root (`models/` or
 `CHEMISTRY_MODELS_DIR`) and a loadable ONNX Runtime, and self-skip otherwise.
 
+### Clean-install and packaging contract tests (B3)
+
+The clean-install contract lives in scripts and packaging configuration, so
+`scripts/lib/*.test.mjs` guard it without building a package, launching Tauri or
+touching the network. The suite asserts the real files:
+
+| Target                                                                                    | Assertion                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/build-packages.sh`, `scripts/make-appimage.sh`, `Taskfile.yml`                   | no step copies `models/`, `*.onnx` or a `manifest.json` into a payload; the bundle resource copy stays `lib/linux-x86_64/**`                                                                                                                                                                                                                                                  |
+| `src-tauri/tauri.linux.conf.json`, `src-tauri/tauri.windows.conf.json`, `tauri.conf.json` | `resources`/`externalBin` name no model path and keep `indigo-server`; `../models` never appears                                                                                                                                                                                                                                                                              |
+| `.github/actions/windows-build/action.yml`                                                | the smoke starts the sidecar with an empty model root and asserts `GET /v2/models` `200` with `ready: false`, `manifest_present: false`, `installed_bytes: 0`, `total_bytes: 323987190` and `download.state: "idle"`, and `GET /v2/info` `200` with `imago_versions: []`; the obsolete `local-ocsr` expectation on the model-less runner is gone and no step downloads models |
+| `docs/verification.md` payload inspection and `scripts/lib/clean-install.test.mjs`        | the absence greps cover `.onnx`/`models/`/`manifest.json`, and the payload keeps Indigo plus `libonnxruntime`                                                                                                                                                                                                                                                                 |
+| clean-root packaged smoke                                                                 | a script/check exists for the AppImage payload with an empty `CHEMISTRY_MODELS_DIR`, reproducing the empty `/v2/models` and `/v2/info` `[]` assertions                                                                                                                                                                                                                        |
+
+Rules:
+
+- Assert the real files, not a fixture. Removing the empty-root `/v2/models`
+  check, restoring `local-ocsr` on the runner, adding a model copy to a
+  packaging script, or dropping the `.onnx` absence grep must each make a test
+  fail; the Windows checks are RED before the action is updated.
+- The contract tests never build a package, launch the app or download models.
+  The payload inspection, the packaged sidecar download/verify/recognize and
+  the clean app-data flow stay the manual/gated smoke in
+  `docs/verification.md` §2 "Clean install (B3)". The temporary Playwright flow
+  (§6.2) can be pointed at a fresh profile for the clean-root UI state machine,
+  but it is still recreated per activity and never committed.
+
 ### Tensor-contract guard
 
 `classifier_model_contract_matches_manifest` opens the artifact through the
@@ -738,6 +765,14 @@ this flow. The temporary browser flow needs a browser and a sidecar process, so
 the Vitest harness block stays the unit gate and the activity runs the flow
 explicitly.
 
+The same flow covers the **clean-root** variant with a fresh profile and the
+dummy catalog: the Models dialog auto-opens once, **Later** leaves the editor
+usable, reopening from **Models** shows the same state, and the dummy download
+ends ready and enables the capability. It proves the clean-root state machine
+only; the packaged app, the real Hugging Face download and the app-data path are
+the manual checks in `docs/verification.md` §2 "Clean install (B3)", and no
+committed e2e suite is added.
+
 ### 6.3 Manual checklist
 
 The real flows cannot be unit-tested without a WebView and a filesystem, so
@@ -747,9 +782,12 @@ Restore/Discard prompt, all close-guard paths), "Toolbar integration" (the four
 custom buttons, the hidden native Save As entry, the shortcuts and the browser
 fallback), "Model setup UI" (auto-open/Later, download/progress/ready, cancel,
 retry, verify/repair, the Verify-fail → Repair → ready reset, the dialog at
-1280x800 and 900x600, and the capability update without canvas loss) and
+1280x800 and 900x600, and the capability update without canvas loss),
 "Recognize Molecule end to end" (the in-app `ErrorDialog` for recognition
-failures with no native alert).
+failures with no native alert) and "Clean install (B3)" (the payload absence
+greps, the packaged sidecar on an empty root through the real
+download/verify/filter/OCSR smoke, and the packaged app's clean app-data Models
+flow).
 
 ---
 

@@ -639,3 +639,29 @@ app itself.
   adapter hardening, parser/adapter tests and minor copy/autofocus/style issues.
 - Gates: 271 Vitest, 238 sidecar, harness green, tsc/lint/format/build/
   ShellCheck clean; C13 checked. Clean-install validation remains.
+
+## 2026-11-15 — Activity 13: phase-b3-clean-install
+
+B3 clean-install validation; the packaged app and sidecar work without bundled
+models.
+
+- Windows CI smoke now starts the sidecar with an empty `CHEMISTRY_MODELS_DIR`,
+  asserts `/v2/models` 200 (ready/manifest false, installed 0, total
+  323,987,190, idle) and `/v2/info` `imago_versions: []`, and keeps the
+  compatibility upload checks; the clean-install contract test is 16/16. The
+  PowerShell/NSIS run is exercised by Windows CI.
+- Rebuilt 0.1.7 packages: deb 29,676,964; rpm 29,801,134; AppImage 28,011,000.
+  No `.onnx`, `models/` or `manifest.json`; Indigo + one real
+  `libonnxruntime.so.1.31.0` with symlinks.
+- Packaged AppImage sidecar, empty root: `/v2/models` 200 false/false/0/323,987,190/
+  idle, `/v2/info` []; real HF download 323,987,190 B -> ready, schema-1
+  manifest, verify ok, filter/OCSR 200 with caffeine, info `["local-ocsr"]`, no
+  `.part`.
+- Clean-root UI: temporary Playwright dummy-catalog flow covers auto-open,
+  Later/reopen, download/ready, Verify, capability enable without remount and
+  no native alerts; the packaged GUI first-run flow passed on the user's
+  machine.
+- Docs: clean-install steps, measured sizes, C14 checked, ROADMAP B3 complete.
+- Minor review fixes: make-appimage in the contract test, `.manifest.json` in
+  the absence greps, Windows `imago_versions` presence, C14/roadmap bookkeeping.
+- Gates: harness green, 271 Vitest, 238 sidecar, clean-install 16/16.

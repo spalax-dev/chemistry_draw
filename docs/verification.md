@@ -283,6 +283,182 @@ CHEMISTRY_MODELS_DIR=$CLEAN task run
     normal and error states, the whole panel stays inside the window and the
     action row is visible; only the body scrolls.
 
+### Clean install (B3)
+
+This validates the packaged artifacts, not a dev checkout. Build them first with
+`task packages`; the full native-library and dependency inspection stays in
+"Packaging" above, and this section adds the model-free and clean-root contract.
+Model weights are never downloaded by CI: the real Hugging Face run below is a
+gated/manual smoke.
+
+> Package sizes (0.1.7, measured on 2026-11-14 with `task packages`; 0.1.6
+> baseline for context):
+>
+> | Artifact | 0.1.7 bytes | 0.1.6 baseline | Δ bytes    |
+> | -------- | ----------- | -------------- | ---------- |
+> | `.deb`   | 29,676,964  | 30,851,320     | −1,174,356 |
+> | `.rpm`   | 29,801,134  | 30,983,791     | −1,182,657 |
+> | AppImage | 28,011,000  | 27,515,384     | +495,616   |
+>
+> The payload stays in the same range as 0.1.6: the 323,987,190 B of model
+> weights live in the app-data model root, never in the installer. The AppImage
+> grows slightly because the B3 sidecar is 2,699,864 B → 5,646,936 B while the
+> payload also dropped the host font/PNG libraries still present in 0.1.6; the
+> compressed `.deb`/`.rpm` shrink.
+
+1. **Payload inspection.** No `.onnx` file or `models/` path may be shipped, and
+   the Indigo libraries plus the ONNX Runtime chain must still be there. Every
+   absence command must print nothing and every non-vacuity check must succeed,
+   otherwise the inspection proves nothing:
+
+   ```bash
+   V=0.1.7
+   DEB=dist-packages/chemistry-draw_${V}_amd64.deb
+   RPM=dist-packages/chemistry-draw-${V}-1.x86_64.rpm
+   APPIMAGE=dist-packages/chemistry-draw_${V}_amd64.AppImage
+
+   rm -rf squashfs-root
+   "$APPIMAGE" --appimage-extract >/dev/null
+
+   # Non-vacuity: the sidecar, Indigo and the runtime are present.
+   ar p "$DEB" data.tar.gz | tar -tz | grep usr/bin/indigo-server
+   rpm -qlp "$RPM" | grep usr/bin/indigo-server
+   test -x squashfs-root/usr/bin/indigo-server
+   ar p "$DEB" data.tar.gz | tar -tz | grep 'libindigo\.so'
+   rpm -qlp "$RPM" | grep 'libindigo\.so'
+   find squashfs-root -name 'libindigo*.so*' | grep .
+   ar p "$DEB" data.tar.gz | tar -tvz | grep 'libonnxruntime\.so'
+   rpm2cpio "$RPM" | cpio -tv 2>/dev/null | grep 'libonnxruntime\.so'
+   find squashfs-root -name 'libonnxruntime.so*' -printf '%y %p -> %l\n'
+
+   # Absence: each command must print nothing.
+   ar p "$DEB" data.tar.gz | tar -tz | grep -Ei '\.onnx$|/models/|manifest\.json'
+   rpm -qlp "$RPM" | grep -Ei '\.onnx$|/models/|manifest\.json'
+   find squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' -o -name 'manifest.json' \)
+
+   # Recorded sizes.
+   stat -c '%s %n' "$DEB" "$RPM" "$APPIMAGE"
+   ```
+
+   Expected: one real `libonnxruntime.so.1.31.0` plus the `.so.1`/`.so` symlinks
+   per Linux payload, no model match from any absence grep, and the sizes above
+   filled in the table.
+
+2. **Packaged sidecar, empty root.** Run the sidecar from the extracted AppImage
+   payload with an empty model root and the packaged libraries. No
+   `ORT_DYLIB_PATH`: this proves the bundled chain loads from the packaged
+   directory the way the release host points at it:
+
+   ```bash
+   CLEAN=$(mktemp -d)
+   export LD_LIBRARY_PATH=$PWD/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
+   INDIGO_PORT=19321 INDIGO_NO_PARENT_WATCHDOG=1 \
+     CHEMISTRY_MODELS_DIR=$CLEAN \
+     ./squashfs-root/usr/bin/indigo-server &
+   BASE=http://127.0.0.1:19321
+
+   curl -s -o /tmp/clean-models.json -w '%{http_code}\n' "$BASE/v2/models" # 200
+   jq '{ready, manifest_present, installed_bytes, total_bytes,
+        download: .download.state}' /tmp/clean-models.json
+   # { "ready": false, "manifest_present": false, "installed_bytes": 0,
+   #   "total_bytes": 323987190, "download": "idle" }
+   jq '.models[] | {key, installed, missing}' /tmp/clean-models.json
+   curl -s "$BASE/v2/info" | jq -c .imago_versions                         # []
+   ```
+
+   The directory exists but holds nothing; neither route creates a manifest or
+   contacts Hugging Face.
+
+3. **Real download, verify and inference.** Start the opt-in download and poll
+   `GET /v2/models` until it leaves `downloading`/`verifying`:
+
+   ```bash
+   curl -s -o /tmp/clean-download.json -w '%{http_code}\n' \
+     -X POST "$BASE/v2/models/download"                                  # 202
+   while :; do
+     S=$(curl -s "$BASE/v2/models")
+     STATE=$(echo "$S" | jq -r '.download.state')
+     echo "$STATE $(echo "$S" | jq -r '[.download.downloaded_bytes,.download.total_bytes] | @tsv')"
+     [ "$STATE" = "downloading" ] || [ "$STATE" = "verifying" ] || break
+     sleep 1
+   done
+   echo "$S" | jq '{ready, installed_bytes, total_bytes, download: .download.state}'
+   # ready: true, installed_bytes == total_bytes == 323987190, download: "ready"
+
+   jq '.schema, .catalog_version, (.models | keys)' "$CLEAN/manifest.json"
+   # 1, 1, ["image-classifier", "ocsr-handdrawn"]
+
+   curl -s -X POST "$BASE/v2/models/verify" | jq '{ok, repair}'
+   # { "ok": true, "repair": null }
+
+   for ep in filter/classify ocsr/recognize; do
+     curl -s -o "/tmp/clean-${ep//\//-}.json" -w "$ep %{http_code}\n" \
+       -X POST "$BASE/v2/$ep" -H 'Content-Type: image/png' \
+       --data-binary @src-tauri/sidecar/fixtures/caffeine.png
+   done
+   jq '.category, .model' /tmp/clean-filter-classify.json
+   jq '{smiles, incomplete, model}' /tmp/clean-ocsr-recognize.json
+   find "$CLEAN" -name '*.part'                                          # nothing
+   kill %1
+   ```
+
+   Expected: both endpoints answer `200`; the filter reports
+   `structure`/`image-classifier@Iagea/d21f4cb`; the OCSR body has the caffeine
+   SMILES `CN1C=NC2=C1C(=O)N(C)C(=O)N2C`, `incomplete: false` and
+   `ocsr-handdrawn@zenodo:10781330`; no `.part` file remains.
+
+4. **Clean app-data UI flow.** Launch the packaged app (extracted AppRun or an
+   installed package) with a fresh app-data root so the real profile is never
+   touched:
+
+   ```bash
+   CLEAN_DATA=$(mktemp -d)
+   XDG_DATA_HOME=$CLEAN_DATA ./squashfs-root/AppRun
+   # or: XDG_DATA_HOME=$CLEAN_DATA \
+   #   ./dist-packages/chemistry-draw_0.1.7_amd64.AppImage
+   ```
+
+   1. **First launch.** The **Models** dialog opens automatically after the
+      editor paints, lists both families with licenses and sizes, shows
+      `Not installed` and `idle`, and no artifact request is made. Recognize is
+      disabled (`/v2/info` is `[]`). `$CLEAN_DATA/dev.spalax.ChemistryDraw/`
+      exists and `models/` is empty.
+   2. **Later and reopen.** **Later** closes it; the app draws, runs Layout and
+      saves a `.ket` file. **Models** reopens the same state and the dialog does
+      not reopen by itself.
+   3. **Download → ready.** Draw a structure, click **Download**: progress is
+      polled in the dialog; at the end it is ready with 323,987,190 installed
+      bytes and `$CLEAN_DATA/dev.spalax.ChemistryDraw/models/manifest.json`.
+      **Recognize enables without a restart**: the structure, selection and
+      undo history are intact (no remount). Use **Recognize Molecule** with
+      `caffeine.png`: the structure is inserted (the packaged models, runtime
+      and Indigo all ran).
+   4. **Document workflow.** Save, Save As, Open, New and an Export still work
+      while the Models state changes; no native alert or second OS window
+      appears for any setup step.
+   5. **Restart with installed models.** Reopen **Models**: it shows `Installed`
+      and **Verify**. Relaunch with the same `CLEAN_DATA`: no dialog auto-opens,
+      and **Models** still opens on demand. A second fresh `CLEAN_DATA` repeats
+      step 1.
+
+5. **Windows CI smoke.** The `windows` job
+   (`.github/actions/windows-build/action.yml`) runs the release sidecar with
+   `INDIGO_NO_PARENT_WATCHDOG=1` and an empty model root, and must assert:
+
+   - `GET /v2/models` is `200` with `ready: false`, `manifest_present: false`,
+     `installed_bytes: 0`, `total_bytes: 323987190` and `download.state: "idle"`.
+   - `GET /v2/info` is `200` with `imago_versions: []`. The pre-B3 expectation
+     of `local-ocsr` on a model-less runner is obsolete and must not return.
+   - The existing `/v2/imago/uploads` compatibility checks stay (POST returns an
+     `upload_id`, unknown id `404`, job terminal or `PENDING`, no
+     `imago_worker`).
+   - The NSIS payload carries `onnxruntime.dll` and the five Indigo DLLs and no
+     `.onnx`/`models/` path.
+
+   The runner never downloads the real models; the Windows change is guarded by
+   the packaging contract test in `docs/testing.md` §5, and the real download
+   remains the manual Linux smoke above.
+
 ### Logs
 
 - `~/.local/share/dev.spalax.ChemistryDraw/logs/chemistry-draw.log` exists.
@@ -812,6 +988,12 @@ The reviewer agent must verify:
       Verify/Cancel/Retry labels, in-dialog offline/disk errors with no native
       alert, and Recognize enabling after ready without a remount or canvas
       loss
+- [ ] Clean install is verified: the packaged payloads carry no model weights
+      and keep Indigo/ONNX Runtime, the AppImage sidecar serves the empty
+      `/v2/models` + `/v2/info` contract and runs the real download/verify plus
+      filter/OCSR, the packaged app's clean-root Models flow works, the Windows
+      smoke covers `/v2/models` empty and `/v2/info` `[]`, and the measured
+      sizes are recorded
 - [ ] When `models/` exists, model-gated tests pass with `--include-ignored`
 - [ ] No ONNX model file is committed or bundled; the shipped
       `libonnxruntime` 1.31.0 comes only from the builder image / Windows fetch

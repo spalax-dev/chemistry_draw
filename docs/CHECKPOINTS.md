@@ -372,8 +372,54 @@
       the dialog downloads only from the catalog's Hugging Face URLs and never
       uploads an image, drawing or document.
 
+## C14 — Clean-install validation (B3)
+
+- [x] Rebuilt `.deb`, `.rpm`, AppImage and NSIS payloads contain no `.onnx`
+      file, `models/` path or generated `manifest.json`; they keep the Indigo
+      libraries and the ONNX Runtime 1.31.0 payload (`libonnxruntime.so.1.31.0`
+      with its symlink chain on Linux, `onnxruntime.dll` on Windows); the
+      absence greps print nothing and their measured sizes are recorded in
+      `docs/verification.md` §2 "Clean install (B3)" and `docs/ROADMAP.md` B3.
+- [x] The packaged sidecar run from the AppImage payload with an empty
+      `CHEMISTRY_MODELS_DIR`, the packaged `LD_LIBRARY_PATH` and no dev checkout
+      answers `GET /v2/models` with `200`, `ready: false`,
+      `manifest_present: false`, `installed_bytes: 0`,
+      `total_bytes: 323987190` and `download.state: "idle"`, and `/v2/info`
+      with `imago_versions: []`; neither route creates a manifest or contacts
+      Hugging Face.
+- [x] `POST /v2/models/download` on that packaged empty root downloads the real
+      artifacts from Hugging Face (323,987,190 B), verifies the pinned sizes and
+      SHA-256 values, writes a schema-1 `manifest.json` with
+      `catalog_version: 1` and both model keys, and ends `ready`;
+      `POST /v2/models/verify` then reports `ok: true` with no repair hint, no
+      `.part` file remains, and `POST /v2/filter/classify` plus
+      `POST /v2/ocsr/recognize` on `caffeine.png` answer `200` with the
+      documented category, SMILES and model ids. This is the gated/manual
+      smoke; CI never downloads the 324 MB.
+- [x] Launching the packaged app with an empty app-data root
+      (`XDG_DATA_HOME`/`%APPDATA%` equivalent) creates the empty models
+      directory, auto-opens the **Models** dialog once and starts no download;
+      **Later** leaves the app usable and reopening from **Models** shows the
+      same state. Download progresses to ready and enables Recognize without
+      remounting the editor; the drawn structure, selection, undo history and
+      Save/Open/Export workflow survive, and no native alert or second OS
+      window appears in any setup state. A relaunch with the populated root
+      does not auto-open; a second fresh root repeats the first-run flow.
+- [x] The Windows CI smoke runs the release sidecar with an empty model root
+      and asserts `GET /v2/models` `ready: false`/`total_bytes: 323987190` and
+      `GET /v2/info` `imago_versions: []`, while keeping the
+      `/v2/imago/uploads` compatibility checks, and the NSIS payload carries no
+      model weights.
+- [x] The clean-install/packaging contract tests exist and fail without their
+      change: no packaging script or bundle resource copies `models/`, `.onnx`
+      or a model root; the Windows action contains the empty-root `/v2/models`
+      and `/v2/info` `[]` checks; a packaged clean-root smoke check exists.
+- [x] The 0.1.7 package-size delta versus 0.1.6 is measured and recorded with
+      Indigo/ONNX Runtime retained and no weights added; no `.onnx`, `.part`,
+      `models/` or `.so` file is committed; `node scripts/harness.mjs` is green.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C13 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C14 remain empty.

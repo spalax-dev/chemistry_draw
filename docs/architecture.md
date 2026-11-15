@@ -515,9 +515,9 @@ delivers the runtime foundation, the filter and the shipped ONNX Runtime. B2
 adds OCSR inference: one hand-drawn model, a separate preprocessing pipeline
 and `POST /v2/ocsr/recognize`. Activity 9 (`phase-b2-recognize-e2e`) adds the
 implemented filter gate, the Ketcher-compatible job adapter and the re-enabled
-Recognize UI on top of it. Model download (B3) is delivered by activity 11, and
-its first-run setup UI by activity 12; both are documented in the Model delivery
-subsection below.
+Recognize UI on top of it. Model download (B3) is delivered by activity 11, its
+first-run setup UI by activity 12 and its packaged clean-install validation by
+activity 13; all three are documented in the Model delivery subsection below.
 
 ### Runtime
 
@@ -620,8 +620,9 @@ does not change the classifier entry or the schema version.
 
 > **Status:** activity 11 (`phase-b3-model-download`) delivers the backend
 > contract below; activity 12 (`phase-b3-setup-ui`) delivers the first-run
-> setup UI at the end of this section. Clean-install validation remains a
-> follow-up.
+> setup UI at the end of this section; activity 13 (`phase-b3-clean-install`)
+> validates the packaged clean install. B3 is complete only when that
+> validation passes.
 
 A clean install ships **no model weights**. The sidecar owns the catalog and the
 downloader; the Tauri host only supplies the model root. Downloading is
@@ -1121,6 +1122,55 @@ dispatch in `try`/`catch` and returns `false` on any mismatch, so the app keeps
 working with Recognize disabled instead of crashing. A Ketcher upgrade must
 re-check the store shape, the `APP_OPTIONS`/`UPDATE`/`ACTION` action types and
 this contract before bumping the dependency.
+
+#### Clean install (B3)
+
+The packaged app is the unit B3 delivers, so its clean-install state is part of
+the contract, not an afterthought of the dev checkout:
+
+- **Payloads carry no model weights.** The `.deb`, `.rpm`, AppImage and NSIS
+  installer contain the sidecar, the Indigo libraries and the dynamically loaded
+  ONNX Runtime 1.31.0, but no `.onnx` file, no `models/` directory and no
+  generated `manifest.json` (§8, §9). Model download is the only route that
+  adds weights to the user's machine.
+- **The model root starts empty.** On a first release launch the host creates
+  `<app_data>/models` (the table in "Model root and host" above) and passes it
+  as `CHEMISTRY_MODELS_DIR`; the directory exists but holds no files. No startup
+  path creates a manifest or contacts Hugging Face.
+- **First status is not ready.** `GET /v2/models` answers `200` with
+  `catalog_version: 1`, `ready: false`, `manifest_present: false`,
+  `installed_bytes: 0`, `total_bytes: 323987190`, both models
+  `installed: false` with their `missing` lists and `download.state: "idle"`.
+  `/v2/info` advertises `imago_versions: []`, so Ketcher disables Recognize,
+  while Indigo keeps serving. The setup UI sees `ready: false` and auto-opens
+  the **Models** dialog exactly once; **Later** leaves the editor fully usable
+  and starts no download.
+- **Download makes the same install ready.** An opt-in
+  `POST /v2/models/download` streams the four artifacts from Hugging Face into
+  `<app_data>/models`, verifies the pinned sizes and SHA-256 values, installs
+  them atomically and writes the schema-1 manifest last. `GET /v2/models` then
+  reports `ready: true` with
+  `installed_bytes == total_bytes == 323987190`; `POST /v2/models/verify`
+  reports `ok: true`; `/v2/info` advertises `["local-ocsr"]`; and the dialog
+  enables Recognize in place without a remount, so the canvas, selection and
+  undo history survive (§7, "Model setup UI").
+- **The packaged sidecar is self-sufficient.** Running
+  `squashfs-root/usr/bin/indigo-server` from the AppImage payload with an empty
+  `CHEMISTRY_MODELS_DIR`, the packaged `LD_LIBRARY_PATH` and no dev checkout is
+  the packaged proof: it serves the empty status, downloads and verifies the
+  real models, then answers `POST /v2/filter/classify` and
+  `POST /v2/ocsr/recognize`. It needs no `ORT_DYLIB_PATH` because the bundled
+  runtime chain loads from the packaged library directory, exactly as the
+  release host uses it.
+- **Windows is gated the same way.** The NSIS payload carries no weights, so the
+  CI smoke runs the sidecar with no models and asserts the empty
+  `GET /v2/models` status and `/v2/info` `imago_versions: []`; the previous
+  expectation of `local-ocsr` on a model-less runner is obsolete. It never
+  downloads the ~324 MB payload.
+- **Sizes are recorded.** The measured artifact sizes, the absence/presence
+  inspection and the packaged clean-root download/verify/recognize evidence
+  live in `docs/verification.md` §2 "Clean install (B3)" and in the B3 package
+  size table in `docs/ROADMAP.md`.
 
 ### Classifier tensor contract
 
@@ -1772,7 +1822,10 @@ The Linux payloads bundle the builder's `lib/linux-x86_64/` as a Tauri
 resource: exactly one real `libonnxruntime.so.1.31.0` plus the
 `libonnxruntime.so.1` and `libonnxruntime.so` symlinks, and no model files.
 `check-native-libs.sh --allowlist /opt/chemistry/libs` runs before bundling and
-rejects any file the builder image did not provide.
+rejects any file the builder image did not provide. The clean install is
+validated from the AppImage payload with an empty app-data model root, so the
+packaged sidecar itself downloads, verifies and runs the models
+(`docs/verification.md` §2, "Clean install (B3)").
 
 Windows: `pnpm tauri build --bundles nsis` produces an NSIS installer under
 `target/release/bundle/nsis/`. It bundles `indigo-server.exe` plus the five

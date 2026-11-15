@@ -73,6 +73,10 @@ runs:
         $stdout = Join-Path $env:RUNNER_TEMP "indigo-server.out.log"
         $stderr = Join-Path $env:RUNNER_TEMP "indigo-server.err.log"
         $env:INDIGO_PORT = "19321"
+        # Point the sidecar at a fresh, empty model root: the runner never
+        # downloads the weights, so the catalog must report itself unready.
+        $env:CHEMISTRY_MODELS_DIR = Join-Path $env:RUNNER_TEMP "clean-models"
+        New-Item -ItemType Directory -Force -Path $env:CHEMISTRY_MODELS_DIR | Out-Null
         # The CI process has no piped stdin, so the parent watchdog would see
         # immediate EOF. Disable it for the standalone smoke run.
         $env:INDIGO_NO_PARENT_WATCHDOG = "1"
@@ -115,8 +119,34 @@ runs:
             throw "/v2/info returned $($info.StatusCode), expected 200"
           }
           $infoJson = $info.Content | ConvertFrom-Json
-          if (@($infoJson.imago_versions) -notcontains "local-ocsr") {
-            throw "/v2/info must advertise the synthetic local-ocsr capability: $($info.Content)"
+          if (-not ($infoJson.PSObject.Properties.Name -contains "imago_versions")) {
+            throw "/v2/info must expose the imago_versions capability field: $($info.Content)"
+          }
+          if (@($infoJson.imago_versions).Count -ne 0) {
+            throw "/v2/info must advertise no capabilities on a model-less runner: $($info.Content)"
+          }
+
+          # The empty model root must report an unready, idle catalog and the
+          # pinned total from the compiled catalog (never a download).
+          $models = Invoke-WebRequest -Uri "$base/models"
+          if ($models.StatusCode -ne 200) {
+            throw "/v2/models returned $($models.StatusCode), expected 200"
+          }
+          $modelsJson = $models.Content | ConvertFrom-Json
+          if ($modelsJson.ready -ne $false) {
+            throw "/v2/models must report ready: false on an empty root: $($models.Content)"
+          }
+          if ($modelsJson.manifest_present -ne $false) {
+            throw "/v2/models must report manifest_present: false on an empty root: $($models.Content)"
+          }
+          if ($modelsJson.installed_bytes -ne 0) {
+            throw "/v2/models must report 0 installed bytes on an empty root: $($models.Content)"
+          }
+          if ($modelsJson.total_bytes -ne 323987190) {
+            throw "/v2/models must report the pinned 323987190 total bytes: $($models.Content)"
+          }
+          if ($modelsJson.download.state -ne "idle") {
+            throw "/v2/models must report an idle download on an empty root: $($models.Content)"
           }
 
           $health = Invoke-WebRequest -Uri "$base/health"

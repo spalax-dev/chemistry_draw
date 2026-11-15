@@ -168,18 +168,40 @@ done except the final review, which is pending.
 
 **Goal:** keep distributables small by fetching the two model weight sets (filter + OCSR) on demand.
 
-**Status: in progress (started 2026-11-13).** Activity 11
+**Status: complete (2026-11-15).** Activity 11
 (`phase-b3-model-download`) delivered the backend: the bundled catalog with the
 pinned Hugging Face URLs, sizes, SHA-256 values and licenses; the streaming
 downloader (`.part`, HTTP Range resume, SHA-256, atomic install, disk-space and
 offline handling, cancel/retry/verify); the `/v2/models`
 status/download/cancel/verify endpoints; the generated `models/manifest.json`;
 the `/v2/info` capability gate; and the release `<app_data>/models` root.
-Activity 12 (`phase-b3-setup-ui`) delivers the first-run setup UI: the
+Activity 12 (`phase-b3-setup-ui`) delivered the first-run setup UI: the
 **Models** toolbar entry, the auto-opened in-app dialog with opt-in
 Download/Resume/Repair/Update/Verify, progress polling, in-dialog errors,
 Later, and the in-place `imago_versions` update that enables Recognize without
-losing the canvas. The clean-install validation remains.
+losing the canvas. Activity 13 (`phase-b3-clean-install`) validated the
+packaged clean install: rebuilt `.deb`/`.rpm`/AppImage and NSIS payloads
+without model weights, the packaged sidecar on an empty app-data root through
+the real Hugging Face download/verify and filter/OCSR smoke, the **Models**
+dialog on a clean app-data root, and the Windows CI `/v2/models` + `/v2/info`
+smoke. The Windows PowerShell/NSIS execution is exercised by CI; the packaged
+GUI check passed on the user's machine.
+
+> Package sizes (0.1.7, clean-install validation, measured on 2026-11-14 with
+> `task packages`). Baseline: 0.1.6, which already shipped the ONNX Runtime.
+>
+> | Artifact | 0.1.6 baseline | 0.1.7      | Δ bytes    |
+> | -------- | -------------- | ---------- | ---------- |
+> | `.deb`   | 30,851,320     | 29,676,964 | −1,174,356 |
+> | `.rpm`   | 30,983,791     | 29,801,134 | −1,182,657 |
+> | AppImage | 27,515,384     | 28,011,000 | +495,616   |
+>
+> B3 adds no native library and no model weight to the installers. The
+> 323,987,190 B of weights are downloaded into `<app_data>/models`, so the
+> payload stays in the 0.1.6 range while a ready install stores ~324 MB per
+> user. The AppImage grows slightly because the B3 sidecar is 2,699,864 B →
+> 5,646,936 B while the payload also dropped the host font/PNG libraries still
+> present in 0.1.6; the compressed `.deb`/`.rpm` shrink.
 
 - **Model registry/manifest:** pin the **filter** and **OCSR** model IDs, revisions/checksums, sizes, and licenses; download from **Hugging Face** (or mirrored URLs) with integrity verification. The catalog is compiled into the sidecar; a successful download writes a schema-1 `models/manifest.json` compatible with the existing registry.
 - **Storage & lifecycle:** the release model root is `<app_data>/models`; downloads stream to `.part` files, resume with Range, verify SHA-256 and install atomically. `catalog_version` drives install/repair/forward update; v1 has no rollback. Offline, disk-space, checksum and cancel states are reported through `GET /v2/models`.
@@ -218,14 +240,11 @@ losing the canvas. The clean-install validation remains.
 
 ## Suggested immediate next step
 
-Phase A is complete (Imago removed, lighter artifacts published) and **B1 is in
-progress**: activity 7 ships the ONNX Runtime and its measured package-size delta
-is recorded above, so what remains is model-gated tests and real-input threshold
-calibration. **B2 is complete except the final review**: activity 8 delivered the
-hand-drawn OCSR model and `POST /v2/ocsr/recognize`; activity 9 implemented the
-filter gate, the SMILES→molfile conversion, the Ketcher `imago/uploads`
-compatibility job and the _Recognize Molecule_ UI, with `0.901` as a provisional
-confidence gate. **B3 is in progress**: activity 11 delivered the model
-catalog/download backend and activity 12 the first-run setup UI; the
-clean-install validation follows. Phase C stays behind B3, with C merged
-whenever the upstream Ketcher fix ships.
+Phase A is complete (Imago removed, lighter artifacts published), **B1** is
+delivered (ONNX Runtime foundation and the classifier endpoint), and **B2** is
+delivered (hand-drawn OCSR, the filter and `imago/uploads` compatibility job and the
+_Recognize Molecule_ UI, with `0.901` as a provisional confidence gate). **B3 is
+complete** (2026-11-15): the model catalog/downloader, the first-run setup UI
+and the clean-install validation are in place. The remaining follow-ups are
+real-input threshold calibration, the packaged-GUI polish, Phase C (upstream
+Ketcher fix) and the Phase D live review.
