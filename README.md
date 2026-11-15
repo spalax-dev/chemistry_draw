@@ -28,10 +28,14 @@
   WebAssembly).
 - **Recognize Molecule** — convert a PNG, JPEG or WebP image into an editable
   structure with the local ONNX classifier and OCSR model. No cloud service.
+- **First-run model setup** — the recognition models (~309 MiB) are not bundled;
+  the **Models** toolbar entry opens a setup dialog that downloads, resumes,
+  verifies or repairs them. The download is opt-in and images never leave your
+  machine.
 - **Documents are `.ket`** — Save (Ctrl+S) writes the Ketcher `.ket` format to
   the file you chose (the native Save dialog appears the first time); **Export**
-  is the way to Molfile, SMILES, InChI, PNG and SVG. Save, New and Export live
-  in Ketcher's own toolbar.
+  is the way to Molfile, SMILES, InChI, PNG and SVG. Save, New, Export and
+  Models live in Ketcher's own toolbar.
 - **Offline-first** — runs entirely on your machine.
 
 ## Download

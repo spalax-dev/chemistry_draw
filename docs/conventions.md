@@ -134,15 +134,16 @@ Rules:
 
 ## 6. In-app dialogs and document UI
 
-Every dialog this app adds — recovery prompt, close guard, save/export errors
-and recognition failures — is an **in-app HTML component**, never a Tauri native
-`message` / `confirm` / `ask`. Alerts use `src/ui/Dialog.tsx` and `ErrorDialog`
-(`src/ui/DocumentDialogs.tsx`); `ErrorDialog`'s optional `title` defaults to
-`Error`, and recognition failures pass `Structure problem`. Do **not** call
-`message()` or browser `alert()` / `confirm()` for in-app errors: an OS dialog
-cannot carry the Ketcher styling and sits outside the webview. Native dialogs
-are only for file selection — Tauri `open` / `save` for Open, Save As and Export
-destinations.
+Every dialog this app adds — recovery prompt, close guard, save/export errors,
+recognition failures and the model setup panel — is an **in-app HTML component**,
+never a Tauri native `message` / `confirm` / `ask`. Alerts use
+`src/ui/Dialog.tsx` and `ErrorDialog` (`src/ui/DocumentDialogs.tsx`);
+`ErrorDialog`'s optional `title` defaults to `Error`, and recognition failures
+pass `Structure problem`. Do **not** call `message()` or browser `alert()` /
+`confirm()` for in-app errors: an OS dialog cannot carry the Ketcher styling and
+sits outside the webview. Native dialogs are only for file selection — Tauri
+`open` / `save` for Open, Save As and Export destinations. The model setup
+dialog follows the same rules (`src/ui/ModelSetupDialog.tsx`).
 
 ### 6.1 Primitives
 
@@ -234,7 +235,9 @@ so Vitest can exercise them (`docs/testing.md` §6.1):
 - saved-blob routing by extension and document state (`src/saveRoute.ts`);
 - recognition error unwrapping, friendly copy, dialog title and raw message
   extraction (`src/recognizeErrors.ts`);
-- autosave scheduling and the recovery decision (`src/autosave.ts`).
+- autosave scheduling and the recovery decision (`src/autosave.ts`);
+- model-setup byte/percent formatting, status parsing and dialog phase/action
+  labels (`src/modelSetup.ts`).
 
 React components and Tauri calls stay thin adapters around those helpers; do
 not put decisions inline in JSX or in an event handler.
@@ -254,8 +257,8 @@ not put decisions inline in JSX or in an event handler.
 - Register them through the `Editor` `customButtons` prop and handle them as
   `CUSTOM_BUTTON_PRESSED` custom actions. Button ids are namespaced
   `chemistry-draw:<command>`; one listener dispatches by id.
-- Titles use sentence case (`Save`, `New`, `Export`), not Title Case, and double
-  as the tooltip.
+- Titles use sentence case (`Save`, `New`, `Export`, `Models`), not Title Case,
+  and double as the tooltip.
 - Icons are fully transparent `imageLink` data URIs whose glyph is painted by a
   CSS `mask-image`, so it inherits the toolbar button colour. No icon files and
   no hard-coded icon colours; see §6.5.1.
@@ -281,9 +284,9 @@ in the image.
   button's `currentColor` shows through the glyph shape and follows the default,
   hover and active states exactly.
 - Selectors are keyed by the `alt` text Ketcher sets from our titles:
-  `img[alt="Save"]`, `img[alt="New"]`, `img[alt="Export"]`, each scoped to
-  `.Ketcher-root`. The ids and titles stay stable; no other attribute is
-  guaranteed.
+  `img[alt="Save"]`, `img[alt="New"]`, `img[alt="Export"]`, `img[alt="Models"]`,
+  each scoped to `.Ketcher-root`. The ids and titles stay stable; no other
+  attribute is guaranteed.
 - The style string is generated in `src/ui/toolbarIcons.ts` and rendered once by
   the app **scoped to** `.Ketcher-root` — the `<style>` element is a sibling of
   the `Editor`, not a descendant of the Ketcher root, so the scope comes from

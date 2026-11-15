@@ -130,6 +130,10 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
         style={{
           width,
           maxWidth: "100%",
+          maxHeight: "calc(100vh - 48px)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           boxSizing: "border-box",
           backgroundColor: tokens.color.surface,
           border: tokens.dialog.border,
@@ -139,7 +143,7 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
           color: tokens.color.text,
         }}
       >
-        <div style={{ padding: "20px 20px 0" }}>
+        <div style={{ flexShrink: 0, padding: "20px 20px 0" }}>
           <h2
             id={titleId}
             style={{
@@ -151,16 +155,27 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
           >
             {title}
           </h2>
-          {children ? (
-            <div style={{ marginTop: "8px", fontSize: tokens.fontSize.body, lineHeight: 1.5 }}>
-              {children}
-            </div>
-          ) : null}
         </div>
+        {children ? (
+          <div
+            style={{
+              flex: "1 1 auto",
+              minHeight: 0,
+              marginTop: "8px",
+              padding: "0 20px 4px",
+              overflowY: "auto",
+              fontSize: tokens.fontSize.body,
+              lineHeight: 1.5,
+            }}
+          >
+            {children}
+          </div>
+        ) : null}
         {actions ? (
           <div
             style={{
               display: "flex",
+              flexShrink: 0,
               justifyContent: "flex-end",
               gap: "8px",
               marginTop: "16px",
@@ -174,7 +189,7 @@ export function Dialog({ title, children, actions, onCancel, width = 420 }: Dial
             {actions}
           </div>
         ) : (
-          <div style={{ height: "20px" }} />
+          <div style={{ height: "20px", flexShrink: 0 }} />
         )}
       </div>
     </div>

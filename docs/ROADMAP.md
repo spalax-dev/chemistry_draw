@@ -169,18 +169,22 @@ done except the final review, which is pending.
 **Goal:** keep distributables small by fetching the two model weight sets (filter + OCSR) on demand.
 
 **Status: in progress (started 2026-11-13).** Activity 11
-(`phase-b3-model-download`) delivers the backend: the bundled catalog with the
+(`phase-b3-model-download`) delivered the backend: the bundled catalog with the
 pinned Hugging Face URLs, sizes, SHA-256 values and licenses; the streaming
 downloader (`.part`, HTTP Range resume, SHA-256, atomic install, disk-space and
 offline handling, cancel/retry/verify); the `/v2/models`
 status/download/cancel/verify endpoints; the generated `models/manifest.json`;
-the `/v2/info` capability gate; and the release `<app_data>/models` root. The
-first-run/setup UI and the clean-install validation are follow-up activities.
+the `/v2/info` capability gate; and the release `<app_data>/models` root.
+Activity 12 (`phase-b3-setup-ui`) delivers the first-run setup UI: the
+**Models** toolbar entry, the auto-opened in-app dialog with opt-in
+Download/Resume/Repair/Update/Verify, progress polling, in-dialog errors,
+Later, and the in-place `imago_versions` update that enables Recognize without
+losing the canvas. The clean-install validation remains.
 
 - **Model registry/manifest:** pin the **filter** and **OCSR** model IDs, revisions/checksums, sizes, and licenses; download from **Hugging Face** (or mirrored URLs) with integrity verification. The catalog is compiled into the sidecar; a successful download writes a schema-1 `models/manifest.json` compatible with the existing registry.
 - **Storage & lifecycle:** the release model root is `<app_data>/models`; downloads stream to `.part` files, resume with Range, verify SHA-256 and install atomically. `catalog_version` drives install/repair/forward update; v1 has no rollback. Offline, disk-space, checksum and cancel states are reported through `GET /v2/models`.
-- **UX (remaining):** first-run/setup window (and Settings entry) showing what will be downloaded (filter and OCSR separately), total size (~324 MB), progress, cancel/retry, and disk-space/errors; block recognition gracefully until both models are ready. The backend reports the state the UI polls.
-- **Privacy & ops:** make network behavior explicit (opt-in/notice as appropriate), log failures for support, and document firewall/offline behavior. Nothing is downloaded at startup.
+- **UX (activity 12):** the **Models** entry in Ketcher's toolbar opens an in-app Ketcher-styled dialog. It auto-opens once on a clean install and lists the filter and OCSR families separately with licenses, sizes, installed bytes and total size (~309 MiB / 323,987,190 B); Download is opt-in and progress is polled from `GET /v2/models` (bytes/percent/current file). Download/Resume/Retry/Repair/Update/Verify labels follow the backend state, cancel keeps `.part` files, all offline/disk/checksum errors stay in the dialog, and Later closes it while the app remains usable. When the models become ready the app copies `/v2/info` `imago_versions` into Ketcher's option store in place, enabling Recognize without a remount or canvas loss; until then the control stays disabled (`[]`).
+- **Privacy & ops:** make network behavior explicit (opt-in/notice as appropriate), log failures for support, and document firewall/offline behavior. Nothing is downloaded at startup, and images/documents never leave the machine.
 - **DoD:** clean install → guided download → working recognition; corrupted/partial downloads recover; packages no longer bundle heavy model weights.
 
 **Cross-cutting B risks/notes:** model licenses & attribution; runtime footprint (Python/torch vs. lighter runtimes) and its impact on A’s “lighter builds”; GPU/CPU performance; filter false negatives (146 of 250 multi-molecule images classified `no-structure`) and OCSR accuracy on hand-drawn vs. printed input; nondeterminism/accuracy vs. Imago—capture baselines during D.
@@ -221,7 +225,7 @@ calibration. **B2 is complete except the final review**: activity 8 delivered th
 hand-drawn OCSR model and `POST /v2/ocsr/recognize`; activity 9 implemented the
 filter gate, the SMILES→molfile conversion, the Ketcher `imago/uploads`
 compatibility job and the _Recognize Molecule_ UI, with `0.901` as a provisional
-confidence gate. **B3 is in progress**: activity 11 delivers the model
-catalog/download backend; the first-run setup UI and clean-install validation
-follow. Phase C stays behind B3, with C merged whenever the upstream Ketcher fix
-ships.
+confidence gate. **B3 is in progress**: activity 11 delivered the model
+catalog/download backend and activity 12 the first-run setup UI; the
+clean-install validation follows. Phase C stays behind B3, with C merged
+whenever the upstream Ketcher fix ships.

@@ -606,3 +606,36 @@ requiring a manually populated `models/`.
   tests and fixes the docs/catalog overflow.
 - Tests: 31 model-delivery, 238 sidecar with ignored, 156 Vitest; harness green;
   C12 checked. First-run setup UI and clean-install validation remain.
+
+## 2026-11-14 — Activity 12: phase-b3-setup-ui
+
+B3 setup UI: a clean install can now download the recognition models from the
+app itself.
+
+- Ketcher's custom toolbar gains a **Models** entry (`chemistry-draw:models`,
+  masked glyph); the in-app `ModelSetupDialog` auto-opens once when `/v2/models`
+  is not ready and can be reopened from Models. **Later** closes it and the app
+  stays usable.
+- The dialog shows both model families, MIT/CC-BY-4.0 provenance, per-model and
+  total sizes (323,987,190 B), installed bytes and download state; Download is
+  opt-in; Resume/Retry/Repair/Update/Verify labels follow `setupView`; Cancel is
+  available only while downloading; errors stay in a `role="alert"` region.
+- Polls `/v2/models` while downloading/verifying; verifies and repairs; the
+  shared `Dialog` now caps to `calc(100vh - 48px)`, scrolls the body and keeps
+  the action row visible at 1280x800 and 900x600.
+- Capability gating: `/v2/info` is `[]` until ready; after success the app
+  applies the advertised `imago_versions` through `src/ketcherOptions.ts`
+  (narrow, hardened React-store adapter; `editor.options` alone does not update
+  the toolbar store), enabling Recognize without remounting or losing the
+  canvas/undo. `local-ocsr` is not hardcoded.
+- Helpers `src/modelSetup.ts` (formatBytes/progressPercent/parseModelsStatus/
+  setupView + fake-fetch HTTP adapters) are covered by 103 Vitest tests; the
+  adapter by 12. A temporary local Playwright flow with a dummy catalog and
+  loopback server covers auto-open, Later/reopen, Download/ready, Verify,
+  Verify-fail -> Repair -> ready, sizes, and the dialog at both viewport sizes;
+  docs/testing/C13 describe it honestly as a temporary flow, not a committed
+  suite. Canvas/undo is automated; selection retention is manual.
+- Review fixed the stale Repair state, dialog overflow, overclaimed e2e docs,
+  adapter hardening, parser/adapter tests and minor copy/autofocus/style issues.
+- Gates: 271 Vitest, 238 sidecar, harness green, tsc/lint/format/build/
+  ShellCheck clean; C13 checked. Clean-install validation remains.

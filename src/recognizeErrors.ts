@@ -24,7 +24,7 @@ export const SIMPLE_ERRORS: Record<string, string> = {
   "The structure could not be read confidently.":
     "The structure could not be read confidently. Try a sharper or larger image of one molecule.",
   "Recognition models are not available.":
-    "Molecule recognition is not set up. Check that the image-classifier and OCSR models are installed (see CHEMISTRY_MODELS_DIR) and restart the app.",
+    "Molecule recognition is not set up. Open the Models entry in the toolbar and download the recognition models.",
   "The recognized structure could not be prepared for the editor.":
     "The structure was recognized but could not be prepared for the editor. Please try again.",
   "Unsupported image. Use a PNG, JPEG or WebP file.":

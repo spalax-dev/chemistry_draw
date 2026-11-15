@@ -57,6 +57,16 @@ const EXPORT_GLYPH = outline(
   "M8.25 9.25L12 5.25L15.75 9.25",
 );
 
+/**
+ * A stacked-disk database: the recognition models stored on disk. Distinct
+ * from Save's tray and Export's open tray.
+ */
+const MODELS_GLYPH = outline(
+  "M5.25 7.5V16.5C5.25 17.75 8.25 18.75 12 18.75C15.75 18.75 18.75 17.75 18.75 16.5V7.5",
+  "M5.25 7.5C5.25 6.25 8.25 5.25 12 5.25C15.75 5.25 18.75 6.25 18.75 7.5C18.75 8.75 15.75 9.75 12 9.75C8.25 9.75 5.25 8.75 5.25 7.5Z",
+  "M5.25 12C5.25 13.25 8.25 14.25 12 14.25C15.75 14.25 18.75 13.25 18.75 12",
+);
+
 /** One `.Ketcher-root` rule that masks the transparent `<img>` into a glyph. */
 const iconRule = (alt: string, glyph: string): string => {
   const mask = `url("${glyph}")`;
@@ -81,11 +91,13 @@ export const TOOLBAR_ICON_STYLES = [
   iconRule("Save", SAVE_GLYPH),
   iconRule("New", NEW_GLYPH),
   iconRule("Export", EXPORT_GLYPH),
+  iconRule("Models", MODELS_GLYPH),
 ].join("\n");
 
-/** Document commands, rendered by Ketcher's own top toolbar (`§5.7`). */
+/** Document and model commands, rendered by Ketcher's own top toolbar (`§5.7`). */
 export const CUSTOM_BUTTONS = [
   { id: "chemistry-draw:save", imageLink: TRANSPARENT_ICON, title: "Save" },
   { id: "chemistry-draw:new", imageLink: TRANSPARENT_ICON, title: "New" },
   { id: "chemistry-draw:export", imageLink: TRANSPARENT_ICON, title: "Export" },
+  { id: "chemistry-draw:models", imageLink: TRANSPARENT_ICON, title: "Models" },
 ];

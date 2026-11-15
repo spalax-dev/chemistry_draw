@@ -573,10 +573,14 @@ Vitest suite for pure helpers below, and the manual checklist in
 
 Vitest is the frontend test runner. The test task adds it (with the `test`
 script and a harness block) before the first helper test is written. Tests live
-next to the module as `src/<module>.test.ts` and cover **only** pure functions
-and constants from `src/document.ts`, `src/autosave.ts`, `src/saveRoute.ts`,
-`src/recognizeErrors.ts`, `src/ui/toolbarIcons.ts` and `src/ui/tokens.ts` — no
-DOM, no Tauri imports, no React rendering.
+next to the module as `src/<module>.test.ts` and cover **only** pure functions,
+constants and the fetch adapters with an injected `FetchLike` from
+`src/document.ts`, `src/autosave.ts`, `src/saveRoute.ts`,
+`src/recognizeErrors.ts`, `src/modelSetup.ts`, `src/ketcherOptions.ts`,
+`src/ui/toolbarIcons.ts` and `src/ui/tokens.ts` — no DOM, no network, no Tauri
+imports, no React rendering. `src/ketcherOptions.ts` is tested with fake
+container/fiber/store objects; its `document` fallback is never reached in the
+Node environment.
 
 | Helper / module        | Behaviour under test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -592,7 +596,12 @@ DOM, no Tauri imports, no React rendering.
 | write generation       | a write started before `clearSnapshot()` cannot recreate the snapshot; a stale write removes the shared snapshot files it just committed (metadata, structure, partial)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | close-guard decision   | clean allows close; Save closes after saving; Discard closes without saving; Cancel stays open; a cancelled Save As aborts the close                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | recognition errors     | `unwrapError` unwraps Ketcher's stringified `FAILURE` body (`{"state":"FAILURE","error":"…"}`, with or without an `Error:` prefix) and reports `json: true`; a JSON body without a usable `error`/`message` stays JSON with an empty detail; plain text (including a `No molecule…` message) is not JSON and keeps the original message; the plain-text `413` parse errors (`Unexpected token`, `is not valid JSON`, `JSON Parse error`) map to "The server could not process the image. It may be too large."; `friendly` maps every documented substring to its copy, including the editor/server hints (`already have edge between vertices`, `Indigo load error`, `Load failed`, `Connection terminated unexpectedly`); the title selection returns `Structure problem` for a mapped copy or a JSON body and `Error` for an unmapped non-JSON failure; `errorMessage` returns an `Error`'s message verbatim and `String(value)` for a non-Error, so the document workflow never applies the recognition copy                                                                          |
-| toolbar icon module    | the exported `imageLink` is a valid, fully transparent SVG data URI (draws nothing); the three button ids and titles stay stable (`chemistry-draw:save`/`Save`, `chemistry-draw:new`/`New`, `chemistry-draw:export`/`Export`); the generated style has exactly one mask rule per `alt` (Save/New/Export) with a `mask-image` data URI; the style contains no literal colour — no hex, no `%23` escape and no named colour such as `black`/`white`/`grey` — only `currentColor`; every glyph is an outline (`fill='none'`, `stroke-width='1.5'`, round caps/joins) whose path centrelines stay inside 5.25-18.75                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ketcher options        | `applyKetcherAppOptions` dispatches exactly `APP_OPTIONS` (with the merged `app` payload), `UPDATE` and a no-op `ACTION` for a store whose `getState().options.app` exists; returns `false` and dispatches nothing for a missing React root, a non-fiber root, a store without `getState`, a state without `options.app`, a throwing `getState` and a throwing dispatch; the fiber walk stops at 10,000 nodes (a store past the cap is not reached); `findKetcherRoot` returns the `clientArea.closest(".Ketcher-root")` element, tolerates a missing or throwing `closest`, and returns `null` outside a DOM                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| toolbar icon module    | the exported `imageLink` is a valid, fully transparent SVG data URI (draws nothing); the four button ids and titles stay stable (`chemistry-draw:save`/`Save`, `chemistry-draw:new`/`New`, `chemistry-draw:export`/`Export`, `chemistry-draw:models`/`Models`); the generated style has exactly one mask rule per `alt` (Save/New/Export/Models) with a `mask-image` data URI; the style contains no literal colour — no hex, no `%23` escape and no named colour such as `black`/`white`/`grey` — only `currentColor`; every glyph is an outline (`fill='none'`, `stroke-width='1.5'`, round caps/joins) whose path centrelines stay inside 5.25-18.75                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| model setup format     | `formatBytes` uses binary units with one decimal above bytes: `0` → `0 B`, `1023` → `1023 B`, `1024` → `1.0 KiB`, `1536` → `1.5 KiB`, `8,162,917` → `7.8 MiB`, `315,824,273` → `301.2 MiB`, `323,987,190` → `309.0 MiB`, `1,073,741,824` → `1.0 GiB`; a negative, `NaN` or infinite count returns `0 B`. `progressPercent` floors and clamps: `0/0` → `0`, `0/100` → `0`, `50/100` → `50`, `1/3` → `33`, `100/100` → `100`, `150/100` → `100`, `-1/100` → `0`, and a non-finite value → `0`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| model status parsing   | `parseModelsStatus` accepts the documented `/v2/models` payload, returns it typed as `ModelsStatus` (unknown extra fields are allowed and do not reject it), accepts `installed_catalog_version: null`, `current_file: null` and `error: null`; returns `null` for a non-object, a missing/`null` `download`, an unknown/non-string `download.state`, a non-array `models`, a model `missing` that is not a string array, non-boolean `ready`/`installed`/`update_available`, a negative or non-finite byte count, a non-integer or mistyped `catalog_version`/`installed_catalog_version`, a non-string model `key`/`id`/`version`/`license`, and a non-string `download.current_file`/`download.error`                                                                                                                                                                                                                                                                                                                                                                                  |
+| model HTTP adapters    | `fetchModelsStatus`, `startModelDownload`, `cancelModelDownload` and `verifyModels` join `apiBase` with and without a trailing slash, send the documented method (`GET` for the status, `POST` for actions/verify) and parse the documented bodies; a non-OK response surfaces the `{ "error": … }` envelope, falls back to a plain-text body and then to `statusText`/`HTTP <status>`; a `409` action names the status and the backend detail; a malformed status or verify body throws the "not a valid …" message; a rejected fetch maps to the actionable "Could not reach the local model service at <base>" message with the cause appended; verify returns the parsed artifact report                                                                                                                                                                                                                                                                                                                                                                                              |
+| model setup view       | `setupView(status, verify)` returns the phase and primary label for every state: `ready: false` + `idle` → `not-installed`/`Download`; `downloading` → `downloading`/`null` with `canCancel: true`; `verifying` → `verifying`/`null` with `canCancel: false`; `cancelled` → `paused`/`Resume`; `failed` → `failed`/`Retry`; `ready` → `ready`/`Verify`; `ready` + `update_available` → `update`/`Update`; `ready` + a verify report with `ok: false` → `repair`/`Repair`; a `failed` run on a ready install stays `failed`/`Retry`; an explicit verify failure wins over `update_available`; `canVerify` is true only on a ready install with no active run; Later is not part of the view and is always rendered                                                                                                                                                                                                                                                                                                                                                                         |
 | dialog tokens          | the overlay token is exactly `rgba(94,94,94,0.2)` and the pre-fade token is `rgba(94,94,94,0.01)`; the hatch overlay token's data URI decodes to a 10×10 SVG whose path is `M0 10 10 0zm12-2-4 4zM-2 2l4-4z` with `stroke` `#555`, `stroke-width` 2 and `stroke-opacity` 0.02; its repeat and size tokens are `repeat` and `10px 10px`; the old `rgba(94,94,94,0.8)` overlay is gone; the dialog panel tokens resolve to radius `8px`, border `none` and shadow `none`; `tokens.dialog.transition` is `background-color 0.3s` (the transition lives on that token, not on the overlay colour); the generic 3 px `radius` and soft shadow remain for non-dialog surfaces and are asserted non-empty; every in-app dialog gets its overlay and panel styling from these tokens, with no per-dialog colour, radius, border or shadow; `tokens.dialog.backdropPattern` stays a bare `data:image/svg+xml` URI that does not itself start with `url(`, while the `background-image` the overlay applies wraps that token as `url("…")` — the token raw, the CSS function owned by the component |
 
 Rules:
@@ -611,14 +620,20 @@ Rules:
   `background-image` or pre-wrapping the token itself must each fail a test.
   For recognition errors, dropping the `json` flag, echoing the raw body,
   removing a documented substring from the mapping, or returning the `Error`
-  title for a mapped failure must each make a test fail.
+  title for a mapped failure must each make a test fail. For model setup,
+  rounding instead of flooring the percent, defaulting an unknown status to
+  `idle`, mapping `cancelled` to Retry, dropping Repair, returning Verify while
+  a run is active, or accepting a malformed status must each make a test fail.
+  For the model HTTP adapters, dropping the error-envelope/plain-text read,
+  ignoring a `409`, accepting a malformed verify report or swallowing the
+  unreachable-service message must each make a test fail.
 - The dialog-token test asserts the exported `tokens` constants directly; the
   rendered overlay tint, hatch visibility, fade smoothness and panel shape are
   covered by the manual checklist (`docs/verification.md` §2, "In-app dialog
   styling").
 - The `ErrorDialog` rendering itself — title, copy, Close button and
   Ketcher-style backdrop — is not unit-tested (Vitest renders no React) and is
-  covered by the manual/Playwright check in `docs/verification.md` section 2,
+  covered by the manual check in `docs/verification.md` section 2,
   "Recognize Molecule end to end".
 - Do not mock Tauri in these tests. The I/O adapters (`appDataDir`,
   `writeTextFile`, `onCloseRequested`) stay thin and are covered manually.
@@ -626,15 +641,115 @@ Rules:
   `routeSavedBlob`: `saveRoutedBlob` in `src/App.tsx` writes the blob first and
   then applies the state change. That adapter is not unit-tested.
 
-### 6.2 Manual checklist
+### 6.2 Model setup UI
+
+The setup UI has three layers. The pure helpers and the HTTP adapters in
+`src/modelSetup.ts` are covered by Vitest; the dialog
+(`src/ui/ModelSetupDialog.tsx`), the `Dialog` panel and the fetch/poll/action
+loop in `App.tsx` are exercised by a **temporary local browser flow** plus the
+manual checklist in `docs/verification.md` §2, "Model setup UI (B3)". There is
+no committed Playwright suite, no `pnpm test:e2e` script and no Playwright
+dependency in `package.json`: the flow needs Chromium, a sidecar process and a
+dev server, so it is recreated for the activity and its output is reported, not
+checked in. Vitest renders no React and mocks no Tauri, as in §6.1.
+
+The helper contract, with the exact expected values in the §6.1 table:
+
+| Helper              | Responsibility                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `formatBytes`       | binary units (`B`, `KiB`, `MiB`, `GiB`) with one decimal above bytes; defensive `0 B` for invalid counts   |
+| `progressPercent`   | integer percent, floored and clamped to `0..100`; `0` when the total is not positive                       |
+| `parseModelsStatus` | validates a `GET /v2/models` body into `ModelsStatus` or returns `null`; no coercion and no unknown states |
+| `setupView`         | maps the status plus an optional verify report to `{ phase, primary, primaryLabel, canCancel, canVerify }` |
+
+`setupView` precedence is fixed: an active run (`downloading`, `verifying`),
+then `failed`, then `cancelled`, then a ready install (repair > update > ready),
+then not installed. A failed repair on a ready install therefore offers Retry,
+not Verify; a verify report with `ok: false` wins over `update_available`.
+Button labels are exactly `Download`, `Resume`, `Retry`, `Update`, `Verify`,
+`Repair`; `Cancel` is separate and only true while downloading. `Later` is not
+part of the view and is always rendered by the dialog.
+
+**HTTP adapters.** `src/modelSetup.ts` owns the routes and response handling:
+`fetchModelsStatus`, `startModelDownload`, `cancelModelDownload` and
+`verifyModels` take an injectable `FetchLike` and are unit-tested with a fake
+fetch (no network). The tests pin endpoint joining (with and without a trailing
+slash), the `{ "error": … }` envelope, a plain-text error body, the status-text
+fallback, a `409` action error, a malformed status or verify body and an
+unreachable service. `App.tsx` owns the polling/action loop; it clears the last
+verify report when a Download/Resume/Retry/Update/Repair action starts and when
+it succeeds, so a repaired install returns to `ready`/Verify instead of staying
+on Repair. That reset lives in the React state and is covered by the browser
+flow below, not by Vitest.
+
+**Browser flow evidence (temporary, not committed).** A local Playwright script
+drives `pnpm dev` in Chromium against a real sidecar and a dummy catalog; it
+never downloads the real models and never contacts Hugging Face:
+
+- A temp model root is paired with a **dummy catalog** injected through
+  `CHEMISTRY_MODEL_CATALOG` (the support override, never set by a release
+  build). The catalog declares the four artifacts (classifier, encoder, decoder
+  step and vocabulary) with a few KiB of dummy bytes, sizes and SHA-256 values
+  computed by the script, and URLs pointing at a loopback HTTP server.
+- The sidecar runs against that root on `127.0.0.1:9321` (the browser's
+  `resolveApiBase` fallback) and the Vite dev server is driven by Chromium. No
+  Tauri build is involved: the setup dialog uses only `fetch`.
+- The dummy artifacts are not executable ONNX graphs, so the flow asserts the
+  capability and control state, never inference. Real inference stays
+  model-gated in the backend suite (§5).
+
+Assertions actually run:
+
+1. With a fresh root, the `Models` dialog opens automatically after the editor
+   and shows both families, licenses, per-model sizes and the dummy total; no
+   download request has been made.
+2. **Later** closes the dialog; the `Models` toolbar entry reopens it; opening
+   the Ketcher Open dialog shows the image-recognition entry disabled while
+   `/v2/info` advertises `[]`.
+3. Tagging the `.Ketcher-root` element and drawing a structure with Ketcher's
+   bond tool, then clicking **Download**, shows progress and ends on the ready
+   state. The same DOM node is still present, the rendered structure SVG is
+   unchanged, `window.currentState.editor.historySize()` is unchanged and
+   `window.currentState.editor.undo()` steps the canvas back through the
+   pre-download history, proving the in-place option-store update did not
+   remount the editor or reset the undo stack. The recognition entry is now
+   enabled and `/v2/info` advertises the capability. No request targets
+   `huggingface.co`, and `page.on("dialog")` records no browser alert.
+4. **Verify → Repair → ready**: a same-size corrupt artifact in the temp root
+   makes Verify report the file and the primary action become **Repair**;
+   Repair runs, ends ready and the primary action returns to **Verify**
+   (regression for a stale verify report). The selective refetch of only the
+   bad artifact stays a sidecar-suite assertion (§5).
+5. A closed-port catalog (error state): the error is rendered in the dialog's
+   `role="alert"` region with **Retry**, and no native alert fires.
+6. Dialog layout at 1280x800 and at the 900x600 minimum, in the normal and
+   error states: the panel is inside the viewport and the action row is
+   visible.
+
+Not covered by that flow: the **Cancel/Resume** and **Update** UI paths. Their
+labels and precedence are unit-tested through `setupView`, their backend
+semantics (`.part` resume, `409` during verify, catalog comparison) are covered
+by the sidecar suite (§5), and the click-through stays in
+`docs/verification.md` §2. Selection retention after the capability update is
+also manual; the flow checks the structure and the undo stack only.
+
+The real Hugging Face download (~324 MB) is the gated/manual smoke in §5, not
+this flow. The temporary browser flow needs a browser and a sidecar process, so
+the Vitest harness block stays the unit gate and the activity runs the flow
+explicitly.
+
+### 6.3 Manual checklist
 
 The real flows cannot be unit-tested without a WebView and a filesystem, so
 `docs/verification.md` §2 is mandatory: "Documents, autosave and recovery"
 (Save, Save As, each Export format, crash simulation, the recovery
-Restore/Discard prompt, all close-guard paths), "Toolbar integration" (the three
+Restore/Discard prompt, all close-guard paths), "Toolbar integration" (the four
 custom buttons, the hidden native Save As entry, the shortcuts and the browser
-fallback) and "Recognize Molecule end to end" (the in-app `ErrorDialog` for
-recognition failures with no native alert).
+fallback), "Model setup UI" (auto-open/Later, download/progress/ready, cancel,
+retry, verify/repair, the Verify-fail → Repair → ready reset, the dialog at
+1280x800 and 900x600, and the capability update without canvas loss) and
+"Recognize Molecule end to end" (the in-app `ErrorDialog` for recognition
+failures with no native alert).
 
 ---
 

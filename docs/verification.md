@@ -88,7 +88,9 @@ Windows changes are validated by the `windows` job in
 - `curl -s http://127.0.0.1:9321/v2/info` answers 200 and
   `jq .imago_versions` returns `["local-ocsr"]` when the models are installed
   (and `[]` on a clean install) — the synthetic capability list, not an Imago
-  build.
+  build. On a clean install the **Models** setup dialog opens automatically at
+  startup (see "Model setup UI (B3)" below) and Recognize stays disabled until
+  the download completes.
 - `curl -s http://127.0.0.1:9321/v2/health` reports `"status": "ok"` and has no
   `imago_worker` field.
 - Closing the window kills `indigo-server` (no orphan on the port).
@@ -201,6 +203,85 @@ downloader creates on demand.
   `323987190` B, `catalog_version: 1` and both model keys. Then run the package
   absence greps in "Packaging" below: no `.onnx`, `manifest.json` or `models/`
   path is shipped. Remove the temp root when done.
+
+### Model setup UI (B3)
+
+Run against the desktop build (`task run`) with a temp model root so the
+installed models are never touched:
+
+```bash
+CLEAN=$(mktemp -d)
+CHEMISTRY_MODELS_DIR=$CLEAN task run
+```
+
+1. **Auto-open on a clean root.** The **Models** setup dialog opens once after
+   the editor paints. It lists both families (`Image classifier`, MIT,
+   8,162,917 B; `Structure recognition`, CC-BY-4.0, 315,824,273 B), the
+   323,987,190 B (309.0 MiB) total, the state `Not installed` and the
+   Hugging Face source. **No download has started**: `GET /v2/models` reports
+   `download.state: "idle"` and the log shows no artifact request. The built-in
+   **Recognize** control is disabled (`/v2/info` advertises `[]`).
+2. **Later.** Click **Later** (and repeat after reopening with Escape): the
+   dialog closes, no download starts, the app draws and runs Indigo operations,
+   and the **Models** toolbar entry reopens the same state. The dialog must not
+   reopen by itself in the same session.
+3. **Download, progress and ready.** Draw a small structure first. Click
+   **Download**: the dialog is the only surface that changes — the editor stays
+   mounted behind it. The progress section shows the state, bytes of the total,
+   an integer percent and the current artifact path; the button row is
+   **Cancel** + **Later** while downloading, then only **Later** while
+   verifying. At the end the status is ready, installed bytes equal
+   `323987190` and `$CLEAN/manifest.json` exists. **Recognize is enabled
+   without a restart**: the canvas is not reloaded, the structure drawn in step
+   2 is still there, and `Ctrl+Z` still undoes into the pre-download history
+   (the editor was not remounted; Ketcher's option store was updated in
+   place). `jq .imago_versions` on `/v2/info` returns `["local-ocsr"]`.
+4. **Reopen while ready.** Click **Models** again: the dialog shows `Installed`,
+   the installed bytes and a **Verify** primary action; no auto-open occurs on
+   the next launch with this root.
+5. **Cancel and resume.** Stop the app, point `CLEAN` at a fresh directory
+   (`CLEAN=$(mktemp -d)`) and relaunch with
+   `CHEMISTRY_MODELS_DIR=$CLEAN task run`. Wait until bytes grow, then
+   **Cancel**. The dialog reports the cancelled state with **Resume** (no
+   error), `find "$CLEAN" -name '*.part' -ls` shows the partial file and
+   clicking **Resume** continues rather than restarting. Repeating Cancel while
+   verifying is not offered (the backend answers `409`).
+6. **Offline error stays in the dialog.** Use the support catalog override in a
+   temp root with every URL pointed at a closed port (never in a release):
+
+   ```bash
+   CAT=$(mktemp --suffix=.json)
+   sed 's#https://huggingface.co#http://127.0.0.1:9#g' \
+     src-tauri/sidecar/src/service/ml/model-catalog.json > "$CAT"
+   CHEMISTRY_MODELS_DIR=$(mktemp -d) CHEMISTRY_MODEL_CATALOG=$CAT task run
+   ```
+
+   Click **Download**: after a failed preflight/fetch the dialog keeps the
+   `role="alert"` error (it names the URL and asks to check the network) with
+   **Retry** and **Later**. No OS alert or second window appears and no browser
+   `alert()` fires. A full volume (a small tmpfs or quota-limited mount) shows
+   the required/available byte message in the same place; the deterministic
+   disk coverage is the backend test suite.
+
+7. **Retry and repair.** With a temp root that already completed a download,
+   overwrite one artifact with same-size garbage (for example the 5,316 B
+   `ocsr-handdrawn-fp32/vocab.json`), restart with that root and reopen
+   **Models** → **Verify**: the dialog reports the corrupt file and the primary
+   action becomes **Repair**. Repair re-hashes, fetches only the bad artifact,
+   rewrites the manifest and ends ready; **Verify** then reports all files
+   match.
+8. **Update label.** In the same temp root only, set `catalog_version` to `0` in
+   `manifest.json`, restart and reopen: the dialog shows an update is available
+   and the primary action is **Update**. Update re-verifies the installed files
+   without refetching them and rewrites the manifest at version `1`. A newer
+   installed catalog is not offered an update.
+9. **No native alerts anywhere.** Every setup error above stays in the dialog;
+   an ad-hoc Playwright run against `pnpm dev` (not a committed suite) records
+   no browser alert, and no Tauri `message()`/`confirm()` window appears in the
+   taskbar.
+10. **Dialog fits the window.** At 1280×800 and at the 900×600 minimum, in the
+    normal and error states, the whole panel stays inside the window and the
+    action row is visible; only the body scrolls.
 
 ### Logs
 
@@ -338,8 +419,9 @@ gitignored and never bundled.
 Requires both model sets (`models/manifest.json`, the classifier file and the
 three OCSR artifacts) and a loadable ONNX Runtime. Without them `/v2/info`
 advertises `imago_versions: []` and Ketcher disables the control; the
-model-unavailable job path stays a sidecar contract and the setup UI is a B3
-follow-up.
+model-unavailable job path stays a sidecar contract, and the **Models** setup
+dialog (above) is the supported way to install the models and enable the
+control.
 
 - The toolbar shows **Recognize Molecule** and opens Ketcher's "Import
   Structure from Image" dialog. The dialog does **not** show an "Imago version"
@@ -375,10 +457,11 @@ follow-up.
   models missing still maps to the setup copy, although B3 disables the control
   when the capability is absent. In every case the title is **Structure
   problem**, the friendly copy replaces the raw message and no native alert
-  appears. When a Playwright runner drives `pnpm dev`, the same check is a DOM
-  assertion — a `[role="dialog"]` element titled `Structure problem` — plus
-  `page.on("dialog")` recording no browser `alert()`; a native Tauri
-  `message()` is an OS window outside the webview and satisfies neither.
+  appears. An ad-hoc Playwright run against `pnpm dev` (not a committed suite)
+  can make the same check a DOM assertion — a `[role="dialog"]` element titled
+  `Structure problem` — plus `page.on("dialog")` recording no browser `alert()`;
+  a native Tauri `message()` is an OS window outside the webview and satisfies
+  neither.
 - Low confidence / incomplete: there is no deterministic fixture; a fragmented
   or heavily degraded sketch is the manual reproduction. The deterministic
   coverage is the gate test with a fake prediction. The dialog must say the
@@ -560,10 +643,10 @@ Run against the desktop build (`task run`) unless a step says browser.
 
 1. **Toolbar only.** The editor shows no control group in the bottom-left
    corner and no app-drawn toolbar anywhere. Ketcher's top toolbar carries Open
-   plus exactly three extra buttons: Save, New and Export. There is no
+   plus exactly four extra buttons: Save, New, Export and Models. There is no
    **Save As…** entry.
-2. **Icon styling.** Save, New and Export match the neighbours' metrics and
-   inherit their colour; the app never paints a fixed icon colour.
+2. **Icon styling.** Save, New, Export and Models match the neighbours' metrics
+   and inherit their colour; the app never paints a fixed icon colour.
    - **Default:** each glyph is the same grey as Ketcher's own icons
      (`#333333`), with no lighter, darker or thicker icon among the buttons.
    - **Hover:** hovering a button turns its glyph Ketcher's teal (`#167782`)
@@ -577,8 +660,8 @@ Run against the desktop build (`task run`) unless a step says browser.
      neighbouring native icons and carries the same 1.5-unit outline weight, so
      the optical size matches the neighbouring native icons (no heavier, no
      filled glyph, none edge to edge).
-   - **Titles:** the tooltips are still `Save`, `New` and `Export`, and the Save
-     glyph is visually distinct from a floppy disk glyph.
+   - **Titles:** the tooltips are still `Save`, `New`, `Export` and `Models`,
+     and the Save glyph is visually distinct from a floppy disk glyph.
 3. **Save.** Draw a structure, click Save with an untitled document: the Tauri
    Save As dialog appears with `untitled.ket`; choose a path and confirm the
    file is `.ket` JSON and the title loses `*`. Edit and click Save again: no
@@ -724,6 +807,11 @@ The reviewer agent must verify:
 - [ ] Model delivery is verified: empty-root status, opt-in
       download/resume/cancel/verify, generated schema-1 manifest, app-data root,
       `/v2/info` capability gating, and no model files in packages
+- [ ] Model setup UI is verified: the Models toolbar entry, auto-open/Later,
+      opt-in Download with polling/progress, the Download/Resume/Repair/Update/
+      Verify/Cancel/Retry labels, in-dialog offline/disk errors with no native
+      alert, and Recognize enabling after ready without a remount or canvas
+      loss
 - [ ] When `models/` exists, model-gated tests pass with `--include-ignored`
 - [ ] No ONNX model file is committed or bundled; the shipped
       `libonnxruntime` 1.31.0 comes only from the builder image / Windows fetch

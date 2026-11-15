@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { CUSTOM_BUTTONS, TOOLBAR_ICON_STYLES, TRANSPARENT_ICON } from "./toolbarIcons";
 
-const ALTS = ["Save", "New", "Export"] as const;
+const ALTS = ["Save", "New", "Export", "Models"] as const;
 
 const EXPECTED_BUTTONS = [
   { id: "chemistry-draw:save", title: "Save" },
   { id: "chemistry-draw:new", title: "New" },
   { id: "chemistry-draw:export", title: "Export" },
+  { id: "chemistry-draw:models", title: "Models" },
 ];
 
 const selectorFor = (alt: (typeof ALTS)[number]): string => `img[alt="${alt}"]`;
@@ -42,8 +43,8 @@ describe("TRANSPARENT_ICON", () => {
 });
 
 describe("CUSTOM_BUTTONS", () => {
-  it("has exactly the three stable ids and titles", () => {
-    expect(CUSTOM_BUTTONS).toHaveLength(3);
+  it("has exactly the four stable ids and titles", () => {
+    expect(CUSTOM_BUTTONS).toHaveLength(4);
     expect(CUSTOM_BUTTONS.map((button) => button.id)).toEqual(EXPECTED_BUTTONS.map((b) => b.id));
     expect(CUSTOM_BUTTONS.map((button) => button.title)).toEqual(
       EXPECTED_BUTTONS.map((button) => button.title),
@@ -52,6 +53,7 @@ describe("CUSTOM_BUTTONS", () => {
 
   it("uses the transparent icon for every button", () => {
     expect(CUSTOM_BUTTONS.map((button) => button.imageLink)).toEqual([
+      TRANSPARENT_ICON,
       TRANSPARENT_ICON,
       TRANSPARENT_ICON,
       TRANSPARENT_ICON,
@@ -105,12 +107,12 @@ describe("TOOLBAR_ICON_STYLES", () => {
     }
   });
 
-  it("parses into three rules with three distinct mask data URIs", () => {
-    expect(TOOLBAR_ICON_STYLES.match(/(?<!-webkit-)mask-image:/g)).toHaveLength(3);
-    expect(TOOLBAR_ICON_STYLES.match(/\{[^}]*\}/g)).toHaveLength(3);
+  it("parses into four rules with four distinct mask data URIs", () => {
+    expect(TOOLBAR_ICON_STYLES.match(/(?<!-webkit-)mask-image:/g)).toHaveLength(4);
+    expect(TOOLBAR_ICON_STYLES.match(/\{[^}]*\}/g)).toHaveLength(4);
 
     const uris = maskUris();
-    expect(uris).toHaveLength(3);
-    expect(new Set(uris).size).toBe(3);
+    expect(uris).toHaveLength(4);
+    expect(new Set(uris).size).toBe(4);
   });
 });

@@ -251,10 +251,10 @@
 ## C10 — Ketcher Toolbar Integration
 
 - [x] No app-owned toolbar, dock or floating control group exists; Save, New
-      and Export render as Ketcher toolbar `customButtons` with sentence-case
-      titles and icons that inherit the toolbar button colour (transparent
-      `imageLink` painted by a CSS mask, Ketcher's native 28/32/40 px metrics,
-      no hard-coded icon colour).
+      and Export (plus the Models entry added by C13) render as Ketcher toolbar
+      `customButtons` with sentence-case titles and icons that inherit the
+      toolbar button colour (transparent `imageLink` painted by a CSS mask,
+      Ketcher's native 28/32/40 px metrics, no hard-coded icon colour).
 - [x] `CUSTOM_BUTTON_PRESSED` actions dispatch by id: Save writes `.ket` to the
       current path (Save As when untitled), New reuses the dirty guard and
       clears the snapshot, Export opens the in-app format dialog without
@@ -321,8 +321,59 @@
       an injected test catalog / catalog-error seam; CI never downloads the ~324 MB real models; the
       real HF smoke is gated/manual and the model-gated inference tests remain.
 
+## C13 — Model Setup UI (B3)
+
+- [x] Ketcher's top toolbar carries a fourth custom entry `Models`
+      (`chemistry-draw:models`, transparent `imageLink` plus a masked outline
+      glyph on the same 24-unit grid and metrics as Save/New/Export); no
+      app-owned toolbar or dock is added.
+- [x] The in-app `Dialog`/`Button` setup dialog auto-opens exactly once on
+      startup when `/v2/models` reports `ready: false`, can be reopened from
+      **Models** at any time, and **Later**/Escape closes it while drawing and
+      Indigo operations keep working. Opening it or choosing Later starts no
+      download.
+- [x] The dialog shows both model families with provenance, license, per-model
+      and total sizes (8,162,917 B / 315,824,273 B / 323,987,190 B, binary
+      formatting to ~309 MiB), installed bytes, catalog version and download
+      state; Download is opt-in.
+- [x] Action labels match the status: Download / Resume / Retry / Repair /
+      Update / Verify, Cancel only while downloading, and Later always;
+      `verifying` offers no cancel (`409`), a `409`/failed request re-fetches
+      the status instead of alerting, and a verify report with `ok: false`
+      turns the primary action into Repair.
+- [x] While `downloading`/`verifying` the UI polls `GET /v2/models` about every
+      500 ms with one in-flight request and shows bytes, percent and the current
+      artifact; terminal states and closing the dialog stop polling.
+- [x] Offline, disk-space, checksum, transport and `409` errors stay inside the
+      dialog in a `role="alert"` region; there is no Tauri
+      `message()`/`confirm()` and no browser `alert()`/`confirm()`.
+- [x] Until ready `/v2/info` advertises `imago_versions: []` and Recognize is
+      disabled; after a successful download the app copies the advertised list
+      into Ketcher's option store in place, so Recognize enables without
+      remounting the editor or losing the canvas or undo history. The temporary
+      local browser flow checks the same DOM node, the structure and the undo
+      stack; selection retention is a manual check in `docs/verification.md`.
+      `local-ocsr` is never hardcoded in the webview, and a ready install at
+      startup applies the same update with no dialog.
+- [x] Pure helpers (`formatBytes`, `progressPercent`, `parseModelsStatus`,
+      `setupView`) and the HTTP adapters (with an injected fake fetch) are
+      covered by Vitest with the not-installed, downloading, verifying, paused,
+      failed, ready, update and repair cases, malformed status/verify bodies and
+      `readError`/`409`/unreachable-service handling. A temporary local
+      Playwright run against a dummy catalog and loopback server (not a
+      committed suite, no `pnpm test:e2e`) exercises auto-open, Later/reopen,
+      Download → ready, Verify, Verify-fail → Repair → ready, the in-dialog
+      error/Retry state, the action row at 1280x800 and 900x600, and the
+      capability update without a remount. Cancel/resume and Update labels are
+      covered by the `setupView` tests, their backend semantics by the sidecar
+      suite, and their click-through by the manual checklist. No flow downloads
+      the real ~324 MB models.
+- [x] Model weights remain unbundled, uncommitted and absent from installers;
+      the dialog downloads only from the catalog's Hugging Face URLs and never
+      uploads an image, drawing or document.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C12 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C13 remain empty.

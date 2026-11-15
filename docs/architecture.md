@@ -72,10 +72,11 @@ inference (image → SMILES) through `POST /v2/ocsr/recognize`, the contract
 activity 8 defines. Activity 9 (`phase-b2-recognize-e2e`) wires them end to end
 — filter gate → OCSR → SMILES → V2000 molfile through Indigo — behind the
 `imago/uploads` job protocol and re-enables the **Recognize Molecule** UI. The
-flow is implemented; section 7 is its contract. B3 (activity 11) adds the
-opt-in model delivery backend — a bundled catalog, a resumable downloader and
-the `/v2/models` routes — while the first-run setup UI stays a follow-up
-activity.
+flow is implemented; section 7 is its contract. B3 adds the opt-in model
+delivery backend (activity 11) — a bundled catalog, a resumable downloader and
+the `/v2/models` routes — and the first-run setup UI (activity 12): a Models
+entry in Ketcher's toolbar and an in-app dialog that downloads, verifies and
+enables recognition without a restart.
 
 The inference paths are HTTP → `transport/{filter,ocsr}.rs` → `service/ml/` →
 ONNX Runtime (CPU). They do not touch Indigo. The compatibility path is the one
@@ -133,7 +134,11 @@ Pattern rules:
 - **Recognize Molecule** is Ketcher's built-in "Import Structure from Image"
   dialog. `App.tsx` removes the `hidden` button option and the sidecar
   advertises the synthetic `imago_versions` capability when the models are
-  installed (B3); Ketcher POSTs the image and polls the compatibility job. Failures reach `errorHandler` as JSON
+  installed (B3); Ketcher POSTs the image and polls the compatibility job. The
+  **Models** toolbar entry and its in-app setup dialog are the way the models
+  are installed; after a successful download the app copies the advertised list
+  into Ketcher's option store in place, so the control enables without a
+  remount (§7, "Model setup UI"). Failures reach `errorHandler` as JSON
   text; `src/recognizeErrors.ts` unwraps and maps them, and `App.tsx` renders
   every one in the in-app `ErrorDialog` (title `Structure problem`), never a
   native OS alert.
@@ -277,19 +282,22 @@ If Save As is cancelled, the close is aborted too. `window.destroy()` bypasses
 
 ### 5.6 Modules and APIs
 
-| Module                       | Responsibility                                                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/document.ts`            | state, titles and names, dirty transitions, save/export mapping, close-guard decisions                                                    |
-| `src/autosave.ts`            | debounce/interval scheduling, write-generation counter, recovery decision (all pure)                                                      |
-| `src/autosaveStore.ts`       | app-data paths, atomic snapshot write, read/clear, original-file `stat`, no-op outside Tauri                                              |
-| `src/fileSaver.ts`           | Vite alias target for `file-saver`: `saveAs` delegates to the registered handler, browser download otherwise; direct text writer for Save |
-| `src/saveRoute.ts`           | pure routing of a saved blob by extension and document state (§5.7.1)                                                                     |
-| `src/recognizeErrors.ts`     | pure unwrapping/mapping of editor and recognition errors to dialog copy and title (section 7)                                             |
-| `src/ui/Dialog.tsx`          | overlay, panel, title, action row                                                                                                         |
-| `src/ui/Button.tsx`          | `primary`, `secondary`, `danger` button styles                                                                                            |
-| `src/ui/DocumentDialogs.tsx` | recovery, close-guard / replace, export and error dialogs                                                                                 |
-| `src/ui/editorButtons.ts`    | `Editor` `buttons` config: hides Ketcher's native Save As entry (§5.7)                                                                    |
-| `src/ui/toolbarIcons.ts`     | transparent `imageLink` + mask-painted glyphs and the generated toolbar style (§5.7)                                                      |
+| Module                        | Responsibility                                                                                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/document.ts`             | state, titles and names, dirty transitions, save/export mapping, close-guard decisions                                                                                              |
+| `src/autosave.ts`             | debounce/interval scheduling, write-generation counter, recovery decision (all pure)                                                                                                |
+| `src/autosaveStore.ts`        | app-data paths, atomic snapshot write, read/clear, original-file `stat`, no-op outside Tauri                                                                                        |
+| `src/fileSaver.ts`            | Vite alias target for `file-saver`: `saveAs` delegates to the registered handler, browser download otherwise; direct text writer for Save                                           |
+| `src/saveRoute.ts`            | pure routing of a saved blob by extension and document state (§5.7.1)                                                                                                               |
+| `src/recognizeErrors.ts`      | pure unwrapping/mapping of editor and recognition errors to dialog copy and title (section 7)                                                                                       |
+| `src/modelSetup.ts`           | pure model-setup helpers plus the `/v2/models` HTTP adapters (byte/percent formatting, status parsing, dialog phase and action labels, download/cancel/verify requests) (section 7) |
+| `src/ketcherOptions.ts`       | narrow adapter that copies `imago_versions` into Ketcher's private option store without a remount; degrades to `false` when the store shape changes (section 7)                     |
+| `src/ui/Dialog.tsx`           | overlay, viewport-capped panel, title, scrollable body and action row                                                                                                               |
+| `src/ui/Button.tsx`           | `primary`, `secondary`, `danger` button styles                                                                                                                                      |
+| `src/ui/DocumentDialogs.tsx`  | recovery, close-guard / replace, export and error dialogs                                                                                                                           |
+| `src/ui/ModelSetupDialog.tsx` | model setup dialog: families, sizes, progress, errors and the action row (section 7)                                                                                                |
+| `src/ui/editorButtons.ts`     | `Editor` `buttons` config: hides Ketcher's native Save As entry (§5.7)                                                                                                              |
+| `src/ui/toolbarIcons.ts`      | transparent `imageLink` + mask-painted glyphs and the generated toolbar style (§5.7)                                                                                                |
 
 Ketcher API used:
 
@@ -354,13 +362,14 @@ over the canvas.
 
 **Custom buttons.** `Editor` accepts
 `customButtons: Array<{ id: string; imageLink: string; title: string }>`
-(`ketcher-react` `CustomButtons.d.ts`). The app registers three:
+(`ketcher-react` `CustomButtons.d.ts`). The app registers four:
 
 | `id`                    | `title` | Action                                                                   |
 | ----------------------- | ------- | ------------------------------------------------------------------------ |
 | `chemistry-draw:save`   | Save    | Save the document (§5.2); Save As when `path` is `null`                  |
 | `chemistry-draw:new`    | New     | replace the document under the dirty guard (§5.3) and clear the snapshot |
 | `chemistry-draw:export` | Export  | open the in-app format dialog; never changes `path` or `format`          |
+| `chemistry-draw:models` | Models  | open the in-app model setup dialog (§7, "Model setup UI")                |
 
 A click calls `ketcher.sendCustomAction(id)`, which emits
 `CUSTOM_BUTTON_PRESSED` with the id on `ketcher.eventBus`; `App.tsx` subscribes
@@ -370,8 +379,8 @@ sentence-case command name.
 Icons are transparent `imageLink` data URIs whose glyph is painted by a CSS
 `mask-image` with `background-color: currentColor`, keyed by the `alt` text
 Ketcher derives from the title (`img[alt="Save"]`, `img[alt="New"]`,
-`img[alt="Export"]`, scoped to `.Ketcher-root`) and generated once in
-`src/ui/toolbarIcons.ts`. Because an `<img>` cannot inherit `currentColor`, the
+`img[alt="Export"]`, `img[alt="Models"]`, scoped to `.Ketcher-root`) and
+generated once in `src/ui/toolbarIcons.ts`. Because an `<img>` cannot inherit `currentColor`, the
 mask is what lets each glyph take the button colour: `#333333` by default,
 `#167782` on hover and the active-state colour on press, at Ketcher's native
 28/32/40 px button metrics with the icon filling the content box. Ketcher's
@@ -506,8 +515,9 @@ delivers the runtime foundation, the filter and the shipped ONNX Runtime. B2
 adds OCSR inference: one hand-drawn model, a separate preprocessing pipeline
 and `POST /v2/ocsr/recognize`. Activity 9 (`phase-b2-recognize-e2e`) adds the
 implemented filter gate, the Ketcher-compatible job adapter and the re-enabled
-Recognize UI on top of it. Model download (B3) is delivered by activity 11 and
-documented in the Model delivery subsection below.
+Recognize UI on top of it. Model download (B3) is delivered by activity 11, and
+its first-run setup UI by activity 12; both are documented in the Model delivery
+subsection below.
 
 ### Runtime
 
@@ -608,14 +618,15 @@ does not change the classifier entry or the schema version.
 
 ### Model delivery (B3)
 
-> **Status:** activity 11 (`phase-b3-model-download`) delivers this contract.
-> The first-run/setup UI and the clean-install validation are follow-up
-> activities.
+> **Status:** activity 11 (`phase-b3-model-download`) delivers the backend
+> contract below; activity 12 (`phase-b3-setup-ui`) delivers the first-run
+> setup UI at the end of this section. Clean-install validation remains a
+> follow-up.
 
 A clean install ships **no model weights**. The sidecar owns the catalog and the
 downloader; the Tauri host only supplies the model root. Downloading is
 **opt-in**: startup fetches nothing, and Recognize stays disabled until both
-model families are installed.
+model families are installed and the setup UI opts in.
 
 #### Bundled catalog
 
@@ -929,8 +940,8 @@ and SHA-256 values) and both model ids' required artifacts exist on disk — a
 cheap metadata/existence check with no hash and no session. Otherwise it
 advertises `[]`, so Ketcher disables Recognize on a clean install. `/v2/models`
 still answers with the status above, and Indigo keeps working. After a download
-completes, the next `/v2/info` advertises the capability; the setup UI
-(follow-up) refreshes the editor.
+completes, the next `/v2/info` advertises the capability; the setup UI reads it
+and refreshes Ketcher's option store in place ("Model setup UI" below).
 
 #### Licenses and attribution
 
@@ -943,6 +954,173 @@ Both families are downloaded from
 `https://huggingface.co/spalax-dev/chemistry-draw-ocsr` on demand and are
 **never bundled or committed**; the installers contain no `.onnx` file and no
 `manifest.json`. Attribution lives in `NOTICE`.
+
+#### Model setup UI (B3)
+
+> **Status:** activity 12 (`phase-b3-setup-ui`) delivers this contract. It is
+> the user-facing half of B3; the routes and state machine above are its
+> backend.
+
+**Why a dialog.** A clean install has no recognition models, so the first run
+must explain the download before anything happens. The app does not render its
+own toolbar or window: the entry lives in Ketcher's top toolbar and the setup
+surface is the same in-app, Ketcher-styled `Dialog` / `Button` pair used by the
+document workflow. It opens above the still-mounted editor; the canvas is never
+replaced, reloaded or unmounted.
+
+**Toolbar entry.** `chemistry-draw:models` (title `Models`) is the fourth
+`customButtons` entry, with the same transparent `imageLink` plus masked
+outline glyph as Save, New and Export (§5.7). Its `CUSTOM_BUTTON_PRESSED`
+action opens the dialog; it stays visible after the dialog is closed and after
+the models are ready, so the status can be inspected at any time. The button is
+ignored while another in-app dialog is open, like the other custom actions.
+
+**Auto-open and Later.** After the editor is ready and the API base resolved,
+the app fetches `GET /v2/models` once. When the response has `ready: false`, the
+dialog opens automatically — exactly once per launch. It closes through
+**Later** (also Escape, the least-destructive choice); nothing is cancelled and
+the app remains fully usable for drawing and Indigo operations. **Later never
+starts a download**, and reopening from **Models** shows the same status. A
+startup with installed models does not auto-open. A failed startup status
+request is logged and does not block the editor: the dialog stays closed and
+the toolbar entry retries and shows the connection error in the dialog. When a
+recovery prompt is also due, it is shown first; the Models dialog opens after
+that prompt is dismissed.
+
+**Dialog sections.** Title `Models`, one panel, no nested native windows:
+
+| Section     | Content                                                                                                                                                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intro       | What the models enable (image → structure recognition), that the download is opt-in, and that images, documents and drawings never leave the machine.                                                                                                                     |
+| Families    | One row per catalog model: `Image classifier` (`image-classifier@Iagea/d21f4cb`, MIT, 8,162,917 B / 7.8 MiB) and `Structure recognition` (`ocsr-handdrawn@zenodo:10781330`, CC-BY-4.0, 315,824,273 B / 301.2 MiB), each with installed/missing state and installed bytes. |
+| Totals      | `installed_bytes` of 323,987,190 B (309.0 MiB), the total percent, and the catalog version with an update note when `update_available` is true.                                                                                                                           |
+| Progress    | While a run is active: state label, a progress bar, `downloaded_bytes` of `total_bytes` with its integer percent, and `download.current_file` (the artifact path being fetched or installed).                                                                             |
+| Error       | `download.error` verbatim in a `role="alert"` region, prefixed by a short failure sentence. Offline, disk-space, checksum and transport messages stay here.                                                                                                               |
+| Attribution | The Hugging Face source repository and the license names; the full attributions are in `NOTICE`.                                                                                                                                                                          |
+
+Sizes use binary units with one decimal (`formatBytes`); the total matches the
+catalog and never a rounded hardcoded string. `current_file` is shown as the
+catalog-relative artifact path, not an absolute path.
+
+**Actions and labels.** All labels are sentence case and match the status; the
+same `POST /v2/models/download` route backs Download, Resume, Retry, Update and
+Repair, and the label states the intent:
+
+| Status                                              | Primary action | Other actions           |
+| --------------------------------------------------- | -------------- | ----------------------- |
+| `ready: false`, no active run                       | **Download**   | Later                   |
+| `download.state: "downloading"`                     | none           | **Cancel**, Later       |
+| `download.state: "verifying"`                       | none           | Later (cancel is `409`) |
+| `download.state: "cancelled"`                       | **Resume**     | Later                   |
+| `download.state: "failed"`                          | **Retry**      | Later                   |
+| `ready: true`                                       | **Verify**     | Later                   |
+| `ready: true`, `update_available: true`             | **Update**     | **Verify**, Later       |
+| `ready: true`, `POST /v2/models/verify` `ok: false` | **Repair**     | **Verify**, Later       |
+
+- **Download is opt-in**: opening the dialog, auto-opening it or clicking Later
+  sends no download request. Only the primary button starts a run.
+- **Cancel** is offered only while `downloading`; `verifying` is short and the
+  backend refuses cancellation with `409`. Cancelling keeps the `.part` files,
+  so Resume continues instead of restarting.
+- **Verify** is the read-only `POST /v2/models/verify` report. `ok: true` says
+  the installed files match; `false` lists the missing/corrupt artifacts and
+  turns the primary action into Repair. Verify is also refused with `409` while
+  a run is active.
+- **Update** appears only from `update_available`, which the backend derives
+  from `installed_catalog_version` versus `catalog_version`. A newer installed
+  catalog never shows Update: the backend answers `409` and the dialog
+  re-fetches the status.
+- **Repair** re-uses the download route, which re-hashes installed files,
+  replaces mismatched artifacts and rewrites the manifest.
+- A `409`, a failed action request or a failed status request is shown in the
+  dialog as a short note; the status is re-fetched instead of assuming a
+  transition.
+- **Later** is always visible, including during a run; it closes the dialog but
+  does not cancel. The toolbar entry reopens and shows live progress.
+
+**Polling.** There is no SSE or WebSocket. Opening the dialog fetches
+`GET /v2/models` immediately, and each action follows with a fetch. While
+`download.state` is `downloading` or `verifying`, the dialog polls
+`GET /v2/models` every 500 ms; terminal states, `ready` and closing the dialog
+stop the timer. Only one request is in flight (the previous one is aborted), and
+a poll response that arrives after close is discarded. An action request owns
+the status while it runs: the pending read is aborted and poll ticks are skipped
+until it settles, so an older snapshot cannot overwrite the action's result. A
+failed poll keeps the last known status, shows a connection note in the dialog
+and tries again on the next tick; it never raises a native alert. `verify` is a
+single request, not a poll.
+
+**Ready and capability update (no remount).** Until the models are ready,
+`/v2/info` advertises `imago_versions: []`, so Ketcher keeps its built-in
+Recognize control disabled. When a status report becomes `ready: true`, the app
+fetches `/v2/info` and copies its `imago_versions` array into Ketcher's option
+store through `src/ketcherOptions.ts`.
+
+Ketcher 3.18's `ketcher.editor.options()` is **not** that store: it rebuilds the
+render (clears the client area and recreates the canvas) and leaves the React
+store's `app.imagoVersions` and the toolbar `actionState` unchanged, so the
+Recognize control stays disabled. The adapter therefore locates the store from
+the `.Ketcher-root` React container and dispatches Ketcher's own
+`APP_OPTIONS` + `UPDATE` pair, followed by a no-op `ACTION` (the action shape
+the toolbar dispatches) so the derived `recognize.disabled` flag is recomputed:
+
+```ts
+store.dispatch({ type: "APP_OPTIONS", data: { server: true, imagoVersions } });
+store.dispatch({ type: "UPDATE" });
+store.dispatch({ type: "ACTION", action: () => undefined });
+```
+
+The `Editor` is not remounted, `setMolecule` is not called, the page is not
+reloaded, and the canvas, selection and undo history survive. The update is
+idempotent (skipped when the last applied list matches) and runs again whenever
+a ready status is observed or the dialog is opened on a ready install, so a
+transient `/v2/info` failure resolves on the next attempt. If the store cannot
+be found, the adapter reports `false` and the app logs a warning instead of
+pretending the capability changed. The webview never hardcodes `local-ocsr`:
+the sidecar advertises the capability and the UI copies it. A restart with
+installed models performs the same update from the startup `/v2/info`; no
+dialog is needed.
+
+**Errors, no native alerts.** Every setup failure — the startup status request,
+a download action, a poll, verify, a `409`, and the backend's offline, disk,
+checksum and transport errors — stays inside the dialog. The app never calls
+Tauri `message()` / `confirm()`, never uses browser `alert()` / `confirm()` and
+never opens a second OS window. The only native dialogs in the app remain the
+file pickers for Open, Save As and Export. The failure copy is the backend's
+actionable `download.error` (it names the URL and asks to check the network, or
+the required/available bytes for a full disk), so the UI does not duplicate
+that mapping.
+
+**Privacy.** The dialog downloads model files from the catalog's Hugging Face
+URLs only; no drawing, image, document or telemetry is uploaded. No model
+weight is bundled in an installer, committed to git or downloaded at startup.
+
+**Modules.** `src/modelSetup.ts` holds the pure helpers — `formatBytes`,
+`progressPercent`, `parseModelsStatus` and `setupView` — and the HTTP adapters
+(`fetchModelsStatus`, `startModelDownload`, `cancelModelDownload`,
+`verifyModels`), covered by Vitest with an injected fetch (`docs/testing.md`
+§6.2). `App.tsx` owns the polling/action loop, the open/auto-open state and the
+in-place options update through `src/ketcherOptions.ts`;
+`src/ui/ModelSetupDialog.tsx` is the presentational panel over `Dialog` /
+`Button`, and `Dialog` caps the panel to the viewport and scrolls only the body.
+Neither the helper module nor the dialog calls Tauri.
+
+**Repair reset.** The last verify report is only used while it is actionable: a
+download-style action (Download, Resume, Retry, Update, Repair) clears it when
+it starts and when it succeeds. Without that reset a successful Repair would
+keep `setupView` on `repair`/Repair from the stale `ok: false` report even
+though the files are now ready; clearing at the action boundary returns the
+dialog to `ready`/Verify after the run.
+
+**Private-internals risk.** `src/ketcherOptions.ts` reaches into Ketcher 3.18's
+React fiber and Redux store because the public `editor.options()` API only
+rebuilds the render and never updates the toolbar. The adapter is deliberately
+defensive: it optional-chains the `clientArea.closest` lookup, caps the fiber
+walk, accepts only a store whose `getState().options.app` exists, wraps every
+dispatch in `try`/`catch` and returns `false` on any mismatch, so the app keeps
+working with Recognize disabled instead of crashing. A Ketcher upgrade must
+re-check the store shape, the `APP_OPTIONS`/`UPDATE`/`ACTION` action types and
+this contract before bumping the dependency.
 
 ### Classifier tensor contract
 
@@ -1342,15 +1520,15 @@ Only the media type and the 10 MiB cap are validated at POST time.
 `{ "state": "FAILURE", "error": "<message>" }` with HTTP `200`; only an
 unknown, expired or restarted job id is `404`.
 
-| Condition                                             | FAILURE `error`                                                               | `ErrorDialog` copy                                                                                                                                |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| filter returns `no-structure`                         | `No molecule was detected in this image.`                                     | No chemical structure was detected in this image. Try a clear image of one drawn molecule, or draw the structure in the editor.                   |
-| `incomplete` or low confidence                        | `The structure could not be read confidently. Try a sharper or larger image.` | The structure could not be read confidently. Try a sharper or larger image of one molecule.                                                       |
-| undecodable / unsupported / over-dimension image      | `Unsupported image. Use a PNG, JPEG or WebP file.`                            | This image cannot be used. Choose a PNG, JPEG or WebP file.                                                                                       |
-| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Molecule recognition is not set up. Check that the image-classifier and OCSR models are installed (see CHEMISTRY_MODELS_DIR) and restart the app. |
-| SMILES → molfile failure                              | `The recognized structure could not be prepared for the editor. Try again.`   | The structure was recognized but could not be prepared for the editor. Please try again.                                                          |
-| still `PENDING` after the TTL                         | `Recognition timed out. Try again.`                                           | Recognition took too long. Please try again.                                                                                                      |
-| unknown, expired or restarted job id (`404`)          | `unknown recognition job`                                                     | The recognition result expired before it reached the editor. Please try again.                                                                    |
+| Condition                                             | FAILURE `error`                                                               | `ErrorDialog` copy                                                                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| filter returns `no-structure`                         | `No molecule was detected in this image.`                                     | No chemical structure was detected in this image. Try a clear image of one drawn molecule, or draw the structure in the editor. |
+| `incomplete` or low confidence                        | `The structure could not be read confidently. Try a sharper or larger image.` | The structure could not be read confidently. Try a sharper or larger image of one molecule.                                     |
+| undecodable / unsupported / over-dimension image      | `Unsupported image. Use a PNG, JPEG or WebP file.`                            | This image cannot be used. Choose a PNG, JPEG or WebP file.                                                                     |
+| model missing, checksum/contract mismatch, no runtime | `Recognition models are not available. Check the model setup.`                | Molecule recognition is not set up. Open the Models entry in the toolbar and download the recognition models.                   |
+| SMILES → molfile failure                              | `The recognized structure could not be prepared for the editor. Try again.`   | The structure was recognized but could not be prepared for the editor. Please try again.                                        |
+| still `PENDING` after the TTL                         | `Recognition timed out. Try again.`                                           | Recognition took too long. Please try again.                                                                                    |
+| unknown, expired or restarted job id (`404`)          | `unknown recognition job`                                                     | The recognition result expired before it reached the editor. Please try again.                                                  |
 
 A POST with an unsupported `Content-Type` is `400` and maps to the unsupported
 image copy. An over-cap POST is the documented **plain-text exception**: axum's
@@ -1415,7 +1593,9 @@ synchronous pipeline.
 sidecar's synthetic `imago_versions` list when the models are installed (B3),
 not by a local option: Ketcher recomputes the button's `disabled` state from
 `app.imagoVersions` after `GET /v2/info` and keeps the control disabled when
-the list is empty.
+the list is empty. The model setup dialog copies the advertised list into
+Ketcher's option store in place after a successful download (no remount, no
+canvas loss; §7 "Model setup UI").
 
 Ketcher's built-in dialog still renders an "Imago version" selector, so
 `src/overrides.css` (imported by `App.tsx` after the Ketcher stylesheet) hides

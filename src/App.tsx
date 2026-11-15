@@ -49,7 +49,18 @@ import {
 } from "./fileSaver";
 import { routeSavedBlob } from "./saveRoute";
 import { describeError, errorMessage } from "./recognizeErrors";
+import { applyKetcherAppOptions, findKetcherRoot } from "./ketcherOptions";
+import {
+  cancelModelDownload,
+  fetchModelsStatus,
+  setupView,
+  startModelDownload,
+  verifyModels,
+  type ModelsStatus,
+  type VerifyReport,
+} from "./modelSetup";
 import { CloseGuardDialog, ErrorDialog, ExportDialog, RecoveryDialog } from "./ui/DocumentDialogs";
+import { ModelSetupDialog } from "./ui/ModelSetupDialog";
 import { EDITOR_BUTTONS } from "./ui/editorButtons";
 import { tokens } from "./ui/tokens";
 import { CUSTOM_BUTTONS, TOOLBAR_ICON_STYLES } from "./ui/toolbarIcons";
@@ -156,10 +167,26 @@ function App() {
   const lastError = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const [ready, setReady] = useState(false);
   const [provider, setProvider] = useState<RemoteStructServiceProvider | null>(null);
+  const [apiBase, setApiBase] = useState<string | null>(null);
 
   const ketcherRef = useRef<Ketcher | null>(null);
   const [doc, setDocState] = useState<DocumentState>(newDocument);
   const docRef = useRef(doc);
+
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const [modelStatus, setModelStatus] = useState<ModelsStatus | null>(null);
+  const [modelVerify, setModelVerify] = useState<VerifyReport | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [modelBusy, setModelBusy] = useState(false);
+
+  const apiBaseRef = useRef<string | null>(null);
+  const modelsOpenRef = useRef(false);
+  const modelsAutoOpenedRef = useRef(false);
+  const modelsAutoOpenPendingRef = useRef(false);
+  const modelsStartupRef = useRef(false);
+  const modelAbortRef = useRef<AbortController | null>(null);
+  const modelBusyRef = useRef(false);
+  const imagoVersionsRef = useRef<string[] | null>(null);
 
   const [recovery, setRecovery] = useState<RecoveryOffer | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -183,18 +210,270 @@ function App() {
     [],
   );
 
+  /**
+   * Copies the sidecar's advertised `imago_versions` into Ketcher's option
+   * store. The store update does not remount the editor or call
+   * `setMolecule`, so the canvas, selection and undo history survive; the
+   * no-op action inside the adapter refreshes the Recognize control state.
+   */
+  const applyImagoVersions = useCallback((versions: string[]) => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher) return;
+
+    const previous = imagoVersionsRef.current;
+    if (
+      previous !== null &&
+      previous.length === versions.length &&
+      previous.every((value, index) => value === versions[index])
+    ) {
+      return;
+    }
+
+    const container = findKetcherRoot(ketcher);
+    if (!applyKetcherAppOptions(container, { server: true, imagoVersions: versions })) {
+      console.warn(
+        "[chemistry-draw] could not update the Ketcher option store; " +
+          "the Recognize control may need a restart.",
+      );
+      return;
+    }
+
+    imagoVersionsRef.current = [...versions];
+  }, []);
+
+  /** Reads `GET /v2/info` and applies the capability list in place. */
+  const syncImagoVersions = useCallback(
+    async (base: string) => {
+      try {
+        const infoUrl = `${base.endsWith("/") ? base : `${base}/`}info`;
+        const response = await fetchWithTimeout(infoUrl, 3_000);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const body: unknown = await response.json();
+        const raw =
+          typeof body === "object" && body !== null && "imago_versions" in body
+            ? (body as { imago_versions?: unknown }).imago_versions
+            : undefined;
+        const versions = Array.isArray(raw)
+          ? raw.filter((value): value is string => typeof value === "string")
+          : [];
+        applyImagoVersions(versions);
+      } catch (error) {
+        console.warn("[chemistry-draw] could not refresh the recognition capability:", error);
+      }
+    },
+    [applyImagoVersions],
+  );
+
+  /**
+   * Reads `GET /v2/models`. Only one request is in flight: a new read aborts
+   * the previous one, and a response that arrives after close is discarded.
+   */
+  const refreshModels = useCallback(
+    async (
+      options: { silent?: boolean; requireOpen?: boolean } = {},
+    ): Promise<ModelsStatus | null> => {
+      const base = apiBaseRef.current;
+      if (base === null) return null;
+
+      modelAbortRef.current?.abort();
+      const controller = new AbortController();
+      modelAbortRef.current = controller;
+      try {
+        const next = await fetchModelsStatus(
+          base,
+          (input, init) => fetch(input, init),
+          controller.signal,
+        );
+        if (controller.signal.aborted) return null;
+        if (options.requireOpen && !modelsOpenRef.current) return null;
+
+        setModelStatus(next);
+        setModelError(null);
+        return next;
+      } catch (error) {
+        if (controller.signal.aborted) return null;
+        if (options.requireOpen && !modelsOpenRef.current) return null;
+        if (options.silent) {
+          console.warn("[chemistry-draw] could not read the model status:", error);
+        } else {
+          setModelError(errorMessage(error));
+        }
+        return null;
+      } finally {
+        if (modelAbortRef.current === controller) modelAbortRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const openModels = useCallback(() => {
+    modelsOpenRef.current = true;
+    setModelsOpen(true);
+    setModelVerify(null);
+    setModelError(null);
+    void refreshModels({ requireOpen: true });
+  }, [refreshModels]);
+
+  const closeModels = useCallback(() => {
+    modelsOpenRef.current = false;
+    setModelsOpen(false);
+    modelAbortRef.current?.abort();
+  }, []);
+
+  /**
+   * Runs a status-returning action and re-fetches after a failure (e.g. 409).
+   *
+   * A download-style action clears the last verify report when it starts and
+   * when it succeeds: the report is stale from that point on, and keeping it
+   * would leave `setupView` on `repair`/Repair after a successful Repair.
+   */
+  const runModelAction = useCallback(
+    async (
+      action: (base: string) => Promise<ModelsStatus>,
+      options: { clearVerify?: boolean } = {},
+    ) => {
+      const base = apiBaseRef.current;
+      if (base === null || modelBusyRef.current) return;
+
+      modelBusyRef.current = true;
+      modelAbortRef.current?.abort();
+      setModelBusy(true);
+      setModelError(null);
+      if (options.clearVerify) setModelVerify(null);
+      try {
+        const next = await action(base);
+        setModelStatus(next);
+        if (options.clearVerify) setModelVerify(null);
+      } catch (error) {
+        const message = errorMessage(error);
+        setModelError(message);
+        await refreshModels({ silent: true, requireOpen: true });
+        // The re-fetch must not wipe the action's own note.
+        setModelError(message);
+      } finally {
+        modelBusyRef.current = false;
+        setModelBusy(false);
+      }
+    },
+    [refreshModels],
+  );
+
+  const downloadModels = useCallback(() => {
+    void runModelAction((base) => startModelDownload(base), { clearVerify: true });
+  }, [runModelAction]);
+
+  const cancelModels = useCallback(() => {
+    void runModelAction((base) => cancelModelDownload(base));
+  }, [runModelAction]);
+
+  const verifyModelFiles = useCallback(async () => {
+    const base = apiBaseRef.current;
+    if (base === null || modelBusyRef.current) return;
+
+    modelBusyRef.current = true;
+    modelAbortRef.current?.abort();
+    setModelBusy(true);
+    setModelError(null);
+    try {
+      setModelVerify(await verifyModels(base));
+      await refreshModels({ silent: true, requireOpen: true });
+    } catch (error) {
+      const message = errorMessage(error);
+      setModelError(message);
+      await refreshModels({ silent: true, requireOpen: true });
+      setModelError(message);
+    } finally {
+      modelBusyRef.current = false;
+      setModelBusy(false);
+    }
+  }, [refreshModels]);
+
+  const handleModelPrimary = useCallback(() => {
+    if (modelStatus === null) {
+      void refreshModels({ requireOpen: true });
+      return;
+    }
+
+    const view = setupView(modelStatus, modelVerify);
+    if (view.primary === "verify") void verifyModelFiles();
+    else if (view.primary === "download") downloadModels();
+  }, [downloadModels, modelStatus, modelVerify, refreshModels, verifyModelFiles]);
+
+  const refreshModelStatus = useCallback(() => {
+    void refreshModels({ requireOpen: true });
+  }, [refreshModels]);
+
+  const modelDownloadState = modelStatus?.download.state ?? null;
+  const modelReady = modelStatus?.ready ?? null;
+
+  // One status read after the editor is ready and the API base resolved.
+  useEffect(() => {
+    if (!ready || apiBase === null || modelsStartupRef.current) return;
+    modelsStartupRef.current = true;
+    void refreshModels({ silent: true }).then((status) => {
+      if (status !== null && !status.ready) modelsAutoOpenPendingRef.current = true;
+    });
+  }, [ready, apiBase, refreshModels]);
+
+  // Auto-open exactly once, after a recovery prompt (or error dialog) is gone.
+  // Deferred one tick so the editor paints first and the open is not a
+  // synchronous cascading render from the effect body.
+  useEffect(() => {
+    if (!modelsAutoOpenPendingRef.current || modelsAutoOpenedRef.current) return;
+    if (recovery !== null || error !== null) return;
+
+    const timer = setTimeout(() => {
+      if (modelsAutoOpenedRef.current || !modelsAutoOpenPendingRef.current) return;
+      modelsAutoOpenedRef.current = true;
+      modelsAutoOpenPendingRef.current = false;
+      openModels();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [modelStatus, recovery, error, openModels]);
+
+  // Poll while the dialog is open and a run is active; closing stops the timer.
+  useEffect(() => {
+    if (!modelsOpen) return;
+    if (modelDownloadState !== "downloading" && modelDownloadState !== "verifying") return;
+
+    const timer = setInterval(() => {
+      // An action request owns the status while it runs; a poll that started
+      // then could overwrite its result with an older snapshot.
+      if (!modelBusyRef.current) void refreshModels({ requireOpen: true });
+    }, 500);
+    return () => clearInterval(timer);
+  }, [modelsOpen, modelDownloadState, refreshModels]);
+
+  // Ready flips the Recognize capability without remounting the editor; a
+  // non-ready status clears it. Opening the dialog on a ready install retries a
+  // transient `/v2/info` failure.
+  useEffect(() => {
+    if (!ready || apiBase === null || modelReady === null) return;
+    if (!modelReady) {
+      applyImagoVersions([]);
+      return;
+    }
+    void syncImagoVersions(apiBase);
+  }, [ready, apiBase, modelReady, modelsOpen, applyImagoVersions, syncImagoVersions]);
+
+  useEffect(() => () => modelAbortRef.current?.abort(), []);
+
   // Keep the keydown handler aware of the dialogs without re-subscribing.
-  const dialogsOpen = recovery !== null || exportOpen || closePrompt || error !== null;
+  const dialogsOpen =
+    recovery !== null || exportOpen || closePrompt || error !== null || modelsOpen;
   useEffect(() => {
     dialogOpenRef.current = dialogsOpen;
   }, [dialogsOpen]);
 
   useEffect(() => {
     let cancelled = false;
-    resolveApiBase().then((apiBase) => {
+    resolveApiBase().then((base) => {
       if (cancelled) return;
-      console.info("[chemistry-draw] Indigo API:", apiBase);
-      setProvider(new StaleSafeStructServiceProvider(apiBase));
+      console.info("[chemistry-draw] Indigo API:", base);
+      apiBaseRef.current = base;
+      setApiBase(base);
+      setProvider(new StaleSafeStructServiceProvider(base));
     });
     return () => {
       cancelled = true;
@@ -638,6 +917,9 @@ function App() {
         case "chemistry-draw:export":
           setExportOpen(true);
           return;
+        case "chemistry-draw:models":
+          openModels();
+          return;
         default:
           return;
       }
@@ -647,7 +929,7 @@ function App() {
     return () => {
       ketcher.eventBus.off("CUSTOM_BUTTON_PRESSED", onCustomButton);
     };
-  }, [ready, saveDocument, startNewDocument]);
+  }, [ready, saveDocument, startNewDocument, openModels]);
 
   // Document shortcuts. Ketcher binds its hotkeys on the editor container in the
   // bubble phase (`initKeydownListener`, `ketcher-react/dist/index.js`), so this
@@ -710,6 +992,19 @@ function App() {
           errorHandler={handleError}
           onInit={handleInit}
           customButtons={CUSTOM_BUTTONS}
+        />
+      )}
+      {modelsOpen && (
+        <ModelSetupDialog
+          status={modelStatus}
+          verify={modelVerify}
+          error={modelError}
+          busy={modelBusy}
+          onRefresh={refreshModelStatus}
+          onPrimary={handleModelPrimary}
+          onCancelDownload={cancelModels}
+          onVerify={() => void verifyModelFiles()}
+          onLater={closeModels}
         />
       )}
       {exportOpen && (
