@@ -117,6 +117,9 @@
 
 ## C9 — Ketcher Toolbar Integration
 
+> Superseded by C12: the File menu replaces the toolbar custom buttons, and
+> Ketcher's native Save As is hidden while its native Open stays visible.
+
 - [x] No app-owned toolbar, dock or floating control group exists; Save, New
       and Export render as Ketcher toolbar `customButtons` with sentence-case
       titles and icons that inherit the toolbar button colour (transparent
@@ -157,11 +160,14 @@
 
 ## C11 — Document Tabs
 
+> Superseded in part by C12: Open… and Import… are separate File menu entries
+> instead of one Open entry dispatching by extension.
+
 > Supersedes the single-document autosave and close-guard points in C8.
 
-- [x] Tabs hold file state (`{ id, path, ket, dirty }` plus the active id) and a
-      single Ketcher instance renders them; no second editor, canvas or per-tab
-      toolbar is mounted.
+- [x] Tabs hold file state (`{ id, name, path, ket, dirty }` plus the active
+      id) and a single Ketcher instance renders them; no second editor, canvas
+      or per-tab toolbar is mounted.
 - [x] Switching serializes the outgoing tab with `getKet`, sets a `loading`
       flag, loads the target with `setMolecule` and clears the flag; a
       programmatic load never marks the tab dirty.
@@ -175,6 +181,17 @@
 - [x] Save, Save As and Export act on the active tab; New always opens a new
       tab; Open reuses an untouched empty tab or opens a new one and never
       prompts for a dirty tab.
+- [x] Open is **one entry** that dispatches by extension: `openProject` for
+      `.ket` (`path`, `name = base(path)`, clean) and `importStructure` for
+      `mol`/`smi`/`inchi`/`sdf`/`rxn` (`path: null`, `name = base(file)`,
+      clean); both reuse an untouched empty tab, otherwise add one.
+- [x] A tab is named by its opened or imported file: the title is the `path`
+      base name, then `name`, then `Untitled`; an imported tab is never
+      `Untitled`, never dirty on open, and its first Save is a Save As prefilled
+      `<name>.ket`; Export names files `<name>.<ext>`.
+- [x] `<id>.json` persists `name`; an entry without it falls back to its path
+      base name, and a legacy import still restores as `Untitled` with its
+      content intact.
 - [x] The close guard follows the matrix: no dirty tab closes; exactly one dirty
       **active** tab offers Save / Discard / Cancel; more than one dirty tab, or
       the only dirty tab being inactive, offers Discard / Cancel only with copy
@@ -194,8 +211,52 @@
       were RED before implementation.
 - [x] The manual checklist in `docs/verification.md` §2 "Document tabs" passes.
 
+## C12 — File Menu
+
+- [x] A File button is the first element of the tab strip, left of the first tab,
+      shares the strip height and uses Ketcher tokens; there is no app-owned
+      toolbar, dock or `customButtons` registration.
+- [x] The menu offers New, Open…, Import…, Save, Save As…, Export…, a separator
+      and Recent documents; items are keyboard reachable, and Escape or an
+      outside click closes the menu.
+- [x] Open… filters `.ket` only and routes through `openProject`; Import… lists
+      `mol`/`smi`/`inchi`/`sdf`/`rxn` and routes through `importStructure`,
+      leaving `path: null` until the tab is saved as `.ket`.
+- [x] Save writes the active tab's `.ket` path (Save As when untitled) and Save
+      As adopts the chosen path; Export never changes path or format.
+- [x] Recent documents persist in `localStorage` under `chemistry-draw.recent`,
+      dedupe by exact path, cap at 10, record on Open and on a successful Save,
+      and prune a missing file with an in-app error.
+- [x] The File trigger shows a Ketcher-style 16 px line icon in `currentColor`
+      before its `File` label (1.5 stroke, 6 px gap, no colour literal).
+- [x] Ketcher's native **Open** stays visible and loads a structure into the
+      current canvas without creating or renaming a tab, adopting a path or
+      recording a recent document; File → Open… remains the `.ket` project open
+      that adopts name and path; only the native **Save As** entry is hidden
+      through `buttons.save.hidden`; the custom buttons, `src/ui/toolbarIcons.ts`
+      and the injected toolbar style stay removed.
+- [x] The pure recent-list helpers and the File menu item model are covered by
+      Vitest and were RED before implementation.
+- [x] The manual checklist in `docs/verification.md` §2 "File menu" passes and
+      `node scripts/harness.mjs` is green.
+
+## C13 — Path Uniqueness
+
+- [x] A `.ket` path belongs to at most one tab: Open… and a recent entry that
+      target an open path activate the existing tab (the single editor switches
+      to it) and show the `Already open` notice, with no new tab, no re-read of
+      the file, no snapshot for a new tab and no duplicate recent entry.
+- [x] Save As to a path owned by another tab is refused with the same notice and
+      writes nothing; saving the active tab to its own path still works.
+- [x] `pathKey` / `findTabByPath` in `src/tabs.ts` normalise separators, ignore a
+      trailing separator, compare Windows drive-letter paths case-insensitively
+      and POSIX paths case-sensitively.
+- [x] The helper and the guard decisions are covered by Vitest and were RED
+      before implementation; the manual step in `docs/verification.md` §2
+      "File menu" passes.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C11 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C13 remain empty.

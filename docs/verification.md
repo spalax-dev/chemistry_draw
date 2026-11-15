@@ -143,13 +143,15 @@ on Linux and `%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
    - Cancel the Save As dialog during Save: the window stays open.
 10. **New and Open.** New opens a new empty tab and leaves the previous tab
     untouched. Open a `.ket`: the file lands in an untouched empty tab (or a new
-    one), the path and title follow it and the tab is clean. Open a
-    `.mol`/`.smi`: it imports through Ketcher, the title is `Untitled` and the
-    tab is dirty. Open never prompts for a dirty tab.
+    one), the path and title follow it and the tab is clean. Open or import a
+    `.mol`/`.smi`/`.inchi`/`.sdf`/`.rxn`: it goes through Ketcher, the title is
+    the file's base name, the tab is **clean** (no dot) and `path` is `null`.
+    Open never prompts for a dirty tab.
 11. **Browser fallback.** `pnpm dev` in a normal browser: tabs work in memory,
-    Save and Export download files (no dialog, no path), nothing is saved or
-    restored across reloads, there is no close guard, and the console stays
-    free of errors.
+    Save and Export download files (no dialog, no path), Open and Import are
+    unavailable because they need the Tauri file picker (there is no browser
+    file input), nothing is saved or restored across reloads, there is no close
+    guard, and the console stays free of errors.
 12. **Autosave scope.** Draw or edit a structure and let the debounce fire
     (about 2 s). `<appDataDir>/recovery/tabs/` contains that tab's `.ket` and
     `.json` plus `index.json`, and the log has no `forbidden path` WARN naming
@@ -159,6 +161,24 @@ on Linux and `%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
     tab is written to its original path, the dirty dot disappears, and the log
     has no `forbidden path` WARN for that path. With the original file deleted,
     restore keeps the path and the first Save recreates the file.
+14. **Open vs import naming.** Open a `.ket` file named `benzene.ket`: the tab
+    title is `benzene`, its `path` is that file and no dirty dot shows. Import
+    `benzene.mol` with the same structure: the tab title is `benzene`, no dot
+    shows and `path` is `null`. Both land in an untouched empty tab, otherwise a
+    new one.
+15. **Import save and export names.** With the imported tab active, Export
+    Molfile, SMILES and PNG: each saved file is named `benzene.<ext>` and the tab
+    keeps its name and `path: null`. `Ctrl+S` opens Save As prefilled with
+    `benzene.ket`; after saving, the file exists, the title is unchanged and the
+    tab is now a `.ket` document with that path.
+16. **Relaunch keeps names.** With one saved `.ket` tab and one imported tab,
+    force-kill and relaunch: both titles return (the `.ket` tab from its path,
+    the import from its snapshot `name`), the import is still clean with
+    `path: null`, and its `<id>.json` records `name: "benzene"`.
+17. **Legacy snapshot.** Use an `<id>.json` written before `name` existed: with
+    a `path`, the tab restores under that path's base name; a legacy import
+    (`path: null`, `dirty: true`) restores as `Untitled` with its content intact
+    and no error dialog.
 
 ### Document tabs
 
@@ -253,57 +273,89 @@ Run against the desktop build (`task run`).
    stops there: the panel has no transform/opacity entrance animation and ours
    is fixed above the whole app rather than scoped to the editor.
 
-### Toolbar integration
+### File menu
 
 Run against the desktop build (`task run`) unless a step says browser.
+`<appDataDir>` is `~/.local/share/dev.spalax.ChemistryDraw` on Linux and
+`%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
 
-1. **Toolbar only.** The editor shows no control group in the bottom-left
-   corner and no app-drawn toolbar anywhere. Ketcher's top toolbar carries Open
-   plus exactly three extra buttons: Save, New and Export. There is no
-   **Save As…** entry.
-2. **Icon styling.** Save, New and Export match the neighbours' metrics and
-   inherit their colour; the app never paints a fixed icon colour.
-   - **Default:** each glyph is the same grey as Ketcher's own icons
-     (`#333333`), with no lighter, darker or thicker icon among the buttons.
-   - **Hover:** hovering a button turns its glyph Ketcher's teal (`#167782`)
-     together with the button; moving away restores the grey.
-   - **Active:** pressing a button shows the same active-state colour as a
-     native icon pressed at the same time.
-   - **Size:** at 100 % the buttons and glyphs match the native 28/32/40 px
-     controls and fill their box without clipping; at 125 % zoom they scale with
-     the toolbar and stay sharp.
-   - **Optical size:** each glyph's ink spans the same ~15x15 live area as the
-     neighbouring native icons and carries the same 1.5-unit outline weight, so
-     the optical size matches the neighbouring native icons (no heavier, no
-     filled glyph, none edge to edge).
-   - **Titles:** the tooltips are still `Save`, `New` and `Export`, and the Save
-     glyph is visually distinct from a floppy disk glyph.
-3. **Save.** Draw a structure, click Save with an untitled tab: the Tauri Save
-   As dialog appears with `untitled.ket`; choose a path and confirm the file is
-   `.ket` JSON and the tab's dirty dot is gone. Edit and click Save again: no
-   dialog, the same file is overwritten.
-4. **New.** With unsaved changes, click New: a new empty tab opens, the previous
-   tab keeps its content and dirty dot, and no dialog appears. The previous
-   tab's snapshot under `<appDataDir>/recovery/tabs/` still exists.
-5. **Export.** Click Export: the existing in-app format dialog opens and lists
-   Molfile V2000, Molfile V3000, SMILES, InChI, SVG and PNG. Export any of
-   them; the active tab's title and its `.ket` path are unchanged and a
-   following Save still writes the `.ket` file.
-6. **Shortcuts.** `Ctrl+S` saves the active tab, `Ctrl+Shift+S` opens Save As,
-   `Ctrl+O` opens a file (reusing an untouched empty tab) and `Ctrl+N` opens a
-   new tab. `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs. `Ctrl+S` does **not** open
-   Ketcher's native Save As dialog.
-7. **No native Save As.** Ketcher's top toolbar has no **Save As…** entry, and
-   no shortcut opens its Molfile save dialog. The entry is hidden through
-   `buttons.save.hidden`; there is no CSS `display: none` and no DOM query in
-   the app.
-8. **No native save dialog.** Neither the toolbar nor any shortcut opens
-   Ketcher's Save As dialog, so its built-in image-save entry is unreachable.
-   Use the app **Export** once for SVG and once for PNG: each opens the Tauri
-   save dialog, writes the file to disk and triggers no browser download.
-9. **Browser fallback.** `pnpm dev` in a normal browser: Save and Export
-   download files, no dialog opens, `path` stays `null`, and the console stays
-   free of errors.
+1. **Placement, icon and items.** The File button is the first element of the
+   tab strip, left of the first tab and sharing its height; it is not a second
+   row. It shows a 16 px line icon before the `File` label, drawn in the same
+   colour as the label (`currentColor`); hovering and opening the menu recolour
+   both together and never the icon alone. Clicking it opens one menu listing
+   New, Open…, Import…, Save, Save As…, Export…, a separator and Recent
+   documents (when the list is empty the heading shows a muted
+   `No recent documents` hint). Ketcher's toolbar shows no Save, New or Export
+   custom buttons and the app injects no toolbar icon style.
+2. **Keyboard and dismissal.** Enter, Space and ArrowDown open the menu and
+   focus the first item; ArrowUp opens it on the last. ArrowUp/ArrowDown move,
+   Home/End jump, Enter or Space run the focused item, Escape closes the menu and
+   returns focus to the File button, and Tab or an outside click closes it
+   without running an item. Running an item closes the menu before its dialog
+   opens.
+3. **New.** With unsaved changes, File → New: a new empty tab opens, the previous
+   tab keeps its content and dirty dot, and no dialog appears.
+4. **Open is `.ket` only.** File → Open…: the dialog is titled `Open` and its
+   filter lists `.ket` files only. Open `benzene.ket`: it fills an untouched
+   empty tab (or opens a new one), the title is `benzene`, the tab is clean and
+   Save writes that path. A `.mol` file cannot be selected in this dialog.
+5. **Import accepts structures.** File → Import…: the dialog is titled `Import`
+   and lists Molfile, SMILES, InChI, SDF and RXN. Import `benzene.mol`: the tab
+   title is `benzene`, it is clean with `path: null`, and `Ctrl+S` opens Save As
+   prefilled with `benzene.ket`. After saving it becomes a `.ket` document.
+6. **Save and Save As.** Save writes the active tab's `.ket` path; an untitled or
+   imported tab falls through to Save As with `<name>.ket` (or `untitled.ket`).
+   Save As writes the chosen file and adopts the new path; the previous file is
+   untouched.
+7. **Export.** File → Export… opens the existing format dialog (Molfile
+   V2000/V3000, SMILES, InChI, SVG, PNG). Export leaves the tab title and its
+   `.ket` path unchanged, and a following Save still writes the `.ket` file.
+8. **Recent documents.** Open more than ten different `.ket` files. The menu lists
+   at most ten entries, newest first, with no duplicates. Choosing an entry opens
+   that file; re-opening a path already in the list moves it to the front instead
+   of adding a duplicate. Saving and Save As add the written path. Relaunch the
+   app: the list is still there.
+9. **Missing recent file.** Delete one file that the menu lists, then choose it
+   from Recent documents: an in-app error dialog names the file, the entry is
+   removed from the list, and the tabs do not change. Re-open the menu: the
+   pruned entry is gone.
+10. **Native Open loads into the canvas.** Ketcher's top toolbar still has its
+    native **Open** button. In a tab named `benzene` with a `benzene.ket` path,
+    use it to load a `toluene.mol`: the structure appears in the current canvas,
+    the tab title stays `benzene`, the tab keeps its `.ket` path (a following
+    `Ctrl+S` still writes `benzene.ket`), no new tab is created, and the Recent
+    documents list gains no entry. The canvas change is a normal edit, so the
+    tab shows its dirty dot; saving through File → Save writes the canvas into
+    the tab's own path. The app still owns `Ctrl+O`, so the keyboard route to a
+    document is File → Open…, not the native button.
+11. **Native Save As is absent.** Ketcher's toolbar has no **Save As…** entry.
+    `Ctrl+S` runs the app Save and `Ctrl+Shift+S` opens the app Save As; no
+    Ketcher native Molfile save dialog ever appears. The hiding comes from the
+    `buttons` config, with no CSS `display: none` and no DOM query in the app.
+12. **Browser fallback.** `pnpm dev` in a normal browser: the File menu opens,
+    Save and Export download files, Open and Import are unavailable because they
+    need the Tauri picker (no browser file input), and the console stays free of
+    errors. The recent list still persists in `localStorage`.
+13. **Open the same document twice.** Open `benzene.ket` through File → Open…,
+    then open the same file again: the first tab is activated, an in-app
+    `Already open` notice reads `This document is already open.`, the strip does
+    not grow, the editor keeps its content, and Recent documents still holds one
+    `benzene.ket` entry.
+14. **Recent entry for an open file.** With `benzene.ket` open, choose it under
+    Recent documents: the same activation and notice appear, no tab is created,
+    no file is reread, and the list keeps one entry.
+15. **Save As onto an open path.** With two tabs, open `benzene.ket` in the
+    first, activate the second and Save As to `benzene.ket`: the `Already open`
+    notice appears, the file's contents and mtime stay unchanged, the second tab
+    keeps its previous path and no recent entry is added. Save As the first tab
+    to its own `benzene.ket` path: it writes normally and shows no notice.
+16. **Path normalisation.** On Windows open `C:\Docs\benzene.ket`, then open
+    `c:/docs/BENZENE.KET`: the first tab is activated with the notice (drive
+    paths compare case-insensitively and separators are unified). On POSIX open
+    `/docs/a.ket` and `/docs/A.ket`: both open as separate tabs because POSIX
+    paths compare case-sensitively; opening `/docs/a.ket` again still activates
+    the existing tab instead of adding one.
 
 ### Packaging
 
@@ -333,10 +385,16 @@ The reviewer agent must verify:
       task is not `done`
 - [ ] New behaviour has a test that would fail without the change
 - [ ] Save/Save As write `.ket` only; Export never changes path or format
-- [ ] Document commands are Ketcher `customButtons` (no app-owned toolbar or
-      dock), the native Save As entry is hidden through `buttons.save.hidden`,
+- [ ] File commands live in the File menu at the left of the tab strip (no
+      app-owned toolbar, dock or `customButtons`), its trigger shows the 16 px
+      `currentColor` icon, Open… accepts `.ket` only and Import… routes
+      structures through `importStructure`, Ketcher's native Open stays visible
+      while the native Save As entry is hidden through the `buttons` config,
       remaining library saves write through Tauri, and the `file-saver` alias is
       the only third-party override
+- [ ] Recent documents are stored in `localStorage` under
+      `chemistry-draw.recent`, deduped, capped at 10 and pruned with an in-app
+      error when a file is missing
 - [ ] Documents live in tabs over a single Ketcher instance: tabs hold file
       state, switching uses `getKet` → loading flag → `setMolecule`, per-tab
       snapshots plus `index.json` are written/flushed safely, launch restores the

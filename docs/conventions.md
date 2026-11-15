@@ -102,6 +102,14 @@ Rules:
 | Constant     | `UPPER_SNAKE_CASE` | `PORT_SCAN_RANGE`, `SIMPLE_ERRORS` |
 | Script       | `kebab-case.sh`    | `build-appimage.sh`                |
 
+**Document tabs.** A tab is identified by the base name of the file it was
+opened or imported from (`benzene` from `benzene.mol`), never by a generic
+label: no `Untitled` for a file that has a name. An import (`mol`, `smi`,
+`inchi`, `sdf`, `rxn`) is **clean** — it equals its source file — and becomes a
+document only when saved as `.ket`; until then its `path` is `null` and its
+first Save is a Save As that prefills `<name>.ket`. `Untitled` is reserved for a
+tab with neither a path nor a name (`docs/architecture.md` §5.1, §5.4).
+
 ---
 
 ## 5. Project layout
@@ -227,86 +235,86 @@ so Vitest can exercise them (`docs/testing.md` §5):
 - the tab model and guard decisions (`src/tabs.ts`);
 - save vs export format mapping and the close-guard decision;
 - saved-blob routing by extension and document state (`src/saveRoute.ts`);
-- autosave scheduling and the recovery decision (`src/autosave.ts`).
+- autosave scheduling and the recovery decision (`src/autosave.ts`);
+- recent-document list operations (`src/recent.ts`) and the File menu item
+  model (`src/fileMenu.ts`).
 
 React components and Tauri calls stay thin adapters around those helpers; do
 not put decisions inline in JSX or in an event handler.
 
-### 6.5 Toolbar commands
+### 6.5 File menu
 
-- **No app-owned toolbars or docks.** Do not render a fixed control group, a
-  second toolbar or a floating dock over the canvas. App-level commands belong
-  in Ketcher's own top toolbar. The document tab strip (§6.6) is document
-  chrome above the toolbar, not a toolbar: it carries tab management only.
-- **Hide, never restyle.** Native toolbar entries the app replaces are hidden
-  through the `Editor` `buttons` config: `buttons.<name>.hidden = true`
-  (`src/ui/editorButtons.ts`). Cast to `ButtonsConfig` only where Ketcher's
-  `ButtonName` union is incomplete (`save`), and justify the cast in a comment.
-  Never hide native UI with CSS `display: none`, a DOM query or a Ketcher source
-  edit.
-- Register them through the `Editor` `customButtons` prop and handle them as
-  `CUSTOM_BUTTON_PRESSED` custom actions. Button ids are namespaced
-  `chemistry-draw:<command>`; one listener dispatches by id.
-- Titles use sentence case (`Save`, `New`, `Export`), not Title Case, and double
-  as the tooltip.
-- Icons are fully transparent `imageLink` data URIs whose glyph is painted by a
-  CSS `mask-image`, so it inherits the toolbar button colour. No icon files and
-  no hard-coded icon colours; see §6.5.1.
-- **Third-party overrides.** The Vite `resolve.alias` mapping `file-saver` to
-  `src/fileSaver.ts` is the only sanctioned override of a third-party module.
-  It must be documented where it is added (`vite.config.ts`) and in
-  `docs/architecture.md` §5.7. Never edit files under `node_modules/`, and do
-  not add another alias without the same treatment.
+- **Placement.** The File button is the first element of the document tab strip,
+  left of the first tab, sharing the strip height and its Ketcher tokens (§6.6).
+  It is document chrome, not a toolbar: the app renders no toolbar, dock or
+  floating control group, and registers no Ketcher `customButtons`. File
+  commands live in this menu and nowhere else. The button is a sibling of the
+  `role="tablist"`, never a child: the tablist owns tabs only.
+- **Trigger icon.** The File button keeps its `File` label and gains a
+  Ketcher-style line icon before it: 16 px box, document glyph stroked with
+  `currentColor` at `1.5` stroke width, round joins and caps, and a `6px` gap
+  between icon and label. The icon is inline SVG with `aria-hidden="true"` and
+  fixed 16 px `width`/`height`; it uses no colour literal — it inherits the
+  button's text colour in rest, hover, focus and open states, so a theme change
+  needs no icon edit. Do not add a second icon or an icon-only trigger.
+- **Popup surface.** The menu opens directly below the File button, above the
+  editor, as a white surface (`tokens.color.surface`) with a 1 px
+  `tokens.color.border` edge, `tokens.radius` corners and `tokens.shadow`
+  elevation. Item text uses `tokens.fontFamily`/`tokens.fontSize.body`; hover
+  uses `tokens.color.surfaceSubtle`; there is no selected/active item state. No
+  gradient, no colour outside the token palette and no per-item inline colour.
+  The popup is capped at the remaining viewport height and scrolls its list, so
+  a long recent list never runs off-screen.
+- **Item model.** One exported, ordered list drives rendering: New, Open…,
+  Import…, Save, Save As…, Export…, a separator, then Recent documents. Labels
+  are sentence case and include the ellipsis only for commands that open another
+  dialog. The recent section always renders; while the list is empty it shows a
+  muted, non-interactive `No recent documents` hint.
+- **Open is `.ket` only.** Open… filters `.ket` and routes through
+  `openProject`: the tab adopts the file path and name. **Import…** lists
+  `mol`, `smi`, `inchi`, `sdf` and `rxn` and routes through `importStructure`:
+  the tab adopts the source base name with `path: null` and is saved as `.ket`
+  later. The two commands never share a dialog or a filter group
+  (`docs/architecture.md` §5.4, §5.9).
+- **Hiding native commands.** Ketcher's native **Save As** is hidden through the
+  `Editor` `buttons` config in `src/ui/editorButtons.ts`
+  (`buttons.save.hidden`), never through CSS, a DOM query or a Ketcher source
+  edit. Cast to `ButtonsConfig` only where Ketcher's `ButtonName` union is
+  incomplete, and justify the cast in a comment.
+- **Native Open is the exception.** Ketcher's native Open stays **visible** and is
+  not hidden by the `buttons` config: it is a different flow from File → Open… —
+  it loads a structure into the current canvas and leaves the tab's name and path
+  alone (its edit is a normal change, so the tab turns dirty), while File → Open…
+  opens a `.ket` project and adopts name and path. Native Open must not create a
+  tab, adopt a path, rename a tab or record a recent document. Do not merge the
+  two entries or route one through the other; `recognize` stays hidden in the
+  same config.
 
-#### 6.5.1 Toolbar icon styling
+#### 6.5.1 Menu accessibility
 
-Ketcher renders every `customButtons` entry as
-`<img src={imageLink} alt={title}>` inside the toolbar button. The button's `color` drives the sibling inline-SVG
-icons through `currentColor`, but an `<img>` cannot inherit `currentColor`, so a
-coloured glyph baked into `imageLink` keeps a fixed colour and ignores hover and
-press states. The app therefore paints the glyph with CSS instead of drawing it
-in the image.
-
-- `imageLink` is a valid, fully **transparent** SVG data URI. It only reserves
-  the `<img>` box; it draws nothing.
-- The visible glyph is a `mask-image` on that `<img>`, combined with
-  `background-color: currentColor`. The mask uses the alpha channel, so the
-  button's `currentColor` shows through the glyph shape and follows the default,
-  hover and active states exactly.
-- Selectors are keyed by the `alt` text Ketcher sets from our titles:
-  `img[alt="Save"]`, `img[alt="New"]`, `img[alt="Export"]`, each scoped to
-  `.Ketcher-root`. The ids and titles stay stable; no other attribute is
-  guaranteed.
-- The style string is generated in `src/ui/toolbarIcons.ts` and rendered once by
-  the app **scoped to** `.Ketcher-root` — the `<style>` element is a sibling of
-  the `Editor`, not a descendant of the Ketcher root, so the scope comes from
-  the selector and never from DOM nesting. Ketcher source is never edited and no
-  DOM query selects the buttons.
-- **No hard-coded icon colours.** The style carries `currentColor` only: the
-  glyph inherits Ketcher's `#333333` default, `#167782` hover and the active
-  state colour from the button. A literal colour in the icon module is a bug.
-
-Metrics and glyphs are Ketcher's own: the toolbar button is 28/32/40 px with
-2/4/5 px padding (compact/default/large) and the icon fills the content box
-(`width/height: 100%`). Glyphs are **outline** drawings on that 24 unit grid:
-`fill="none"`, a 1.5 unit stroke, `stroke-linecap="round"` and
-`stroke-linejoin="round"`, with all artwork (strokes included) confined to a
-**15x15 live area centred in the box**, i.e. inset 4.5 units (path centrelines
-stay within 5.25-18.75 so the 0.75 half-stroke lands on 4.5-19.5). Solid fills
-are not used: a filled glyph reads far heavier than the neighbouring outline
-family, whose native icons keep their ink inside the same ~15x15 area at a
-comparable 1.5 unit stroke. `stroke` is `currentColor`, which inside an SVG
-image resolves to the initial opaque colour, so the mask reads full alpha
-without naming a colour. `fill` is never set to `currentColor`: the
-mask uses the glyph's alpha, so the shape is the source of truth and the colour
-comes from `background-color`. Save must stay visually distinct from a floppy
-disk glyph.
+- The trigger is a real `<button type="button">` labelled `File`, with
+  `aria-haspopup="menu"`, `aria-expanded` reflecting the popup and
+  `aria-controls` pointing at it.
+- The popup is `role="menu"` and every entry is `role="menuitem"`; a separator
+  is `role="separator"`. Recent entries are menu items whose label is the file
+  base name and whose `title` shows the full path.
+- Keyboard: Enter/Space/ArrowDown open the menu and focus the first item,
+  ArrowUp opens and focuses the last; ArrowDown/ArrowUp move focus, Home/End
+  jump to the ends, Enter/Space run the focused item, Escape closes the menu and
+  returns focus to the File button, and Tab closes it. Opening an item's dialog
+  closes the menu first. A document keyboard shortcut closes the menu and is
+  consumed like it would be while a dialog is open.
+- Pointer: clicking outside the menu and its trigger closes it without running
+  an item. The popup never traps focus and never covers the File button.
+- Every entry has a visible label; the recent items' `aria-label` includes
+  "Recent" so they are distinguishable from the main commands.
 
 ### 6.6 Document tab strip
 
 The tab strip is the only app-rendered chrome above the editor. It sits at the
-top of the window, above Ketcher's toolbar, and manages tabs only — Save, New
-and Export stay in Ketcher's toolbar (§6.5).
+top of the window, above Ketcher's toolbar, with the File button at its left
+(§6.5); the strip manages tabs and hosts that button. Save, New, Open, Import
+and Export live in the File menu (§6.5), not in the strip itself.
 
 - **One editor.** The strip never mounts a second `<Editor>`, a second canvas or
   a per-tab toolbar/dock. Selecting a tab runs the one-editor switching protocol
@@ -348,9 +356,11 @@ and Export stay in Ketcher's toolbar (§6.5).
   and a middle click closes the tab too. Closing is per tab and follows
   `docs/architecture.md` §5.7. The `+` button at the end of the strip opens a
   new empty tab.
-- **Titles.** Base name without `.ket`, `Untitled` when the tab has no path;
+- **Titles.** Base name of the tab's path, otherwise its `name`, otherwise
+  `Untitled`; an opened or imported file always shows its own base name,
   truncated with an ellipsis rather than wrapping, so the strip stays one row.
-- **Accessibility.** The strip is `role="tablist"` and each tab is
+- **Accessibility.** The tab bar (the inner container, a sibling of the File
+  button) is `role="tablist"` and each tab is
   `role="tab"` with `aria-selected`; the active tab is the only one with
   `tabIndex={0}` (roving tabindex). ArrowLeft/ArrowRight move focus and
   activation to the neighbouring tab, wrapping at the ends; Enter/Space
@@ -370,6 +380,14 @@ and Export stay in Ketcher's toolbar (§6.5).
   code behind it.
 - Titles are sentence case: `Unsaved changes` when only Discard / Cancel is
   offered, `Save changes?` when Save is offered.
+- **Already open** notice: title `Already open`, one sentence
+  `This document is already open.`, a single **OK** action. It states the
+  situation without a question, a second paragraph or an implementation
+  explanation.
+- **One path, one tab.** A `.ket` path belongs to at most one tab
+  (`docs/architecture.md` §5.10): opening a path that is already open activates
+  that tab and shows the notice, and Save As to a path owned by another tab is
+  refused with the same notice.
 
 ---
 

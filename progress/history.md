@@ -302,3 +302,57 @@ re-review.
   absent under the active tab, no 2 px band, height unchanged (36).
 - `src/tabStrip.test.ts` pins both layers. Docs updated (conventions §6.6,
   architecture row, verification step 11, CHECKPOINTS C11). 174 tests.
+
+## 2026-11-14 — Activity 14: open-as-project
+
+- Root cause of the "Untitled pasted tab": non-.ket opens used
+  `importedTab(id, text)` → `{path:null, dirty:true}` with no name, so the title
+  could only say Untitled and every import looked unsaved.
+- `TabState.name` added (display identity); `tabTitle` precedence path → name →
+  Untitled; names drop the last extension for any file (`benzene.mol` →
+  `benzene`), preserving `.ket`, Windows paths, extension-less names and dotfiles.
+- Open split: `openProject` (.ket → path + name, clean) and `importStructure`
+  (other formats → name, no path, clean), one entry dispatching by extension,
+  untouched-tab reuse guarded by `name === null`.
+- Save As defaults to `<name>.ket`; Export uses `<name>.<ext>`; window title and
+  dialog copy use `tabDisplayName`. Snapshots persist `name` with a legacy
+  fallback to the path base name.
+- Review: REQUEST_CHANGES (names kept their extension) → fix → PASS. 193 tests.
+
+## 2026-11-14 — Activity 15: file-menu
+
+- The visible Open was Ketcher's native dialog (loads into the canvas, bypasses
+  tabs/names/paths); our openProject/importStructure were only on Ctrl+O.
+- Added a File button at the left of the tab strip (sibling of the tablist,
+  Ketcher tokens, fixed popup with scroll) owning New, Open… (.ket only),
+  Import… (structures, saved as .ket later), Save, Save As…, Export… and Recent
+  documents (last 10 .ket, localStorage `chemistry-draw.recent`, dedupe, prune
+  on missing file with an in-app error, visible empty hint).
+- Hid Ketcher's native Open and Save As via `buttons`; removed the custom
+  toolbar Save/New/Export buttons, their icons and injected styles.
+- Open/Import are desktop-only (Tauri picker); Save/Export download in the
+  browser and recents still persist.
+- Review: REQUEST_CHANGES (docs claimed a browser fallback, empty-state wording,
+  missing storage tests, ARIA nesting) → fix → PASS. 223 tests.
+
+## 2026-11-15 — Activity 16: file-button-icon-and-native-open
+
+- The File trigger now carries a 16 px document icon (currentColor, 1.5 stroke,
+  round caps, 6 px gap) before its label.
+- Ketcher's native Open is visible again: it is the deliberate "load a structure
+  into the current canvas" path and does not touch the tab path/name or recents.
+  Save As stays hidden; File → Open remains the `.ket` project open.
+- 227 tests; Prettier drift in architecture.md fixed; harness green.
+
+## 2026-11-15 — Activity 17: dedupe-open-path
+
+- A `.ket` path belongs to at most one tab. Opening a path that is already
+  open (File → Open or a recent entry) activates the owning tab and shows an
+  in-app `Already open` notice instead of creating a divergent duplicate;
+  Save As onto another tab's path is refused with the same notice.
+- Matching is a pure `pathKey` (separators, trailing slash, Windows drive case
+  folded, POSIX case preserved); `resolveOpenTarget`/`canSaveToPath` hold the
+  decisions and are unit-tested.
+- Restore dedupes snapshots by path (first wins, active id validated).
+- Review: REQUEST_CHANGES (guard decisions untested, C13 unticked) → fix → PASS.
+  251 tests.

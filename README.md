@@ -28,10 +28,10 @@
   WebAssembly).
 - **Image-to-structure (Only Linux)** — basic structure recognition powered by EPAM
   Imago v2.
-- **Documents are `.ket`** — Save (Ctrl+S) writes the Ketcher `.ket` format to
-  the file you chose (the native Save dialog appears the first time); **Export**
-  is the way to Molfile, SMILES, InChI, PNG and SVG. Save, New and Export live
-  in Ketcher's own toolbar.
+- **Documents are `.ket`** — a **File** menu at the left of the tab strip owns
+  Open (`.ket`), Import (Molfile, SMILES, InChI, SDF, RXN), Save, Save As and
+  Export, plus a recent-documents list; **Export** is the way to Molfile, SMILES,
+  InChI, PNG and SVG.
 - **Document tabs** — keep several `.ket` documents open in one window; every
   tab keeps its own unsaved content and the set is restored on relaunch.
 - **Offline-first** — runs entirely on your machine.
