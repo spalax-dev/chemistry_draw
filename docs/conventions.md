@@ -237,7 +237,10 @@ so Vitest can exercise them (`docs/testing.md` §5):
 - saved-blob routing by extension and document state (`src/saveRoute.ts`);
 - autosave scheduling and the recovery decision (`src/autosave.ts`);
 - recent-document list operations (`src/recent.ts`) and the File menu item
-  model (`src/fileMenu.ts`).
+  model (`src/fileMenu.ts`);
+- the backstage section list, status-strip formatting and declared-version
+  helper (`src/backstage.ts`);
+- settings descriptors and value formatting (`src/settingsModel.ts`).
 
 React components and Tauri calls stay thin adapters around those helpers; do
 not put decisions inline in JSX or in an event handler.
@@ -388,6 +391,57 @@ and Export live in the File menu (§6.5), not in the strip itself.
   (`docs/architecture.md` §5.10): opening a path that is already open activates
   that tab and shows the notice, and Save As to a path owned by another tab is
   refused with the same notice.
+
+### 6.8 Backstage
+
+The backstage is the app's start surface (`docs/architecture.md` §5.11). It is an
+in-app overlay above the tab strip and Ketcher, never a route, a second window,
+a second editor or a Tauri native dialog.
+
+- **Only real capabilities.** Every row and button maps to a function the app
+  already has: New/Open/Import, the recent list, Save/Save As/Export, Ketcher
+  settings and real version sources. Do not add a control, badge, counter,
+  template, chip or link that has no implementation behind it, and do not
+  reproduce Stitch mock content (templates grid, "Open from Indigo sidecar",
+  coordinate-grid note, validity badges, molecular-weight chips, "Browse all
+  fragments", models counter).
+- **Layout and tokens.** Top bar, 260 px `surfaceSubtle` (`#eff2f5`) rail,
+  white `surface` content pane, 32 px status strip, 24 px content padding.
+  Surfaces use the `8px` radius, controls the `3px` radius, edges the 1 px
+  `tokens.color.border` (`#cad3dd`), the accent is `tokens.color.accent`
+  (`#167782`) and text is Roboto 12/14 px. No gradient and no colour, radius,
+  border or shadow outside `src/ui/tokens.ts` (§6.2). The status strip shows
+  only real values (`Indigo <version> · sidecar :<port>` from `/v2/info`); no
+  models counter.
+- **Accessibility.** The overlay is `role="dialog"` with `aria-modal="true"` and
+  `aria-labelledby` pointing at its title; focus moves in on open, is trapped
+  and returns to the trigger (the home button) on close. `Escape` and the
+  **Back to Editor** action close it. The rail is a `nav` of real
+  `<button type="button">` elements — not a `tablist` — with roving `tabIndex`,
+  ArrowUp/ArrowDown/Home/End movement and `aria-current="page"` on the active
+  section. Every control has a visible label; icon-only controls need an
+  `aria-label`.
+- **Home button.** A real button with a 16 px `currentColor` house line icon and
+  `aria-label="Backstage"` is the first control of the tab strip, before the
+  File button and outside the `role="tablist"`. It only toggles the overlay: it
+  never activates a tab, saves, reloads or changes the canvas.
+- **Startup.** The backstage replaces the loading splash on every launch and
+  stays until dismissed; it never auto-closes when Ketcher becomes ready. It
+  must not block or delay the silent tab restore, and dismissing it must not
+  wait for that restore.
+- **Settings.** Bind only to `ketcher.settingsService` (`getSettings`,
+  `updateSettings`, `subscribe`, `resetToDefaults`, `loadPreset`). Use the
+  curated keys in `docs/architecture.md` §5.11.1 with their real unit keys,
+  options and the documented bounds; apply each change live, show the ACS preset
+  and Reset to defaults. Never invent an option Ketcher does not have, never keep a second
+  settings object and never persist settings in `.ket` or a tab snapshot.
+- **About.** Show only values with a real source (app, Ketcher and React
+  versions, `/v2/info` Indigo version and port, webview platform, runtime,
+  license links). No fake build SHA, commit, date, IUPAC version or model count;
+  an unavailable source shows `Unavailable`, not a placeholder number.
+- **Commands.** Reuse the File menu handlers. New/Open/Import close the
+  backstage as they run; Save, Save As and Export keep it open, with their
+  dialogs above it. The backstage never closes a tab or discards work.
 
 ---
 

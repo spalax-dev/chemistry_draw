@@ -356,3 +356,20 @@ re-review.
 - Restore dedupes snapshots by path (first wins, active id validated).
 - Review: REQUEST_CHANGES (guard decisions untested, C13 unticked) → fix → PASS.
   251 tests.
+
+## 2026-11-15 — Activity 18: backstage-menu
+
+- Backstage implemented from the Stitch design, stripped of invented content:
+  full-screen overlay with top bar, 260 px rail (New, Recent, Save & Export,
+  Settings, About), content pane and a status strip with the real Indigo
+  version/port and app version.
+- Shown from the first frame at launch (the old loading splash is gone); the
+  editor and silent tab restore run underneath. A home icon at the left of the
+  tab strip opens it; Back to Editor/Escape return with the same tab and canvas.
+- New/Recent (last 10 `.ket` + open tabs, path-uniqueness guard)/Save & Export
+  reuse the existing handlers. Settings binds to ketcher.settingsService
+  (curated real keys with unit pairs, ACS preset, reset, live subscribe). About
+  reads package.json and /v2/info and links the real licenses.
+- Focus trap, aria-modal, rail roving focus, Escape; all colours from tokens.
+- Review: REQUEST_CHANGES (docs claimed untested behaviour, imageResolution cap,
+  unticked C14) → fix → PASS. 279 tests.

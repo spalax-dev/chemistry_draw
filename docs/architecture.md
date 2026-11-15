@@ -673,6 +673,174 @@ paragraph and no destructive action. The owning tab is activated **before** the
 notice shows, so closing it lands the user on the document that already holds the
 path.
 
+### 5.11 Backstage view
+
+The **backstage** is the app's start surface: one full-window in-app overlay above
+the tab strip and Ketcher, modelled on the Stitch backstage shell but carrying
+**only capabilities the app really has**. It is not a route, a second window or a
+second editor; Ketcher stays mounted underneath and keeps its state.
+
+**Layout.** The overlay fills the viewport and is one `role="dialog"` with
+`aria-modal="true"` (`docs/conventions.md` §6.8):
+
+| Region         | Content                                                                                        | Tokens                                              |
+| -------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Top bar        | app logo, `Chemistry Draw \| Backstage` title, **Back to Editor** action                       | `surface`, `border` 1 px bottom edge, 12/14 px text |
+| Left rail      | 260 px column with 10 px uppercase `FILE OPERATIONS` and the section buttons                   | `surfaceSubtle` (`#eff2f5`)                         |
+| Content pane   | white section panel, 24 px padding, `8px` surface corners                                      | `surface`, `border`, `radius` (3 px controls)       |
+| Status strip   | 32 px strip: `Indigo <version> · sidecar :<port>` from `/v2/info`; no counter that is not real | `surfaceSubtle`/`surface`, `border` top edge        |
+| Accent/borders | `#167782` accent, `#cad3dd` borders, Roboto 12/14 px, no colour outside the token palette      | `tokens.color.accent`, `tokens.color.border`, fonts |
+
+The rail sections are, in order: **New**, **Recent**, **Save & Export**,
+**Settings**, **About**. The rail is a `nav` of real buttons, not a `tablist`:
+the active section carries `aria-current="page"` and roving `tabIndex`, and
+ArrowUp/ArrowDown/Home/End move focus between sections. The top bar title is the
+dialog's `aria-labelledby` target. The panel scrolls inside the content pane, so
+the rail, top bar and status strip stay fixed.
+
+**Startup takeover.** The backstage replaces the `Loading chemistry editor...`
+splash: `App.tsx` renders it from the first frame instead of the splash, while
+the provider resolves, Ketcher initializes and `readTabSet()` restores the tab
+set underneath. Readiness does **not** dismiss it — every launch shows the
+backstage until the user chooses **Back to Editor**, presses `Escape` or uses the
+home button later in the session. Controls that need the editor (Settings and
+the About versions that come from Ketcher or the sidecar) show a muted
+`Starting…`/`Unavailable` state until their source answers; the rest of the
+backstage is usable immediately. Dismissing the backstage never waits for the
+restore and never triggers a save, a tab activation or `setMolecule`.
+
+**Home button.** A house icon is the first control of the document tab strip,
+immediately left of the File button and a sibling of the `role="tablist"`
+(`docs/conventions.md` §6.8). It is a real `<button type="button">` with
+`aria-label="Backstage"` and a 16 px `currentColor` line icon, and it opens the
+backstage. `Escape` and **Back to Editor** close it. Opening and closing only
+toggle the overlay: the active tab, the canvas and every dirty flag are left
+untouched, and focus returns to the home button when it was the trigger.
+
+**Sections and data sources.**
+
+| Section       | Rows/actions                                                                                       | Real source                                                                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New           | **Blank canvas**, **Import structure…**, **Open project…**                                         | `startNewDocument()`, `importStructure(path)`, `openProject(path)` (§5.3, §5.4)                                                                                      |
+| Recent        | last 10 `.ket` paths with **Open** and **Remove**, plus the currently open tabs                    | `src/recent.ts` over `localStorage["chemistry-draw.recent"]`; open tabs from `TabSet` (§5.9)                                                                         |
+| Save & Export | active tab summary, **Save**, **Save As…**, **Export…**                                            | the same handlers as the File menu (§5.3, §5.4); Export never changes `path`/format                                                                                  |
+| Settings      | curated Ketcher settings with value + unit, **ACS preset**, **Reset to defaults**                  | `ketcher.settingsService` after `onInit` (§5.11.1)                                                                                                                   |
+| About         | app, Ketcher and React versions, Indigo version and sidecar port, platform, runtime, license links | `package.json.version` passed as `appVersion`; `ketcher-react`/`react` dependencies; `/v2/info` (`indigo_version`, `api_path`); `navigator.platform` and `isTauri()` |
+
+Command behaviour:
+
+- **New** creates a tab and closes the backstage. **Open project…** and
+  **Import structure…** open the existing picker, and the backstage closes as
+  the picker opens; cancelling the picker leaves the editor as it was.
+- **Recent** rows show the file base name with the full path as `title`.
+  **Open** routes through `openProject(path)`; a path that belongs to a tab is
+  handled by the path-uniqueness guard (§5.10) — that tab is activated and the
+  `Already open` notice shows, with no re-read and no new tab. **Remove** drops
+  that path through `removeRecent` and touches no tab or file. Choosing a
+  currently open tab activates it and closes the backstage. An empty list shows
+  a muted, non-interactive `No recent documents` hint.
+- **Save**, **Save As…** and **Export…** act on the active tab and keep the
+  backstage open; their dialogs render above the backstage. Save As and Export
+  behave exactly as from the File menu. The section names the active document
+  (`tabDisplayName`), its `.ket` path or `Not saved yet`, and the dirty state.
+- The backstage never closes a tab, never discards work and never adds a second
+  route to a command: every button calls the function the File menu already uses.
+
+**Removed Stitch content.** The backstage does not reproduce the Stitch mock's
+templates grid, "Open from Indigo sidecar" entry, coordinate-grid note, validity
+badges, molecular-weight chips, "Browse all fragments" link or a models counter.
+None of those map to a real app capability, so they are absent rather than
+disabled or faked (`docs/conventions.md` §6.8).
+
+**Module map.**
+
+| Module                                   | Responsibility                                                                                                                      |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `src/ui/Backstage.tsx`                   | overlay shell, top bar, rail navigation, content routing, status strip, focus trap and Escape                                       |
+| `src/ui/backstage/NewSection.tsx`        | Blank canvas, Import structure…, Open project…                                                                                      |
+| `src/ui/backstage/RecentSection.tsx`     | recent rows (open/remove), open-tab rows and the empty hint                                                                         |
+| `src/ui/backstage/SaveExportSection.tsx` | active-tab summary and the Save / Save As / Export actions                                                                          |
+| `src/ui/backstage/SettingsSection.tsx`   | controls bound to `ketcher.settingsService`, ACS preset and reset                                                                   |
+| `src/ui/backstage/AboutSection.tsx`      | version rows, platform and license links                                                                                            |
+| `src/backstage.ts`                       | pure model: ordered section list and default, status-strip formatting, declared-version helper; re-exports the settings descriptors |
+| `src/settingsModel.ts`                   | pure settings descriptors (key, label, control, unit key, bounds/options) and value formatting                                      |
+| `src/ui/HomeButton.tsx`                  | house button in the tab strip that opens the backstage                                                                              |
+
+#### 5.11.1 Settings binding
+
+Settings come from the mounted editor, never from a copy: after `onInit`,
+`ketcher.settingsService` exposes `getSettings()`,
+`updateSettings(partial)`, `subscribe(listener)`, `resetToDefaults()` and
+`loadPreset(name)`. The section reads the service when it mounts and on every
+subscription event, so an external change is reflected immediately. A control
+change sends a **single-key** partial to `updateSettings`; the service validates
+it, persists it (Ketcher's own `ketcher-opts` `localStorage` entry) and emits the
+update, which is what redraws the canvas. Settings are global editor
+preferences, not document data: they are not stored in `.ket`, not per tab and
+not snapshotted.
+
+The curated keys are exactly the real Ketcher 3.18 settings below; labels are
+sentence case and every key with a companion `…Unit` key renders a unit select
+beside the number input. No other setting, and nothing Ketcher does not have
+(theme toggle, grid, model thresholds), is exposed. Numeric bounds are the
+schema's where Ketcher defines one; where it does not (`imageResolution`), the
+UI keeps a documented floor and no maximum.
+
+| Ketcher key                     | Label                         | Control       | Unit key / range or options                                        |
+| ------------------------------- | ----------------------------- | ------------- | ------------------------------------------------------------------ |
+| `atomColoring`                  | Atom coloring                 | checkbox      | —                                                                  |
+| `carbonExplicitly`              | Show carbon explicitly        | checkbox      | —                                                                  |
+| `showHydrogenLabels`            | Hydrogen labels               | select        | `off`, `Hetero`, `Terminal`, `Terminal and Hetero`, `On`           |
+| `showCharge`                    | Show charges                  | checkbox      | —                                                                  |
+| `showValence`                   | Show valence                  | checkbox      | —                                                                  |
+| `aromaticCircle`                | Aromatic circle               | checkbox      | —                                                                  |
+| `showStereoFlags`               | Stereo flags                  | checkbox      | —                                                                  |
+| `stereoLabelStyle`              | Stereo label style            | select        | `IUPAC`, `classic`, `On-Atoms`, `off`                              |
+| `bondLength`                    | Bond length                   | number + unit | `bondLengthUnit`: `px`/`pt`/`cm`/`inch`; 0.1–1000                  |
+| `bondThickness`                 | Bond thickness                | number + unit | `bondThicknessUnit`: `px`/`pt`/`cm`/`inch`; 0.1–96                 |
+| `bondSpacing`                   | Bond spacing                  | number        | integer 1–100; Ketcher has no unit key for it                      |
+| `stereoBondWidth`               | Stereo bond width             | number + unit | `stereoBondWidthUnit`: `px`/`pt`/`cm`/`inch`; 0.1–96               |
+| `hashSpacing`                   | Hash spacing                  | number + unit | `hashSpacingUnit`: `px`/`pt`/`cm`/`inch`; 0.1–1000                 |
+| `reactionComponentMarginSize`   | Reaction component margin     | number + unit | `reactionComponentMarginSizeUnit`: `px`/`pt`/`cm`/`inch`; 0.1–1000 |
+| `fontsz`                        | Atom label size               | number + unit | `fontszUnit`: `px`/`pt`/`cm`/`inch`; 0.1–96                        |
+| `imageResolution`               | Image resolution              | number        | DPI, no unit key; unbounded in Ketcher (UI floor 1, no maximum)    |
+| `rotationStep`                  | Rotation step                 | number        | integer 1–90 degrees                                               |
+| `valence-mode`                  | Valence mode                  | select        | `default`, `biovia-2009`, `biovia-2017`                            |
+| `smart-layout`                  | Smart layout                  | checkbox      | —                                                                  |
+| `ignore-stereochemistry-errors` | Ignore stereochemistry errors | checkbox      | —                                                                  |
+| `dearomatize-on-load`           | Dearomatize on load           | checkbox      | —                                                                  |
+
+- **ACS preset** calls `loadPreset("acs")`. Ketcher defines it as
+  `atomColoring: false`, `fontsz`/`fontszsub: 10 pt`, `bondLength: 14.4 pt`,
+  `bondSpacing: 18`, `bondThickness: 0.6 pt`, `stereoBondWidth: 2 pt`,
+  `hashSpacing: 2.5 pt`, `reactionComponentMarginSize: 1.6 pt` and
+  `imageResolution: 600`.
+- **Reset to defaults** calls `resetToDefaults()`, restoring Ketcher's own
+  defaults (`atomColoring: true`, `bondLength: 40 px`, `bondThickness: 2 px`,
+  `stereoBondWidth: 6 px`, `hashSpacing: 1.2 px`, `fontsz: 13 px`,
+  `imageResolution: 72`, `rotationStep: 15`, …). The section never writes a
+  settings object of its own.
+- Before the editor reports `onInit`, the section shows a muted
+  `Settings become available when the editor is ready` line with disabled
+  controls; it never falls back to a hard-coded copy of the settings.
+
+#### 5.11.2 About sources
+
+| Row            | Source                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chemistry Draw | `package.json.version`, passed to the section as the `appVersion` prop                                                                                 |
+| Ketcher        | the `ketcher-react` dependency declared in `package.json`, read at build time and shown without its range prefix                                       |
+| React          | the `react` dependency declared in `package.json`, read at build time                                                                                  |
+| Indigo         | `indigo_version` (mirrored as `Indigo.version`) from `GET /v2/info`; `Unavailable` while the sidecar has not answered                                  |
+| Sidecar port   | the port parsed from `api_path` in the same `/v2/info` response — the actually bound port, not the preferred 9321                                      |
+| Platform       | the webview-reported platform string (`navigator.userAgentData.platform`, `navigator.platform` then `navigator.userAgent` fallbacks), labelled as such |
+| Runtime        | `isTauri()`: `Desktop (Tauri)` in the app shell, `Browser` in a plain web build                                                                        |
+| License links  | Ketcher (Apache-2.0), Indigo (Apache-2.0), ONNX Runtime (MIT), opened in the system browser through `@tauri-apps/plugin-opener`                        |
+
+There is no build SHA, commit id, build date, IUPAC version or model count: the
+project has no real value for them, so About shows no row rather than a
+placeholder.
+
 ---
 
 ## 6. Sidecar API surface

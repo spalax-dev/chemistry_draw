@@ -255,8 +255,47 @@
       before implementation; the manual step in `docs/verification.md` §2
       "File menu" passes.
 
+## C14 — Backstage
+
+- [x] The backstage replaces the `Loading chemistry editor...` splash from the
+      first frame, stays until **Back to Editor**/Escape, and shows on every
+      launch; Ketcher mounts and the tab set restores underneath without being
+      blocked or dismissed by readiness.
+- [x] A house button at the left of the tab strip, before File and outside the
+      `role="tablist"`, opens the backstage; **Back to Editor** and Escape
+      return to the same active tab, canvas, dirty flags and tab order. (The
+      home button is covered while the overlay is open, so it is the way in,
+      not the way back.)
+- [x] The rail is a `nav` of real buttons (not a tablist) with New, Recent,
+      Save & Export, Settings and About in order, roving focus and
+      `aria-current="page"`; the overlay is `role="dialog"`, `aria-modal`, with
+      initial focus, a focus trap, Escape and focus return.
+- [x] New exposes Blank canvas (creates a tab), Import structure… and Open
+      project…; Recent lists the last 10 `chemistry-draw.recent` paths with Open
+      and Remove plus the open tabs, reusing the path-uniqueness guard; Save &
+      Export reuses the File menu handlers and shows the active-tab summary.
+- [x] Settings binds only to `ketcher.settingsService` with the curated keys and
+      real unit keys/ranges/options from `docs/architecture.md` §5.11.1, applies
+      live, persists through Ketcher, and offers the ACS preset and Reset to
+      defaults; no invented option exists.
+- [x] About shows the app, Ketcher and React versions, the Indigo version and
+      sidecar port from `/v2/info`, the platform, the runtime row (`Desktop
+(Tauri)` or `Browser`) and the license links (Ketcher Apache-2.0, Indigo
+      Apache-2.0, ONNX Runtime MIT), with `Unavailable` for a missing source and
+      no fake build SHA, IUPAC version or models counter.
+- [x] Stitch-invented content is absent: templates grid, "Open from Indigo
+      sidecar", coordinate-grid note, validity badges, molecular-weight chips,
+      "Browse all fragments" and the models counter.
+- [x] All backstage surfaces use `src/ui/tokens.ts` only (surface/rail/content/
+      status strip, `#cad3dd` borders, teal accent, 3/8 px radii, Roboto 12/14
+      px) and never a colour literal.
+- [x] The pure section list, settings descriptors, value formatting and the
+      status/version helpers are covered by Vitest and were RED before
+      implementation; the manual "Backstage" checklist in
+      `docs/verification.md` §2 passes and `node scripts/harness.mjs` is green.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C13 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C14 remain empty.

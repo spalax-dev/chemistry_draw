@@ -357,6 +357,83 @@ Run against the desktop build (`task run`) unless a step says browser.
     paths compare case-sensitively; opening `/docs/a.ket` again still activates
     the existing tab instead of adding one.
 
+### Backstage
+
+Run against the desktop build (`task run`) unless a step says browser.
+
+1. **Startup takeover.** Launch with a restored tab set: the backstage is visible
+   from the first frame instead of `Loading chemistry editor...`, and it stays
+   visible after Ketcher finishes initializing. With the backstage still open,
+   no loading splash flashes and the tabs finish restoring underneath. Choose
+   **Back to Editor**: the same active tab, canvas and dirty dots are shown. Quit
+   and relaunch: the backstage appears again.
+2. **Home button.** A 16 px house icon sits at the left of the tab strip,
+   immediately before the File button and outside the tab bar. It has no visible
+   label: its accessible name is `Backstage` and the hover title shows the same,
+   while hovering recolours the icon to the accent and back (`currentColor`).
+   Click it: the backstage opens. While the overlay covers the strip the home
+   button is not reachable, so return with **Back to Editor** or `Escape`: the
+   active tab, canvas, dirty dots and tab order are unchanged. Press `Escape`,
+   then repeat and press **Back to Editor**: the same state returns.
+3. **Rail and focus.** The rail is a `nav`, not a tab list: New, Recent,
+   Save & Export, Settings and About are real buttons, the active one carries
+   `aria-current="page"`, and ArrowUp/ArrowDown/Home/End move focus. `Tab` cycles
+   inside the overlay and never reaches the editor behind it; the overlay has
+   `role="dialog"` and `aria-modal="true"`.
+4. **New.** **Blank canvas** adds a tab, closes the backstage and activates the
+   empty tab; the previous tabs are untouched. **Import structure…** lists
+   Molfile, SMILES, InChI, SDF and RXN and lands a clean `path: null` tab named
+   after the file; **Open project…** lists `.ket` only and adopts the path and
+   name. Cancelling either picker leaves the editor unchanged.
+5. **Recent.** Open more than ten `.ket` files, then open the backstage: Recent
+   lists at most ten paths, newest first, with Open and Remove on each row, plus
+   the currently open tabs (title and path). Remove drops only that entry and
+   changes no tab or file. Open a listed path: it opens through `openProject`;
+   if it is already open, the existing tab is activated, the `Already open`
+   notice appears and no tab or entry is duplicated. Choosing an open tab
+   activates it. With no entries, the muted `No recent documents` hint shows.
+6. **Save and Export.** The active-tab summary shows the title, its `.ket` path
+   or `Not saved yet`, and the dirty state. Save writes the active tab exactly as
+   File → Save; Save As adopts the chosen `.ket`; Export writes the chosen
+   format. Export leaves the tab's `path` and format untouched, and a following
+   Save still writes `.ket`. The backstage stays open behind the Save As/Export
+   dialogs.
+7. **Settings live.** Change atom coloring, bond length, bond thickness, bond
+   spacing, atom label size and image resolution: the canvas reflects each
+   change immediately, with no Apply button. Toggle `showHydrogenLabels`,
+   `stereoLabelStyle` and `valence-mode`: the options are exactly Ketcher's enums
+   and the canvas follows. Quit and relaunch: the values persist through
+   Ketcher's own `ketcher-opts` storage. The section lists exactly the real
+   settings, with a unit select beside each unit-bearing number; there is no
+   theme toggle, grid or model threshold.
+8. **Preset and reset.** Click **ACS preset**: atom coloring turns off and the
+   values match `docs/architecture.md` §5.11.1 (bond length 14.4 pt, bond
+   thickness 0.6 pt, image resolution 600, …). Click **Reset to defaults**:
+   Ketcher's defaults return (bond length 40 px, image resolution 72, …), the
+   canvas redraws and a relaunch keeps the reset values.
+9. **Settings before ready.** Launch with a cold sidecar/editor: the Settings
+   section shows the muted starting message with disabled controls until the
+   editor initializes, then reads the real values. It never shows a hard-coded
+   copy of the settings.
+10. **About.** Compare with `curl -s http://127.0.0.1:<port>/v2/info`: the Indigo
+    version and the sidecar port match `indigo_version` and `api_path`. The app
+    version matches `package.json`/the installed release, and the Ketcher and
+    React versions match the `ketcher-react` and `react` dependencies. The
+    platform row is present and the runtime row reads `Desktop (Tauri)` in the
+    app shell (`Browser` under `pnpm dev`). Ketcher (Apache-2.0), Indigo
+    (Apache-2.0) and ONNX Runtime (MIT) links open in the system browser. No
+    build SHA, commit, build date, IUPAC version or models counter is shown;
+    while `/v2/info` is unavailable the Indigo and port rows read `Unavailable`.
+11. **Removed content.** The backstage contains no templates grid, "Open from
+    Indigo sidecar", coordinate-grid note, validity badges, molecular-weight
+    chips, "Browse all fragments" or models counter, and no disabled placeholder
+    for any of them.
+12. **Browser fallback.** `pnpm dev` in a normal browser: the backstage opens,
+    New works in memory, Save/Export download, Open/Import need the desktop
+    picker, Settings still bind to the in-browser Ketcher, and the About app
+    version comes from the compiled constant with Indigo/port `Unavailable`. The
+    console stays free of errors.
+
 ### Packaging
 
 - AppImage extracts to a minimal AppDir: only our libraries, no GTK/WebKit/
@@ -395,6 +472,16 @@ The reviewer agent must verify:
 - [ ] Recent documents are stored in `localStorage` under
       `chemistry-draw.recent`, deduped, capped at 10 and pruned with an in-app
       error when a file is missing
+- [ ] The backstage replaces the loading splash on every launch, keeps the
+      editor mounted while tabs restore, and Back to Editor/Escape return to the
+      same tab and canvas; the rail is a `nav` with `aria-current`, the overlay is
+      `role="dialog"`/`aria-modal` with a focus trap, and the home button sits
+      before File outside the tablist
+- [ ] The backstage exposes only real capabilities: sections map to existing
+      New/Open/Import, recent, Save/Save As/Export and version sources; Settings
+      uses only the curated `ketcher.settingsService` keys with real units,
+      ranges and options, applying live with ACS preset and reset; About has no
+      fake build, IUPAC or model data and matches `/v2/info`
 - [ ] Documents live in tabs over a single Ketcher instance: tabs hold file
       state, switching uses `getKet` → loading flag → `setMolecule`, per-tab
       snapshots plus `index.json` are written/flushed safely, launch restores the
