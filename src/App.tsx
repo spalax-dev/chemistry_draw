@@ -2,13 +2,20 @@ import "ketcher-react/dist/index.css";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Editor } from "ketcher-react";
-import { RemoteStructServiceProvider, type Ketcher } from "ketcher-core";
+import {
+  RemoteStructServiceProvider,
+  type DeepPartial,
+  type ISettingsService,
+  type Ketcher,
+  type Settings,
+} from "ketcher-core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import packageJson from "../package.json";
 import {
   applyExport,
   closeAfterSave,
@@ -60,10 +67,11 @@ import {
 } from "./fileSaver";
 import { routeSavedBlob } from "./saveRoute";
 import { CloseGuardDialog, ErrorDialog, ExportDialog, NoticeDialog } from "./ui/DocumentDialogs";
+import { Backstage } from "./ui/Backstage";
+import type { SettingValue } from "./ui/backstage/SettingsSection";
 import { EDITOR_BUTTONS } from "./ui/editorButtons";
 import { FileMenu } from "./ui/FileMenu";
 import { TabStrip } from "./ui/TabStrip";
-import { tokens } from "./ui/tokens";
 import { addRecent, loadRecent, removeRecent, saveRecent } from "./recent";
 import type { FileMenuId } from "./fileMenu";
 
@@ -118,14 +126,50 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   }
 }
 
+/** Versions and the real port read from `GET /v2/info`; never assumed values. */
+interface IndigoInfo {
+  version: string | null;
+  port: number | null;
+}
+
+interface ResolvedApi {
+  apiBase: string;
+  info: IndigoInfo;
+}
+
+/** Reads `indigo_version` and the port in `api_path`, tolerating a bad body. */
+function parseIndigoInfo(body: unknown, fallbackPort: number): IndigoInfo {
+  if (typeof body !== "object" || body === null) {
+    return { version: null, port: fallbackPort };
+  }
+
+  const record = body as Record<string, unknown>;
+  const version =
+    typeof record.indigo_version === "string" && record.indigo_version.length > 0
+      ? record.indigo_version
+      : null;
+
+  let port = fallbackPort;
+  if (typeof record.api_path === "string") {
+    try {
+      const parsed = new URL(record.api_path);
+      if (parsed.port !== "") port = Number(parsed.port);
+    } catch {
+      // Keep the port the host reported.
+    }
+  }
+
+  return { version, port };
+}
+
 /**
- * Resolve the Indigo API base URL.
+ * Resolve the Indigo API base URL and the real sidecar info.
  *
  * The sidecar reports the port it actually bound to, which may not be the
  * preferred one if that port was already in use. It also starts asynchronously,
  * so we poll until /v2/info answers.
  */
-async function resolveApiBase(): Promise<string> {
+async function resolveApiBase(): Promise<ResolvedApi> {
   const deadline = Date.now() + 20_000;
   let port = 9321;
 
@@ -138,7 +182,15 @@ async function resolveApiBase(): Promise<string> {
 
     try {
       const res = await fetchWithTimeout(`http://127.0.0.1:${port}/v2/info`, 1_000);
-      if (res.ok) return `http://127.0.0.1:${port}/v2/`;
+      if (res.ok) {
+        let info: IndigoInfo = { version: null, port };
+        try {
+          info = parseIndigoInfo(await res.json(), port);
+        } catch {
+          // The endpoint answered but not with JSON; keep the fallback.
+        }
+        return { apiBase: `http://127.0.0.1:${port}/v2/`, info };
+      }
     } catch {
       // Sidecar not ready yet.
     }
@@ -147,17 +199,24 @@ async function resolveApiBase(): Promise<string> {
   }
 
   // Give up and let Ketcher surface the connection error.
-  return `http://127.0.0.1:${port}/v2/`;
+  return { apiBase: `http://127.0.0.1:${port}/v2/`, info: { version: null, port } };
 }
 
 function App() {
   const lastError = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const [ready, setReady] = useState(false);
-  /** True until the silent tab restore finishes; the loading overlay stays up. */
+  /** True until the silent tab restore finishes; the backstage status strip shows it. */
   const [restoring, setRestoring] = useState(true);
   const [provider, setProvider] = useState<RemoteStructServiceProvider | null>(null);
+  /** The backstage is the start surface, so every launch begins here. */
+  const [backstageOpen, setBackstageOpen] = useState(true);
+  const [indigoInfo, setIndigoInfo] = useState<IndigoInfo>({ version: null, port: null });
 
   const ketcherRef = useRef<Ketcher | null>(null);
+  /** The mounted editor's settings service; `null` before `onInit` (§5.11.1). */
+  const settingsServiceRef = useRef<ISettingsService | null>(null);
+  /** Live Ketcher settings for the backstage; the service is the only owner. */
+  const [ketcherSettings, setKetcherSettings] = useState<Settings | null>(null);
   const [tabSet, setTabSetState] = useState<TabSet>(() => emptyTabSet("tab-1"));
   const tabsRef = useRef(tabSet);
   const nextTabIdRef = useRef(1);
@@ -210,17 +269,19 @@ function App() {
   }, []);
 
   // Keep the keydown handler aware of the dialogs without re-subscribing.
-  const dialogsOpen = exportOpen || closePrompt !== null || errorText !== null || notice !== null;
+  const dialogsOpen =
+    backstageOpen || exportOpen || closePrompt !== null || errorText !== null || notice !== null;
   useEffect(() => {
     dialogOpenRef.current = dialogsOpen;
   }, [dialogsOpen]);
 
   useEffect(() => {
     let cancelled = false;
-    resolveApiBase().then((apiBase) => {
+    resolveApiBase().then(({ apiBase, info }) => {
       if (cancelled) return;
       console.info("[chemistry-draw] Indigo API:", apiBase);
       setProvider(new RemoteStructServiceProvider(apiBase));
+      setIndigoInfo(info);
     });
     return () => {
       cancelled = true;
@@ -236,6 +297,26 @@ function App() {
     });
     setReady(true);
   }, []);
+
+  /**
+   * Binds the backstage to the mounted editor's settings service: seed the
+   * state from `getSettings()` and follow every change it emits, so an external
+   * change is reflected immediately (§5.11.1). The section never keeps a copy.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    const service = ketcherRef.current?.settingsService;
+    if (!service) return;
+
+    settingsServiceRef.current = service;
+    setKetcherSettings(service.getSettings());
+    const unsubscribe = service.subscribe(setKetcherSettings);
+
+    return () => {
+      unsubscribe();
+      settingsServiceRef.current = null;
+    };
+  }, [ready]);
 
   const handleError = useCallback((raw: unknown) => {
     const msg = typeof raw === "string" ? raw : String(raw);
@@ -676,6 +757,117 @@ function App() {
     [openProject, updateRecent],
   );
 
+  const openBackstage = useCallback(() => setBackstageOpen(true), []);
+  const closeBackstage = useCallback(() => setBackstageOpen(false), []);
+
+  /**
+   * Backstage commands reuse the File menu handlers. New/Open/Import and a tab
+   * switch close the overlay first; Save, Save As and Export keep it open so
+   * their dialogs render above it.
+   */
+  const handleBackstageNew = useCallback(() => {
+    setBackstageOpen(false);
+    void startNewDocument();
+  }, [startNewDocument]);
+
+  const handleBackstageOpen = useCallback(() => {
+    setBackstageOpen(false);
+    void openKetFile();
+  }, [openKetFile]);
+
+  const handleBackstageImport = useCallback(() => {
+    setBackstageOpen(false);
+    void importStructureFile();
+  }, [importStructureFile]);
+
+  const handleBackstageOpenRecent = useCallback(
+    (path: string) => {
+      setBackstageOpen(false);
+      void openRecentDocument(path);
+    },
+    [openRecentDocument],
+  );
+
+  const handleBackstageRemoveRecent = useCallback(
+    (path: string) => updateRecent((list) => removeRecent(list, path)),
+    [updateRecent],
+  );
+
+  const handleBackstageSwitchTab = useCallback(
+    (id: string) => {
+      setBackstageOpen(false);
+      void activateTabById(id);
+    },
+    [activateTabById],
+  );
+
+  const handleBackstageSave = useCallback(() => {
+    void saveActiveTab("save");
+  }, [saveActiveTab]);
+
+  const handleBackstageSaveAs = useCallback(() => {
+    void saveActiveTab("save-as");
+  }, [saveActiveTab]);
+
+  const handleBackstageExport = useCallback(() => setExportOpen(true), []);
+
+  /**
+   * Sends one validated change to the editor's settings service. The service
+   * persists it in Ketcher's own `ketcher-opts` entry and emits the update that
+   * redraws the canvas (§5.11.1); a rejected value surfaces in the error dialog.
+   */
+  const applySetting = useCallback(
+    async (partial: DeepPartial<Settings>) => {
+      const service = settingsServiceRef.current;
+      if (!service) return;
+      try {
+        setKetcherSettings(await service.updateSettings(partial));
+      } catch (error) {
+        showError(`Could not apply the setting: ${describeError(error)}`);
+      }
+    },
+    [showError],
+  );
+
+  const handleChangeSetting = useCallback(
+    (key: string, value: SettingValue) => {
+      void applySetting({ [key]: value } as DeepPartial<Settings>);
+    },
+    [applySetting],
+  );
+
+  /**
+   * Ketcher keeps a measure's number and its unit as two independent keys: a
+   * numeric value patches the key, a unit name patches the unit key.
+   */
+  const handleChangeSettingUnit = useCallback(
+    (key: string, unitKey: string, value: number | string) => {
+      const partial = typeof value === "string" ? { [unitKey]: value } : { [key]: value };
+      void applySetting(partial as DeepPartial<Settings>);
+    },
+    [applySetting],
+  );
+
+  const handlePresetSetting = useCallback(async () => {
+    const service = settingsServiceRef.current;
+    if (!service) return;
+    try {
+      setKetcherSettings(await service.loadPreset("acs"));
+    } catch (error) {
+      showError(`Could not load the ACS preset: ${describeError(error)}`);
+    }
+  }, [showError]);
+
+  const handleResetSettings = useCallback(async () => {
+    const service = settingsServiceRef.current;
+    if (!service) return;
+    try {
+      setKetcherSettings(await service.resetToDefaults());
+    } catch (error) {
+      showError(`Could not reset the settings: ${describeError(error)}`);
+    }
+  }, [showError]);
+
   /** Dispatches a File menu item id to the command it runs (§5.9). */
   const handleFileAction = useCallback(
     (id: FileMenuId) => {
@@ -1093,6 +1285,7 @@ function App() {
         }}
       >
         <TabStrip
+          onOpenBackstage={openBackstage}
           leading={
             <FileMenu
               recent={recent}
@@ -1119,23 +1312,31 @@ function App() {
           )}
         </div>
       </div>
-      {(!provider || !ready || restoring) && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: tokens.zIndex.loading,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: tokens.fontFamily,
-            color: tokens.color.muted,
-            fontSize: "14px",
-            background: tokens.color.surface,
-          }}
-        >
-          Loading chemistry editor...
-        </div>
+      {backstageOpen && (
+        <Backstage
+          onClose={closeBackstage}
+          onNew={handleBackstageNew}
+          onImport={handleBackstageImport}
+          onOpen={handleBackstageOpen}
+          recent={recent}
+          onOpenRecent={handleBackstageOpenRecent}
+          onRemoveRecent={handleBackstageRemoveRecent}
+          tabs={tabSet}
+          activeTabId={tabSet.activeId}
+          onSwitchTab={handleBackstageSwitchTab}
+          onSave={handleBackstageSave}
+          onSaveAs={handleBackstageSaveAs}
+          onExport={handleBackstageExport}
+          indigoVersion={indigoInfo.version}
+          indigoPort={indigoInfo.port}
+          starting={!provider || !ready || restoring}
+          appVersion={packageJson.version}
+          ketcherSettings={ketcherSettings}
+          onChangeSetting={handleChangeSetting}
+          onChangeSettingUnit={handleChangeSettingUnit}
+          onPresetSetting={() => void handlePresetSetting()}
+          onResetSettings={() => void handleResetSettings()}
+        />
       )}
       {exportOpen && (
         <ExportDialog

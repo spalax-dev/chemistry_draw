@@ -59,7 +59,14 @@ export const tokens = {
     body: "12px",
   },
   zIndex: {
+    /** Popups anchored to the editor chrome, such as the File menu. */
     overlay: 1000,
+    /**
+     * The full-window backstage covers the editor; the document dialogs (Save
+     * As, Export, errors) raise themselves above it with `dialog`.
+     */
+    backstage: 1100,
+    dialog: 1200,
     loading: 9999,
   },
 } as const;
