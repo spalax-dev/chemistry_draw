@@ -12,7 +12,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   applyExport,
   closeAfterSave,
-  documentName,
   exportFileName,
   saveAsTarget,
   saveRequest,
@@ -26,6 +25,8 @@ import {
   activateTab,
   activeTab,
   addTab,
+  ALREADY_OPEN_MESSAGE,
+  canSaveToPath,
   closeTab,
   commitEditor,
   createTab,
@@ -35,6 +36,9 @@ import {
   EMPTY_KET,
   importedTab,
   isUntouchedTab,
+  pathBaseName,
+  resolveOpenTarget,
+  tabDisplayName,
   tabTitle,
   updateTab,
   type TabSet,
@@ -55,15 +59,17 @@ import {
   writeTextFileAt,
 } from "./fileSaver";
 import { routeSavedBlob } from "./saveRoute";
-import { CloseGuardDialog, ErrorDialog, ExportDialog } from "./ui/DocumentDialogs";
+import { CloseGuardDialog, ErrorDialog, ExportDialog, NoticeDialog } from "./ui/DocumentDialogs";
 import { EDITOR_BUTTONS } from "./ui/editorButtons";
+import { FileMenu } from "./ui/FileMenu";
 import { TabStrip } from "./ui/TabStrip";
 import { tokens } from "./ui/tokens";
-import { CUSTOM_BUTTONS, TOOLBAR_ICON_STYLES } from "./ui/toolbarIcons";
+import { addRecent, loadRecent, removeRecent, saveRecent } from "./recent";
+import type { FileMenuId } from "./fileMenu";
 
 /** The Save / Export helpers work on a document view of the active tab. */
-function documentView(tab: TabState): DocumentState {
-  return { path: tab.path, format: "ket", dirty: tab.dirty };
+function documentView(tab: TabState): DocumentState & { name: string | null } {
+  return { path: tab.path, name: tab.name, format: "ket", dirty: tab.dirty };
 }
 
 interface WindowClosePrompt {
@@ -158,14 +164,23 @@ function App() {
   /** Started before the editor initializes, resolved once it is ready. */
   const [restorePromise] = useState(() => readTabSet());
 
+  /** Remembered `.ket` paths, newest first (`docs/architecture.md` §5.9). */
+  const [recent, setRecent] = useState<string[]>(() => loadRecent());
+  const recentRef = useRef<string[]>(recent);
+
   const [exportOpen, setExportOpen] = useState(false);
   const [closePrompt, setClosePrompt] = useState<ClosePrompt | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  /** Already-open notice (§5.10); the caller supplies title and message. */
+  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
 
   const closeChoiceRef = useRef<((choice: CloseChoice) => void) | null>(null);
   const dialogOpenRef = useRef(false);
   const busyRef = useRef(false);
   const closingRef = useRef(false);
+  /** The File popup is open; keyboard shortcuts close it like a dialog. */
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const fileMenuOpenRef = useRef(false);
   /** True while a programmatic `setMolecule` runs; change events are ignored. */
   const loadingRef = useRef(false);
   const schedulerRef = useRef<AutosaveScheduler | null>(null);
@@ -178,10 +193,24 @@ function App() {
 
   const showError = useCallback((text: string) => setErrorText(text), []);
 
+  /** Applies a recent-list change, persists it, and repaints the menu. */
+  const updateRecent = useCallback((transform: (list: string[]) => string[]) => {
+    const next = transform(recentRef.current);
+    recentRef.current = next;
+    saveRecent(next);
+    setRecent(next);
+  }, []);
+
   const allocateTabId = useCallback(() => `tab-${nextTabIdRef.current++}`, []);
 
+  /** Keeps the rendered File menu and the shortcut handler in sync. */
+  const handleFileMenuOpenChange = useCallback((open: boolean) => {
+    fileMenuOpenRef.current = open;
+    setFileMenuOpen(open);
+  }, []);
+
   // Keep the keydown handler aware of the dialogs without re-subscribing.
-  const dialogsOpen = exportOpen || closePrompt !== null || errorText !== null;
+  const dialogsOpen = exportOpen || closePrompt !== null || errorText !== null || notice !== null;
   useEffect(() => {
     dialogOpenRef.current = dialogsOpen;
   }, [dialogsOpen]);
@@ -351,7 +380,8 @@ function App() {
       busyRef.current = true;
       try {
         const tab = activeTab(tabsRef.current);
-        const request = saveRequest(documentView(tab));
+        const view = documentView(tab);
+        const request = saveRequest(view, view.name);
         const ket = await ketcher.getKet();
 
         if (!isTauri()) {
@@ -377,7 +407,15 @@ function App() {
           path = saveAsTarget(chosen);
         }
 
+        // A path owned by another tab is refused before the write; the active
+        // tab's own path still saves (§5.10).
+        if (!canSaveToPath(tabsRef.current, path, tab.id)) {
+          setNotice({ title: "Already open", message: ALREADY_OPEN_MESSAGE });
+          return "cancelled";
+        }
+
         await writeTextFileAt(path, ket);
+        updateRecent((list) => addRecent(list, path));
 
         const next = updateTab(tabsRef.current, tab.id, { path, ket, dirty: false });
         setTabs(next);
@@ -393,7 +431,7 @@ function App() {
         busyRef.current = false;
       }
     },
-    [setTabs, showError],
+    [setTabs, showError, updateRecent],
   );
 
   /**
@@ -410,6 +448,9 @@ function App() {
 
       switch (route.kind) {
         case "document-save": {
+          // Dormant while native Save As is hidden: the app's Save path
+          // enforces `canSaveToPath`, and this branch only runs when Ketcher's
+          // own save handler is reachable.
           let path = route.path;
           if (path === null) {
             const chosen = await saveDialog({
@@ -423,6 +464,7 @@ function App() {
 
           const text = await blob.text();
           await writeTextFileAt(path, text);
+          updateRecent((list) => addRecent(list, path));
 
           const next = updateTab(tabsRef.current, tab.id, { path, ket: text, dirty: false });
           setTabs(next);
@@ -436,7 +478,7 @@ function App() {
           return;
       }
     },
-    [setTabs],
+    [setTabs, updateRecent],
   );
 
   const askCloseChoice = useCallback(
@@ -490,23 +532,15 @@ function App() {
   }, [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError]);
 
   /**
-   * Open reuses an untouched empty tab, otherwise it opens a new one. A dirty
-   * tab is never replaced and never prompts.
+   * Shared Open plumbing: commit and flush the outgoing tab, reuse an untouched
+   * empty tab (else allocate one), load the file behind the loading flag, then
+   * record the target tab, its snapshot and the new index. A dirty tab is never
+   * replaced and Open never prompts.
    */
-  const openDocumentFromDisk = useCallback(async () => {
-    const ketcher = ketcherRef.current;
-    if (!ketcher || busyRef.current) return;
-
-    try {
-      const chosen = await openDialog({
-        title: "Open structure",
-        multiple: false,
-        filters: [
-          { name: "Ketcher files", extensions: ["ket"] },
-          { name: "Structures", extensions: ["mol", "smi", "inchi", "sdf", "rxn"] },
-        ],
-      });
-      if (typeof chosen !== "string") return;
+  const openFileIntoTab = useCallback(
+    async (chosen: string, build: (id: string, text: string) => TabState): Promise<boolean> => {
+      const ketcher = ketcherRef.current;
+      if (!ketcher || busyRef.current) return false;
 
       busyRef.current = true;
       try {
@@ -519,26 +553,20 @@ function App() {
         if (outgoingTab) await writeTabSnapshot(outgoingTab, Date.now());
 
         const text = await readTextFile(chosen);
-        const isKet = /\.ket$/i.test(chosen);
         const reuse = outgoingTab !== undefined && isUntouchedTab(outgoingTab);
         const targetId = reuse ? outgoing.id : allocateTabId();
+        const target = build(targetId, text);
 
-        await loadTabIntoEditor({ ...createTab(targetId), ket: text });
+        await loadTabIntoEditor(target);
 
         const next = reuse
-          ? updateTab(
-              tabsRef.current,
-              targetId,
-              isKet
-                ? { path: chosen, ket: text, dirty: false }
-                : { path: null, ket: text, dirty: true },
-            )
-          : addTab(
-              tabsRef.current,
-              isKet
-                ? createTab(targetId, { path: chosen, ket: text })
-                : importedTab(targetId, text),
-            );
+          ? updateTab(tabsRef.current, targetId, {
+              path: target.path,
+              name: target.name,
+              ket: target.ket,
+              dirty: target.dirty,
+            })
+          : addTab(tabsRef.current, target);
         setTabs(next);
 
         const opened = next.tabs.find((tab) => tab.id === targetId);
@@ -548,15 +576,134 @@ function App() {
           next.activeId,
         );
         restartScheduler();
+        return true;
+      } catch (error) {
+        loadingRef.current = false;
+        showError(`Could not open ${chosen}: ${describeError(error)}`);
+        return false;
       } finally {
         busyRef.current = false;
       }
+    },
+    [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError],
+  );
+
+  /**
+   * A `.ket` file becomes the tab's document: it owns the path and stays clean.
+   * A path already held by a tab is not opened again: that tab is activated and
+   * the notice shows, before any file read (§5.10). The guard returns `true`
+   * because the request is satisfied — a recent entry must not be pruned.
+   */
+  const openProject = useCallback(
+    async (path: string): Promise<boolean> => {
+      const found = resolveOpenTarget(tabsRef.current, path);
+      if (found.kind === "activate") {
+        if (tabsRef.current.activeId !== found.tabId) await activateTabById(found.tabId);
+        setNotice({ title: "Already open", message: ALREADY_OPEN_MESSAGE });
+        return true;
+      }
+
+      const opened = await openFileIntoTab(path, (id, text) =>
+        createTab(id, {
+          path,
+          name: pathBaseName(path),
+          ket: text,
+          dirty: false,
+        }),
+      );
+      // A remembered entry moves to the front when reopened (§5.9).
+      if (opened) updateRecent((list) => addRecent(list, path));
+      return opened;
+    },
+    [activateTabById, openFileIntoTab, updateRecent],
+  );
+
+  /**
+   * Any other structure is imported clean: its content equals the source file,
+   * so no `.ket` path backs it until the first Save As.
+   */
+  const importStructure = useCallback(
+    (path: string) =>
+      openFileIntoTab(path, (id, text) => importedTab(id, text, pathBaseName(path))),
+    [openFileIntoTab],
+  );
+
+  /** File → Open…: `.ket` files only, routed through `openProject`. */
+  const openKetFile = useCallback(async () => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher || busyRef.current) return;
+
+    try {
+      const chosen = await openDialog({
+        title: "Open",
+        multiple: false,
+        filters: [{ name: "Ketcher files", extensions: ["ket"] }],
+      });
+      if (typeof chosen !== "string") return;
+
+      await openProject(chosen);
     } catch (error) {
-      loadingRef.current = false;
-      busyRef.current = false;
       showError(`Could not open the file: ${describeError(error)}`);
     }
-  }, [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError]);
+  }, [openProject, showError]);
+
+  /** File → Import…: structure formats, routed through `importStructure`. */
+  const importStructureFile = useCallback(async () => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher || busyRef.current) return;
+
+    try {
+      const chosen = await openDialog({
+        title: "Import",
+        multiple: false,
+        filters: [{ name: "Structures", extensions: ["mol", "smi", "inchi", "sdf", "rxn"] }],
+      });
+      if (typeof chosen !== "string") return;
+
+      await importStructure(chosen);
+    } catch (error) {
+      showError(`Could not import the file: ${describeError(error)}`);
+    }
+  }, [importStructure, showError]);
+
+  /** A recent entry opens through Open; a missing file is pruned (§5.9). */
+  const openRecentDocument = useCallback(
+    async (path: string) => {
+      if (busyRef.current) return;
+      const opened = await openProject(path);
+      if (!opened) updateRecent((list) => removeRecent(list, path));
+    },
+    [openProject, updateRecent],
+  );
+
+  /** Dispatches a File menu item id to the command it runs (§5.9). */
+  const handleFileAction = useCallback(
+    (id: FileMenuId) => {
+      if (dialogOpenRef.current || busyRef.current) return;
+
+      switch (id) {
+        case "new":
+          void startNewDocument();
+          return;
+        case "open":
+          void openKetFile();
+          return;
+        case "import":
+          void importStructureFile();
+          return;
+        case "save":
+          void saveActiveTab("save");
+          return;
+        case "save-as":
+          void saveActiveTab("save-as");
+          return;
+        case "export":
+          setExportOpen(true);
+          return;
+      }
+    },
+    [importStructureFile, openKetFile, saveActiveTab, startNewDocument],
+  );
 
   const exportDocument = useCallback(
     async (format: ExportFormat) => {
@@ -568,8 +715,9 @@ function App() {
         // Export is a separate file: the tab's path, format and dirty flag are
         // unchanged.
         const tab = activeTab(tabsRef.current);
-        const { request } = applyExport(documentView(tab), format);
-        const name = exportFileName(tab.path, request.extension);
+        const view = documentView(tab);
+        const { request } = applyExport(view, format);
+        const name = exportFileName(view.path, request.extension, view.name);
 
         switch (request.source) {
           case "getMolfile": {
@@ -632,7 +780,7 @@ function App() {
         const named = allowSave ? activeTab(set) : dirty[0];
         const choice = await askCloseChoice({
           kind: "window",
-          documentName: documentName(named.path),
+          documentName: tabDisplayName(named),
           dirtyCount: dirty.length,
           allowSave,
         });
@@ -688,7 +836,7 @@ function App() {
 
         const choice = await askCloseChoice({
           kind: "tab",
-          documentName: documentName(tab.path),
+          documentName: tabDisplayName(tab),
         });
         if (choice === "cancel") return;
         if (choice === "save") {
@@ -871,38 +1019,6 @@ function App() {
     return () => resetFileSaver();
   }, [ready, saveRoutedBlob, showError]);
 
-  // Ketcher's top-toolbar buttons emit `CUSTOM_BUTTON_PRESSED` with the button
-  // id; this listener is the single dispatcher for them (§5.9).
-  useEffect(() => {
-    if (!ready) return;
-    const ketcher = ketcherRef.current;
-    if (!ketcher) return;
-
-    const onCustomButton = (id: unknown) => {
-      if (typeof id !== "string") return;
-      if (dialogOpenRef.current || busyRef.current) return;
-
-      switch (id) {
-        case "chemistry-draw:save":
-          void saveActiveTab("save");
-          return;
-        case "chemistry-draw:new":
-          void startNewDocument();
-          return;
-        case "chemistry-draw:export":
-          setExportOpen(true);
-          return;
-        default:
-          return;
-      }
-    };
-
-    ketcher.eventBus.on("CUSTOM_BUTTON_PRESSED", onCustomButton);
-    return () => {
-      ketcher.eventBus.off("CUSTOM_BUTTON_PRESSED", onCustomButton);
-    };
-  }, [ready, saveActiveTab, startNewDocument]);
-
   // Document shortcuts. Ketcher binds its hotkeys on the editor container in the
   // bubble phase (`initKeydownListener`, `ketcher-react/dist/index.js`), so this
   // listener runs in the capture phase and stops the event before Ketcher sees
@@ -918,12 +1034,21 @@ function App() {
 
       const key = event.key.toLowerCase();
 
+      // The File popup behaves like a dialog for the shortcut guard: a matched
+      // combination closes it and is consumed without running its command.
+      const dismissFileMenu = (): boolean => {
+        if (!fileMenuOpenRef.current) return false;
+        fileMenuOpenRef.current = false;
+        setFileMenuOpen(false);
+        return true;
+      };
+
       // Tab shortcuts never close the window while a dialog is open, but a
       // matched combination is consumed first so Ketcher cannot see it.
       if (key === "w" || key === "t") {
         event.preventDefault();
         event.stopPropagation();
-        if (dialogOpenRef.current || busyRef.current) return;
+        if (dismissFileMenu() || dialogOpenRef.current || busyRef.current) return;
 
         if (key === "w") void closeTabById(tabsRef.current.activeId);
         else void startNewDocument();
@@ -933,7 +1058,7 @@ function App() {
       if (key === "tab") {
         event.preventDefault();
         event.stopPropagation();
-        if (dialogOpenRef.current || busyRef.current) return;
+        if (dismissFileMenu() || dialogOpenRef.current || busyRef.current) return;
 
         cycleTabs(event.shiftKey ? -1 : 1);
         return;
@@ -946,20 +1071,19 @@ function App() {
       event.preventDefault();
       event.stopPropagation();
 
-      if (dialogOpenRef.current || busyRef.current) return;
+      if (dismissFileMenu() || dialogOpenRef.current || busyRef.current) return;
 
       if (key === "s") void saveActiveTab(event.shiftKey ? "save-as" : "save");
-      else if (key === "o") void openDocumentFromDisk();
+      else if (key === "o") void openKetFile();
       else void startNewDocument();
     };
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [ready, saveActiveTab, openDocumentFromDisk, startNewDocument, closeTabById, cycleTabs]);
+  }, [ready, saveActiveTab, openKetFile, startNewDocument, closeTabById, cycleTabs]);
 
   return (
     <>
-      <style>{TOOLBAR_ICON_STYLES}</style>
       <div
         style={{
           display: "flex",
@@ -969,6 +1093,15 @@ function App() {
         }}
       >
         <TabStrip
+          leading={
+            <FileMenu
+              recent={recent}
+              open={fileMenuOpen}
+              onOpenChange={handleFileMenuOpenChange}
+              onAction={handleFileAction}
+              onOpenRecent={(path) => void openRecentDocument(path)}
+            />
+          }
           tabSet={tabSet}
           onActivate={(id) => void activateTabById(id)}
           onClose={(id) => void closeTabById(id)}
@@ -982,7 +1115,6 @@ function App() {
               buttons={EDITOR_BUTTONS}
               errorHandler={handleError}
               onInit={handleInit}
-              customButtons={CUSTOM_BUTTONS}
             />
           )}
         </div>
@@ -1020,6 +1152,13 @@ function App() {
         />
       )}
       {errorText !== null && <ErrorDialog message={errorText} onClose={() => setErrorText(null)} />}
+      {notice !== null && (
+        <NoticeDialog
+          title={notice.title}
+          message={notice.message}
+          onClose={() => setNotice(null)}
+        />
+      )}
     </>
   );
 }

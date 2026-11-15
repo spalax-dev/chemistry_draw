@@ -34,10 +34,11 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   },
 }));
 
-import { clearTabSnapshot, writeTabSnapshot } from "./tabStore";
+import { clearTabSnapshot, readTabSet, writeTabSnapshot } from "./tabStore";
 import { createTab } from "./tabs";
 
 const STRUCTURE = '{"root":{"nodes":[]}}';
+const BENZENE = "/home/jorge/Documents/benzene.ket";
 
 function snapshotFiles(id: string): string[] {
   return [...state.files.keys()].filter((path) => path.includes(`/${id}.`));
@@ -84,5 +85,127 @@ describe("tab snapshot lifecycle", () => {
     await Promise.all([clearing, writing]);
 
     expect(snapshotFiles("tab-race")).toEqual([]);
+  });
+});
+
+describe("tab metadata", () => {
+  beforeEach(() => {
+    state.files.clear();
+  });
+
+  it("persists the display name in the tab metadata", async () => {
+    await writeTabSnapshot(
+      createTab("tab-name", { name: "benzene", path: BENZENE, ket: STRUCTURE }),
+      1,
+    );
+
+    expect(JSON.parse(state.files.get("/app/recovery/tabs/tab-name.json") ?? "null")).toEqual({
+      name: "benzene",
+      path: BENZENE,
+      savedAt: 1,
+      dirty: false,
+    });
+  });
+
+  it("restores a tab with its persisted name", async () => {
+    await writeTabSnapshot(
+      createTab("tab-restore", { name: "benzene", path: BENZENE, ket: STRUCTURE }),
+      1,
+    );
+    state.files.set(
+      "/app/recovery/tabs/index.json",
+      JSON.stringify({ order: ["tab-restore"], activeId: "tab-restore" }),
+    );
+
+    expect(await readTabSet()).toEqual({
+      tabs: [{ id: "tab-restore", name: "benzene", path: BENZENE, ket: STRUCTURE, dirty: false }],
+      activeId: "tab-restore",
+    });
+  });
+
+  it("derives the name of a legacy entry from its path base name", async () => {
+    state.files.set(
+      "/app/recovery/tabs/index.json",
+      JSON.stringify({ order: ["tab-legacy"], activeId: "tab-legacy" }),
+    );
+    state.files.set(
+      "/app/recovery/tabs/tab-legacy.json",
+      JSON.stringify({ path: BENZENE, savedAt: 1, dirty: false }),
+    );
+    state.files.set("/app/recovery/tabs/tab-legacy.ket", STRUCTURE);
+
+    expect((await readTabSet())?.tabs[0]).toEqual({
+      id: "tab-legacy",
+      name: "benzene",
+      path: BENZENE,
+      ket: STRUCTURE,
+      dirty: false,
+    });
+  });
+
+  it("restores a legacy path-less entry with no name", async () => {
+    state.files.set(
+      "/app/recovery/tabs/index.json",
+      JSON.stringify({ order: ["tab-legacy-import"], activeId: "tab-legacy-import" }),
+    );
+    state.files.set(
+      "/app/recovery/tabs/tab-legacy-import.json",
+      JSON.stringify({ path: null, savedAt: 1, dirty: false }),
+    );
+    state.files.set("/app/recovery/tabs/tab-legacy-import.ket", STRUCTURE);
+
+    expect((await readTabSet())?.tabs[0]).toEqual({
+      id: "tab-legacy-import",
+      name: null,
+      path: null,
+      ket: STRUCTURE,
+      dirty: false,
+    });
+  });
+});
+
+describe("tab restore path dedupe", () => {
+  beforeEach(() => {
+    state.files.clear();
+  });
+
+  it("keeps the first tab for a path and drops a later duplicate", async () => {
+    await writeTabSnapshot(
+      createTab("tab-dup-a", { name: "benzene", path: BENZENE, ket: STRUCTURE }),
+      1,
+    );
+    await writeTabSnapshot(
+      createTab("tab-dup-b", { name: "benzene", path: BENZENE, ket: STRUCTURE }),
+      2,
+    );
+    state.files.set(
+      "/app/recovery/tabs/index.json",
+      JSON.stringify({ order: ["tab-dup-a", "tab-dup-b"], activeId: "tab-dup-b" }),
+    );
+
+    const restored = await readTabSet();
+
+    expect(restored?.tabs.map((tab) => tab.id)).toEqual(["tab-dup-a"]);
+    expect(restored?.activeId).toBe("tab-dup-a");
+  });
+
+  it("keeps a surviving active id even after a duplicate is dropped", async () => {
+    await writeTabSnapshot(
+      createTab("tab-dup-c", { name: "benzene", path: BENZENE, ket: STRUCTURE }),
+      1,
+    );
+    await writeTabSnapshot(
+      createTab("tab-dup-d", { name: "benzene", path: BENZENE, ket: STRUCTURE }),
+      2,
+    );
+    state.files.set(
+      "/app/recovery/tabs/index.json",
+      JSON.stringify({ order: ["tab-dup-c", "tab-dup-d"], activeId: "tab-dup-c" }),
+    );
+
+    const restored = await readTabSet();
+
+    expect(restored?.tabs.map((tab) => tab.id)).toEqual(["tab-dup-c"]);
+    expect(restored?.activeId).toBe("tab-dup-c");
   });
 });

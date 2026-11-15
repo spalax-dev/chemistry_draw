@@ -3,7 +3,7 @@
  * `recovery/tabs/`; the tab semantics stay pure in `tabs.ts`.
  *
  *   <appDataDir>/recovery/tabs/<id>.ket    working structure (.ket text)
- *   <appDataDir>/recovery/tabs/<id>.json   { path, savedAt, dirty }
+ *   <appDataDir>/recovery/tabs/<id>.json   { name, path, savedAt, dirty }
  *   <appDataDir>/recovery/tabs/index.json  { order: id[], activeId }
  *
  * Each tab's metadata is written last (commit record) and removed first (so an
@@ -24,10 +24,13 @@ import {
   parseAutosaveMeta,
   type AutosaveMeta,
 } from "./autosave";
-import { isKetDocument, type TabState } from "./tabs";
+import { isKetDocument, pathBaseName, pathKey, type TabState } from "./tabs";
 
-/** The `{ path, savedAt, dirty }` record committed after a tab's structure. */
-export type TabSnapshotMeta = AutosaveMeta;
+/** The `{ name, path, savedAt, dirty }` record committed after a tab's structure. */
+export interface TabSnapshotMeta extends AutosaveMeta {
+  /** Display name of a path-less imported tab; `null` when it has none. */
+  name: string | null;
+}
 
 /** `index.json`: the strip order and the tab the editor showed. */
 export interface TabIndex {
@@ -169,7 +172,12 @@ export function writeTabSnapshot(tab: TabState, savedAt: number): Promise<void> 
       return;
     }
 
-    const meta: TabSnapshotMeta = { path: tab.path, savedAt, dirty: tab.dirty };
+    const meta: TabSnapshotMeta = {
+      name: tab.name,
+      path: tab.path,
+      savedAt,
+      dirty: tab.dirty,
+    };
     await writeTextFile(paths.metadata, JSON.stringify(meta));
 
     if (!generation.isCurrent(token)) {
@@ -249,8 +257,25 @@ export async function readTabSet(): Promise<RestoredTabSet | null> {
 
     if (tabs.length === 0) return null;
 
-    const activeId = tabs.some((tab) => tab.id === index.activeId) ? index.activeId : tabs[0].id;
-    return { tabs, activeId };
+    // A set written before the guard existed can hold two tabs on one path:
+    // keep the first and drop later duplicates, then pick a surviving active.
+    const unique: TabState[] = [];
+    const seenPaths = new Set<string>();
+    for (const tab of tabs) {
+      if (tab.path !== null) {
+        const key = pathKey(tab.path);
+        if (seenPaths.has(key)) continue;
+        seenPaths.add(key);
+      }
+      unique.push(tab);
+    }
+
+    if (unique.length === 0) return null;
+
+    const activeId = unique.some((tab) => tab.id === index.activeId)
+      ? index.activeId
+      : unique[0].id;
+    return { tabs: unique, activeId };
   } catch {
     return null;
   }
@@ -291,15 +316,39 @@ async function readTab(id: string): Promise<TabState | null> {
 
   try {
     const paths = await tabPaths(id);
-    const meta = parseAutosaveMeta(await readTextFile(paths.metadata));
+    const meta = parseTabMeta(await readTextFile(paths.metadata));
     if (meta === null) return null;
 
     const ket = await readTextFile(paths.structure);
     if (!isKetDocument(ket)) return null;
-    return { id, path: meta.path, ket, dirty: meta.dirty };
+    return { id, name: meta.name, path: meta.path, ket, dirty: meta.dirty };
   } catch {
     return null;
   }
+}
+
+/**
+ * Reads one tab's metadata. A record written before the display name existed
+ * carries no `name`: it is derived from the path base name, and stays `null`
+ * for a path-less entry.
+ */
+function parseTabMeta(raw: string | null | undefined): TabSnapshotMeta | null {
+  const meta = parseAutosaveMeta(raw);
+  if (meta === null || typeof raw !== "string") return null;
+
+  let name: string | null = null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      const value = (parsed as Record<string, unknown>).name;
+      if (typeof value === "string") name = value;
+    }
+  } catch {
+    // `parseAutosaveMeta` already rejected unparseable JSON.
+  }
+
+  if (name === null && meta.path !== null) name = pathBaseName(meta.path);
+  return { ...meta, name };
 }
 
 /** Reads `index.json`; a missing, malformed or empty record yields `null`. */

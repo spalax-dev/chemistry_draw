@@ -12,6 +12,8 @@ export interface TabState {
   id: string;
   /** User-chosen `.ket` file, or `null` when the tab was never saved. */
   path: string | null;
+  /** Source file base name for a path-less import, or `null` when unnamed. */
+  name: string | null;
   /** Last committed `.ket` content, empty for an untouched tab. */
   ket: string;
   /** Unsaved edits since the last save, open or new. */
@@ -39,7 +41,6 @@ export interface TabsCloseGuardDecision {
   action: TabsCloseGuardAction;
 }
 
-const KET_EXTENSION = ".ket";
 const UNTITLED = "Untitled";
 
 /** Minimal valid `.ket` document: an empty canvas. */
@@ -50,6 +51,7 @@ export function createTab(id: string, init: TabInit = {}): TabState {
   return {
     id,
     path: init.path ?? null,
+    name: init.name ?? null,
     ket: init.ket ?? "",
     dirty: init.dirty ?? false,
   };
@@ -106,10 +108,18 @@ export function closeTab(set: TabSet, id: string, emptyId: string): TabSet {
   return { tabs, activeId: neighbour.id };
 }
 
-/** Base name without `.ket`, `Untitled` when path-less, plus `*` while dirty. */
+/**
+ * Path base name first, then the imported source `name`, then `Untitled`, plus
+ * `*` while dirty.
+ */
 export function tabTitle(tab: TabState): string {
-  const base = tab.path === null ? UNTITLED : baseName(tab.path);
+  const base = tab.path !== null ? pathBaseName(tab.path) : (tab.name ?? UNTITLED);
   return tab.dirty ? `${base}*` : base;
+}
+
+/** The same precedence as `tabTitle`, without the dirty marker: dialog copy. */
+export function tabDisplayName(tab: TabState): string {
+  return tab.path !== null ? pathBaseName(tab.path) : (tab.name ?? UNTITLED);
 }
 
 /** The tab the editor shows. Every set has an active tab. */
@@ -167,17 +177,76 @@ export function isKetDocument(text: string): boolean {
 /** An untouched tab Open may reuse instead of opening a new one. */
 export function isUntouchedTab(tab: TabState): boolean {
   const ket = tab.ket.trim();
-  return tab.path === null && !tab.dirty && (ket === "" || ket === EMPTY_KET);
+  return tab.name === null && tab.path === null && !tab.dirty && (ket === "" || ket === EMPTY_KET);
 }
 
-/** A tab Open loaded from a non-`.ket` file: no file backs its content. */
-export function importedTab(id: string, ket: string): TabState {
-  return createTab(id, { path: null, ket, dirty: true });
+/**
+ * A tab imported from a non-`.ket` file: clean (it equals its source file) and
+ * path-less until its first Save As, carrying the source file's base name.
+ */
+export function importedTab(id: string, ket: string, name: string | null = null): TabState {
+  return createTab(id, { path: null, name, ket, dirty: false });
 }
 
-/** Last path segment on POSIX (`/`) and Windows (`\`), without `.ket`. */
-function baseName(path: string): string {
+/**
+ * Last path segment on POSIX (`/`) and Windows (`\`), without its last
+ * extension: `benzene.ket` and `benzene.mol` both yield `benzene`. A name with
+ * no extension and a leading-dot dotfile such as `.enol` are kept as they are.
+ */
+export function pathBaseName(path: string): string {
   const segments = path.split(/[\\/]/);
   const name = segments[segments.length - 1] || path;
-  return name.toLowerCase().endsWith(KET_EXTENSION) ? name.slice(0, -KET_EXTENSION.length) : name;
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+/** One-sentence notice body for an already-open path (§6.7). */
+export const ALREADY_OPEN_MESSAGE = "This document is already open.";
+
+/**
+ * Comparison key for a document path (`docs/architecture.md` §5.10):
+ * separators are unified and collapsed, one trailing separator is dropped, and
+ * a Windows drive-letter path is lower-cased because that filesystem compares
+ * case-insensitively. A POSIX path keeps its case. Nothing else is normalised:
+ * no dot segments, no symlink resolution, no extension change.
+ */
+export function pathKey(path: string): string {
+  const unified = path.replace(/[\\/]+/g, "/");
+  const trimmed = unified.length > 1 && unified.endsWith("/") ? unified.slice(0, -1) : unified;
+  return /^[A-Za-z]:/.test(trimmed) ? trimmed.toLowerCase() : trimmed;
+}
+
+/** The tab holding a path, comparing through `pathKey`; `undefined` if none. */
+export function findTabByPath(set: TabSet, path: string): TabState | undefined {
+  const key = pathKey(path);
+  return set.tabs.find((tab) => tab.path !== null && pathKey(tab.path) === key);
+}
+
+/**
+ * The tab owning a path, optionally ignoring one tab (`excludeId`). Save As
+ * uses it to refuse a destination held by another tab while allowing the
+ * active tab's own path.
+ */
+export function tabOwningPath(set: TabSet, path: string, excludeId?: string): TabState | undefined {
+  const key = pathKey(path);
+  return set.tabs.find(
+    (tab) => tab.id !== excludeId && tab.path !== null && pathKey(tab.path) === key,
+  );
+}
+
+/** What Open does with a path: activate its owning tab, or open it. */
+export type OpenTarget = { kind: "activate"; tabId: string } | { kind: "open" };
+
+/** Open and Recent…: an owned path activates its tab, a free path opens. */
+export function resolveOpenTarget(set: TabSet, path: string): OpenTarget {
+  const owner = findTabByPath(set, path);
+  return owner ? { kind: "activate", tabId: owner.id } : { kind: "open" };
+}
+
+/**
+ * Save As…: a path owned by another tab is refused, while the tab's own path
+ * and a free path are allowed.
+ */
+export function canSaveToPath(set: TabSet, path: string, tabId: string): boolean {
+  return tabOwningPath(set, path, tabId) === undefined;
 }

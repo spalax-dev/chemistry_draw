@@ -7,12 +7,14 @@
  * instead, while the window title and dialog copy keep the asterisk.
  */
 
-import { useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { tabTitle, type TabSet, type TabState } from "../tabs";
 import { tokens } from "./tokens";
 
 export interface TabStripProps {
+  /** Rendered first inside the strip, before the tabs (the File button). */
+  leading?: ReactNode;
   tabSet: TabSet;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
@@ -35,6 +37,27 @@ const STRIP: CSSProperties = {
   whiteSpace: "nowrap",
   fontFamily: tokens.fontFamily,
   fontSize: tokens.tab.fontSize,
+};
+
+const LEADING: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  flex: "0 0 auto",
+  height: "100%",
+  marginRight: 4,
+};
+
+/**
+ * The `role="tablist"` scope excludes the File button: a tablist may only own
+ * tabs, so the File menu sits in the strip container next to it
+ * (`docs/conventions.md` §6.5, §6.6).
+ */
+const TABLIST: CSSProperties = {
+  display: "flex",
+  alignItems: "stretch",
+  flex: "1 1 auto",
+  minWidth: 0,
+  height: "100%",
 };
 
 const LABEL: CSSProperties = {
@@ -198,7 +221,7 @@ function NewTabButton({ onNew }: { onNew: () => void }) {
 }
 
 /** Top-of-window tab strip; the editor keeps the remaining height. */
-export function TabStrip({ tabSet, onActivate, onClose, onNew }: TabStripProps) {
+export function TabStrip({ leading, tabSet, onActivate, onClose, onNew }: TabStripProps) {
   const nodes = useRef(new Map<string, HTMLDivElement>());
 
   /** Roving tabindex: focus and activate the neighbour, wrapping at the ends. */
@@ -212,22 +235,25 @@ export function TabStrip({ tabSet, onActivate, onClose, onNew }: TabStripProps) 
   };
 
   return (
-    <div role="tablist" aria-label="Documents" style={STRIP}>
-      {tabSet.tabs.map((tab) => (
-        <TabItem
-          key={tab.id}
-          tab={tab}
-          active={tab.id === tabSet.activeId}
-          onActivate={() => onActivate(tab.id)}
-          onClose={() => onClose(tab.id)}
-          onNavigate={(direction) => navigate(tab.id, direction)}
-          register={(node) => {
-            if (node === null) nodes.current.delete(tab.id);
-            else nodes.current.set(tab.id, node);
-          }}
-        />
-      ))}
-      <NewTabButton onNew={onNew} />
+    <div style={STRIP}>
+      {leading !== undefined ? <div style={LEADING}>{leading}</div> : null}
+      <div role="tablist" aria-label="Documents" style={TABLIST}>
+        {tabSet.tabs.map((tab) => (
+          <TabItem
+            key={tab.id}
+            tab={tab}
+            active={tab.id === tabSet.activeId}
+            onActivate={() => onActivate(tab.id)}
+            onClose={() => onClose(tab.id)}
+            onNavigate={(direction) => navigate(tab.id, direction)}
+            register={(node) => {
+              if (node === null) nodes.current.delete(tab.id);
+              else nodes.current.set(tab.id, node);
+            }}
+          />
+        ))}
+        <NewTabButton onNew={onNew} />
+      </div>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 /**
- * In-app dialogs for the document workflow: the close guard, Export and
- * save/export errors. They are presentational only — App.tsx owns the state and
- * the decisions (see `docs/conventions.md` §6). Startup restore is silent, so
- * there is no recovery dialog.
+ * In-app dialogs for the document workflow: the close guard, Export,
+ * save/export errors and the already-open notice. They are presentational only
+ * — App.tsx owns the state and the decisions (see `docs/conventions.md` §6).
+ * Startup restore is silent, so there is no recovery dialog.
  */
 
 import { closeGuardCopy, type CloseGuardAction } from "../closeGuardCopy";
@@ -136,6 +136,33 @@ export function ErrorDialog({ message, onClose }: ErrorDialogProps) {
       actions={
         <Button variant="primary" data-autofocus="true" onClick={onClose}>
           Close
+        </Button>
+      }
+    >
+      <p style={PARAGRAPH}>{message}</p>
+    </Dialog>
+  );
+}
+
+export interface NoticeDialogProps {
+  title: string;
+  /** One sentence stating the situation; the caller owns the copy. */
+  message: string;
+  onClose: () => void;
+}
+
+/**
+ * Plain notice with a single acknowledgement action (§6.7): the already-open
+ * guard uses it, and Escape dismisses it like the button.
+ */
+export function NoticeDialog({ title, message, onClose }: NoticeDialogProps) {
+  return (
+    <Dialog
+      title={title}
+      onCancel={onClose}
+      actions={
+        <Button variant="primary" data-autofocus="true" onClick={onClose}>
+          OK
         </Button>
       }
     >

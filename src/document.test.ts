@@ -94,6 +94,15 @@ describe("document names", () => {
   it("falls back to untitled for an export from an unsaved document", () => {
     expect(exportFileName(null, ".smi")).toBe("untitled.smi");
   });
+
+  it("uses the fallback name for an export from a path-less document", () => {
+    expect(exportFileName(null, ".mol", "benzene")).toBe("benzene.mol");
+    expect(exportFileName(null, ".svg", "benzene")).toBe("benzene.svg");
+  });
+
+  it("ignores the fallback name when the document has a path", () => {
+    expect(exportFileName(BENZENE, ".mol", "source")).toBe("benzene.mol");
+  });
 });
 
 describe("save target", () => {
@@ -101,8 +110,16 @@ describe("save target", () => {
     expect(saveTarget(newDocument())).toBe("untitled.ket");
   });
 
+  it("defaults to <name>.ket for a path-less document with a fallback name", () => {
+    expect(saveTarget(newDocument(), "benzene")).toBe("benzene.ket");
+  });
+
   it("reuses the current path", () => {
     expect(saveTarget(openDocument(BENZENE))).toBe(BENZENE);
+  });
+
+  it("ignores the fallback name when the document has a path", () => {
+    expect(saveTarget(openDocument(BENZENE), "source")).toBe(BENZENE);
   });
 
   it("appends .ket for Save As when the extension is missing", () => {
@@ -126,6 +143,19 @@ describe("save target", () => {
       extension: ".ket",
       source: "getKet",
     });
+  });
+
+  it("prefills Save with <name>.ket for a path-less document", () => {
+    expect(saveRequest(newDocument(), "benzene")).toEqual({
+      path: "benzene.ket",
+      format: "ket",
+      extension: ".ket",
+      source: "getKet",
+    });
+  });
+
+  it("ignores the fallback name for Save when a path exists", () => {
+    expect(saveRequest(openDocument(BENZENE), "source").path).toBe(BENZENE);
   });
 });
 

@@ -19,6 +19,10 @@ describe("EDITOR_BUTTONS", () => {
     expect(config.recognize?.hidden).toBe(true);
   });
 
+  it("keeps native Open visible as the canvas-load path", () => {
+    expect(config.open?.hidden).not.toBe(true);
+  });
+
   it("hides nothing else", () => {
     expect(Object.keys(EDITOR_BUTTONS).sort()).toEqual([...HIDDEN_BUTTONS].sort());
   });

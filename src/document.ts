@@ -45,7 +45,7 @@ export interface CloseGuardDecision {
 export type SaveOutcome = "saved" | "cancelled" | "failed";
 
 const KET_EXTENSION = ".ket";
-const DEFAULT_SAVE_NAME = "untitled.ket";
+const DEFAULT_NAME = "untitled";
 
 const EXPORT_REQUESTS: Record<ExportFormat, ExportRequest> = {
   v2000: { format: "v2000", source: "getMolfile", argument: "v2000", extension: ".mol" },
@@ -87,14 +87,26 @@ export function documentName(path: string | null): string {
   return path === null ? "Untitled" : baseName(path);
 }
 
-/** Export file name: the document base name plus the format extension. */
-export function exportFileName(path: string | null, extension: string): string {
-  return path === null ? `untitled${extension}` : `${baseName(path)}${extension}`;
+/**
+ * Export file name: the document base name plus the format extension. A
+ * path-less document prefills its fallback name, else `untitled`.
+ */
+export function exportFileName(
+  path: string | null,
+  extension: string,
+  fallbackName?: string | null,
+): string {
+  if (path !== null) return `${baseName(path)}${extension}`;
+  return `${fallbackName ?? DEFAULT_NAME}${extension}`;
 }
 
-/** Where Save writes: the current path, or the default for a new document. */
-export function saveTarget(state: DocumentState): string {
-  return state.path ?? DEFAULT_SAVE_NAME;
+/**
+ * Where Save writes: the current path, or `<fallbackName>.ket` for an imported
+ * path-less document, else the default for a new one.
+ */
+export function saveTarget(state: DocumentState, fallbackName?: string | null): string {
+  if (state.path !== null) return state.path;
+  return `${fallbackName ?? DEFAULT_NAME}${KET_EXTENSION}`;
 }
 
 /** Save As target: keeps `.ket`, appending it when the extension is missing. */
@@ -103,9 +115,9 @@ export function saveAsTarget(path: string): string {
 }
 
 /** The `.ket` write behind Save. */
-export function saveRequest(state: DocumentState): SaveRequest {
+export function saveRequest(state: DocumentState, fallbackName?: string | null): SaveRequest {
   return {
-    path: saveTarget(state),
+    path: saveTarget(state, fallbackName),
     format: "ket",
     extension: KET_EXTENSION,
     source: "getKet",
