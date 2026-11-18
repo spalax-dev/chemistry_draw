@@ -1373,6 +1373,14 @@ structure exists.
 
 Measured latency on CPU in the toolchain report: p50 **49 ms**, p95 **206 ms**.
 
+Phase D runs a `pilot300` parity check of the shipped classifier (FP16) and the
+hand-drawn OCSR (FP32) against the toolchain's frozen predictions; the protocol,
+references and report live in
+[`benchmarks/model-parity.md`](benchmarks/model-parity.md). It is a parity
+check, not a recalibration: `0.000089` stays unless the pilot evidence justifies
+a follow-up, and the run converts TIFF pilot images to RGB PNG only because the
+app decodes PNG/JPEG/WebP.
+
 ### Endpoint
 
 `POST /v2/filter/classify`

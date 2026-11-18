@@ -468,8 +468,51 @@
       Indigo/ONNX Runtime retained and no weights added; no `.onnx`, `.part`,
       `models/` or `.so` file is committed; `node scripts/harness.mjs` is green.
 
+## C15 — Phase D model-parity pilot
+
+- [x] The protocol is documented in `docs/benchmarks/model-parity.md` with
+      purpose, provenance, frozen IDs, classifier mapping, OCSR metric rules,
+      acceptance, TIFF conversion and tracking policy, and the report has no
+      `TBD` left.
+- [x] The classifier FP16 run reproduces the same-ID FP16 reference: binary
+      accuracy **≥ 0.7231** (0.7281 reference − 0.5 pp, 165/228) over **228**
+      non-reaction rows, all 300 images decoded, and the 72 `reactions` reported
+      separately (not counted in the binary matrix). Confusion TP/FN/FP/TN
+      recorded.
+- [x] The hand-drawn OCSR FP32 run reproduces the FP32 pilot reference: RDKit
+      canonical **≥ 0.7092** (0.7192 reference − 1.0 pp, 208/292) over
+      comparable pairs; exact (reference 121/300), valid (299/300, 1
+      incomplete), comparable `n` and the `422`/incomplete rule recorded.
+- [x] p50/p95 are recorded on the same machine and the shipped **release**
+      binary (nearest-rank, after one warm-up) for both models, and per-image
+      agreement plus every disagreement against the toolchain is recorded (raw
+      rows stay under `target/benchmarks/`); debug-build latency is not
+      reported as the app result.
+- [x] The classifier artifact (`d5f5506…af505a9`), encoder
+      (`996727a2…c78193f52`), decoder (`cfff9788…c6bb6d68197`) and vocab
+      (`62c84d90…fa3c7dd`) hashes are checked equal to the toolchain selection;
+      the report pins the toolchain commit `c2265a6d`, the frozen-manifest and
+      label SHA-256 values, and the run identity.
+- [x] The TIFF → RGB PNG conversion rule is followed for the 197 classifier
+      pilot TIFFs (toolchain Pillow, first frame, lossless RGB pixels, temp
+      files only), and the app's supported formats remain PNG/JPEG/WebP only.
+- [x] The threshold decision is recorded: classifier `0.000089` and OCSR
+      `0.901` are retained unless the pilot evidences a parity failure that
+      justifies a separate calibration; no per-image tuning was done.
+- [x] The parity unit tests in `scripts/lib/model-parity.test.mjs` are green and
+      mutation-checked: including reactions, flipping the mapping, using 300 as
+      the canonical denominator, counting a `422` as valid/comparable, letting
+      an invalid row carry a canonical result, or breaking the nearest-rank
+      percentile must each fail.
+- [x] The classifier reference reconciliation is recorded: the historical
+      `classifier.fp32.pilot300.json` (`0.7361`, n=216, 84 reactions) is not the
+      current frozen pilot (0/300 ID overlap; 8/300 category+filename) and was not used as the baseline.
+- [x] No dataset (166 MB classifier / 25 MB HDM), toolchain checkout, model
+      weight, converted PNG or raw per-image prediction is committed;
+      `node scripts/harness.mjs` is green.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C14 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C15 remain empty.

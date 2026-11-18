@@ -697,3 +697,30 @@ available.`) forces the control visible (attention override) because a
   Repair; 500 repair keeps the control; repair completion hides it; accepted
   202 is not proof; close-during-repair then a new failure keeps it visible.
 - Review: four rounds; final PASS.
+
+## 2026-11-17/18 — Activity 15: phase-d-model-parity
+
+Phase D parity pilot against the DECIMER ONNX toolchain benchmark.
+
+- Ran the frozen pilot300 through the release sidecar for both shipped models;
+  the ONNX artifacts are byte-identical to the toolchain selections (classifier
+  `d5f5506…`, encoder `996727a2…`, decoder `cfff9788…`; toolchain `c2265a6`).
+- Classifier FP16: 166/228 = 0.7281 (TP 87/FN 62/FP 0/TN 79), 72 reactions
+  reported separately, 300/300 per-image agreement with both the FP16 and FP32
+  eval predictions restricted to the same IDs. Gate ≥ 0.7231 PASS.
+- Hand-drawn OCSR FP32: 211/290 canonical = 0.7276 vs 0.7192 reference, exact
+  122/300 vs 121, valid 299/1. Gate ≥ 0.7092 PASS. Nine raw disagreements
+  (3 canonical-equivalent, 3 canonical mismatch, 2 unparseable, 1 incomplete),
+  stable across runs; the likely cause is the Pillow-vs-`image` resampler.
+- The historical `classifier.fp32.pilot300.json` is stale (0/300 ID overlap;
+  8/300 category+filename) and was not used; the reference is derived from
+  `classifier.e4-fp16.eval1000.json` filtered to the frozen pilot IDs.
+- Release latency: classifier p50/p95 124.4/425.9 ms vs the toolchain
+  49.2/206.5 in-process; the gap is preprocessing/transport (2.5x/2.1x) and is
+  a Phase D performance finding. OCSR 1681.7/3557.0 ms; the one incomplete
+  decode took 37.3 s, the top Phase D performance finding.
+- Thresholds retained: classifier `0.000089`, OCSR `0.901`; no per-image tuning.
+- Tracking: harness, comparator, report and docs committed; the 166 MB dataset,
+  raw predictions and converted images stay in the toolchain/`target/`.
+- Tests: 51 parity (143 Node), 296 Vitest, 238 sidecar; harness green.
+- Review: one round plus fixes; final PASS.

@@ -890,6 +890,66 @@ greps, the packaged sidecar on an empty root through the real
 download/verify/filter/OCSR smoke, and the packaged app's clean app-data Models
 flow).
 
+### 6.4 Model parity harness (Phase D)
+
+The Phase D pilot (`docs/benchmarks/model-parity.md`) has two layers. The
+**pure metric layer** is unit-tested in Node; the **benchmark run** is manual
+and gated, because it needs the external datasets, the toolchain and the
+installed models.
+
+| Layer             | Files                                                               | How it runs                                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pure metric layer | `scripts/lib/model-parity.mjs`, `scripts/lib/model-parity.test.mjs` | `node --test scripts/lib/model-parity.test.mjs`; `scripts/harness.mjs` block 3 auto-discovers every `scripts/lib/*.test.mjs` (7 files, 143 tests; 51 in this file)     |
+| RDKit comparator  | `scripts/lib/ocsr-match.py`                                         | Called by the runner with `$TOOLCHAIN/.venv/bin/python`; reads JSONL `{id, expected, got}` and writes `exact`/`canonical`/`valid`/`incomparable` plus canonical SMILES |
+| Runner            | `scripts/model-parity.mjs`                                          | Manual, with `$TOOLCHAIN`, `CHEMISTRY_MODELS_DIR` and `ORT_DYLIB_PATH`; documented in `docs/verification.md` §2 "Model parity pilot (Phase D)"                         |
+
+The unit tests use synthetic fixtures only: no dataset, no model, no sidecar,
+no network. They pin these rules:
+
+- **Label mapping:** `one_molecule` and `several_molecules` → `structure`;
+  `other` → `no-structure`; `reactions` is excluded from the binary metric and
+  reported separately. An unknown category is rejected, not silently mapped.
+- **Binary metric:** accuracy is `(TP + TN) / n` over the non-reaction rows
+  only; TP/FN/FP/TN follow the documented row order; a reaction row never
+  enters the denominator. A fixture with TP 87, FN 62, FP 0, TN 79 (166/228)
+  pins the binary function used for the reference derivation.
+- **OCSR metric:** `exact_match` is raw string equality over all 300 rows;
+  `canonical_match` is RDKit canonical equality over comparable pairs only (a
+  `422`/incomplete has no returned SMILES and is not comparable); a `422`
+  still counts as invalid and as an exact failure. `valid` mirrors the
+  toolchain heuristic (an answer exists, not an RDKit parse check);
+  `incomparable` covers both missing answers and either side failing to parse.
+  An invalid (`422`/incomplete) row carrying a boolean canonical result is
+  rejected, so it cannot enter the comparable denominator.
+- **Percentiles:** nearest-rank on the sorted latencies, index
+  `ceil(p * n) - 1`; p50/p95 for small fixtures and for `n = 300` (indices 149
+  and 284).
+- **Reference derivation:** filtering the toolchain eval details by frozen pilot
+  IDs keeps 300 rows, recomputes the same binary aggregate, and rejects a
+  duplicate or missing ID.
+- **Threshold direction:** `score <= 0.000089` is `structure`; the boundary
+  value and values a small step above/below are asserted (the test STEP is
+  16,384 ULPs at `0.000089`).
+- **Sidecar default:** the runner defaults to `target/release/indigo-server`
+  (the shipped build) and never to `target/debug`; `--sidecar` stays the
+  override. A debug-build latency must not be reported as the app result.
+
+**Mutation rule.** Each of these must fail a test: including `reactions` in
+the binary denominator, flipping `structure`/`no-structure`, counting a
+reaction as `no-structure`, using 300 instead of the comparable-pair count for
+canonical accuracy, counting an incomplete/`422` as valid or as comparable,
+letting an invalid row carry a canonical result, replacing nearest-rank with the
+mean or an off-by-one index, computing accuracy over all 300 instead of the
+binary `n`, treating `score < 0.000089` as `structure`, or accepting a
+duplicate/missing pilot ID. A metric change that no unit test catches is a
+review finding.
+
+The benchmark run itself is not CI: it is the gated manual procedure in
+`docs/verification.md` §2, and its raw output stays under `target/benchmarks/`.
+The committed report is `docs/benchmarks/model-parity.md` §4; unit tests never
+read the external datasets. The reference-shaped fixtures (166/228, 210/292,
+121/300, 299/300) pin the metric function, not the benchmark result.
+
 ---
 
 ## 7. Assertion quality

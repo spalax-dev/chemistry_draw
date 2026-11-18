@@ -4,14 +4,14 @@
 
 ## Overview
 
-| Phase  | Goal                                                   | Depends on               | Outcome                                                         |
-| ------ | ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------- |
-| **A**  | Remove Imago dependency entirely                       | —                        | Smaller, simpler packages; Imago-free release on all platforms  |
-| **B1** | Filter model: molecule present vs. not                 | A (recommended)          | ONNX foundation + classifier endpoint (in progress)             |
-| **B2** | OCSR model: image → structure                          | B1                       | Local end-to-end image→molfile (replaces Imago recognition)     |
-| **B3** | Remote model delivery from Hugging Face + first-run UX | B2                       | Lightweight installers; on-demand download + progress/setup UI  |
-| **C**  | Update Ketcher + enable language selector              | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config |
-| **D**  | Live local functional review                           | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next   |
+| Phase  | Goal                                                   | Depends on               | Outcome                                                                                             |
+| ------ | ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| **A**  | Remove Imago dependency entirely                       | —                        | Smaller, simpler packages; Imago-free release on all platforms                                      |
+| **B1** | Filter model: molecule present vs. not                 | A (recommended)          | ONNX foundation + classifier endpoint (in progress)                                                 |
+| **B2** | OCSR model: image → structure                          | B1                       | Local end-to-end image→molfile (replaces Imago recognition)                                         |
+| **B3** | Remote model delivery from Hugging Face + first-run UX | B2                       | Lightweight installers; on-demand download + progress/setup UI                                      |
+| **C**  | Update Ketcher + enable language selector              | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config                                     |
+| **D**  | Live local functional review                           | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next (in progress: live functional review) |
 
 > Recommended sequencing: **A → B1 → B2 → B3**, with **C** tracked in parallel and merged whenever the upstream fix ships; **D** runs after the filter + OCSR path is usable locally (and again after B3/C).
 
@@ -71,7 +71,7 @@ package sizes are recorded below.
 
 **Goal:** given an input image, decide whether it contains a **chemical structure**; reject non-molecule images locally with a user-meaningful result before any OCSR work happens.
 
-**Status: in progress (started 2026-11-11).** Activity 3 (`phase-b1-onnx-filter`) is complete: the ONNX Runtime foundation (`ort` 2.0.0-rc.15, CPU, one intra-op thread, lazy cached sessions, **dynamic runtime loading**), the gitignored `models/` layout with a checksummed manifest, the DECIMER image classifier with `runtime_default` preprocessing, and `POST /v2/filter/classify` (raw image, 10 MiB cap, 400/413/503) are in place. Activity 7 (`ship-onnx-runtime`) delivers the runtime shipment: pinned, SHA-256-verified ONNX Runtime **1.31.0** on Linux (builder image → `task libs`/packages) and Windows (`fetch-windows-libs.ps1`), symlink-preserving `cp -a` copies, host `ORT_DYLIB_PATH` resolution (debug `.ort/<platform>` override → bundled `lib/<platform>`; release bundled), and no link-time dependency. The payloads carry one real `libonnxruntime.so.1.31.0` plus its `.so.1`/`.so` symlinks and the measured size delta is recorded below. Still open: real-input calibration of the threshold, asserting the fixed classifier input names at load time (B3 hardening), and B2 (OCSR + UI wiring).
+**Status: in progress (started 2026-11-11).** Activity 3 (`phase-b1-onnx-filter`) is complete: the ONNX Runtime foundation (`ort` 2.0.0-rc.15, CPU, one intra-op thread, lazy cached sessions, **dynamic runtime loading**), the gitignored `models/` layout with a checksummed manifest, the DECIMER image classifier with `runtime_default` preprocessing, and `POST /v2/filter/classify` (raw image, 10 MiB cap, 400/413/503) are in place. Activity 7 (`ship-onnx-runtime`) delivers the runtime shipment: pinned, SHA-256-verified ONNX Runtime **1.31.0** on Linux (builder image → `task libs`/packages) and Windows (`fetch-windows-libs.ps1`), symlink-preserving `cp -a` copies, host `ORT_DYLIB_PATH` resolution (debug `.ort/<platform>` override → bundled `lib/<platform>`; release bundled), and no link-time dependency. The payloads carry one real `libonnxruntime.so.1.31.0` plus its `.so.1`/`.so` symlinks and the measured size delta is recorded below. The Phase D model-parity pilot completed on 2026-11-17 with both gates passing and the classifier threshold retained (`docs/benchmarks/model-parity.md` §4). Still open: asserting the fixed classifier input names at load time (B3 hardening) and B2 (OCSR + UI wiring).
 
 - Runtime decided: **ONNX Runtime** via `ort` 2.0.0-rc.15, CPU only, loaded dynamically (`load-dynamic` + `ORT_DYLIB_PATH`); no Python and no TensorFlow at runtime. B1 ships the pinned 1.31.0 native library; model weights stay download-only (B3).
 - Package-size delta, measured with `task packages` inside the rebuilt `chemistry-builder` image (baseline: runtime-free 0.1.6). The delta is measured after restoring the symlink chain in the deb/rpm payloads; Tauri's resource copier dereferences symlinks, so `scripts/repack-native-payload.sh` repacks them with gzip payloads.
@@ -88,7 +88,7 @@ package sizes are recorded below.
 > ~11 MB). No model weights are bundled.
 
 - I/O contract: raw image → `contains_molecule`, `category`, `score`, `threshold`, `logit` and a `model` id. Low score means structure (`score <= 0.000089`).
-- Local evaluation: the frozen upstream evaluation (binary accuracy 0.7679, AUC 0.603, p50 49 ms / p95 206 ms on CPU) is recorded; a curated chemistry-draw set is still needed to re-calibrate the threshold on real inputs.
+- Local evaluation: the frozen upstream evaluation (binary accuracy 0.7679, AUC 0.603, p50 49 ms / p95 206 ms on CPU) is recorded. The Phase D model-parity pilot (2026-11-17) reproduced the FP16 same-pilot reference exactly (166/228, 300/300 same-ID agreement) and retained `0.000089`; a threshold recalibration remains a separate activity.
 - **Known limitation:** binary only — 146 of 250 multi-molecule images (~58%) are classified `no-structure`, and no confidence gate applies.
 - **DoD:** deterministic local inference, documented model/version/source, tests/eval passing on positives and negatives, no network dependency.
 
@@ -180,7 +180,7 @@ conditional **Models** toolbar entry (visible only while setup needs attention),
 the auto-opened in-app dialog with opt-in
 Download/Resume/Repair/Update/Verify, progress polling, in-dialog errors,
 Later, and the in-place `imago_versions` update that enables Recognize without
-losing the canvas. The post-B3 polish hides the control on a healthy install,
+losing the canvas. The post-B3 polish (done in `fb16451`) hides the control on a healthy install,
 keeps it while an update, repair, run or recognition-reported model failure
 needs attention, and removes the redundant licenses/source block (attribution
 stays in `NOTICE`). Activity 13 (`phase-b3-clean-install`) validated the
@@ -232,6 +232,15 @@ GUI check passed on the user's machine.
 
 ## D — Live local functional review
 
+**Status: in progress (started 2026-11-17).** The **model-parity pilot** is
+complete (`docs/benchmarks/model-parity.md` §4): the frozen `pilot300` splits
+for the two shipped models through the sidecar, compared with the
+decimer-onnx-toolchain's frozen predictions (toolchain commit `c2265a6d`).
+Both gates passed — classifier 0.7281 (166/228, 300/300 same-ID agreement) and
+OCSR canonical 0.7276 (211/290) — so `0.000089` and `0.901` are retained; the
+nine OCSR per-image differences and latency are recorded. The live functional
+review (real drawing, Indigo, recognition UX and packaging) follows.
+
 **Objective:** validate the real user experience and decide the next backlog with evidence.
 
 - **Test matrix (real usage):** structure drawing/editing, Indigo operations (clean/aromatize/convert/layout as applicable), image recognition end-to-end (hand-drawn + printed), error states (no models, bad image, offline), and packaging smoke per target.
@@ -249,6 +258,7 @@ delivered (ONNX Runtime foundation and the classifier endpoint), and **B2** is
 delivered (hand-drawn OCSR, the filter and `imago/uploads` compatibility job and the
 _Recognize Molecule_ UI, with `0.901` as a provisional confidence gate). **B3 is
 complete** (2026-11-15): the model catalog/downloader, the first-run setup UI
-and the clean-install validation are in place. The remaining follow-ups are
-real-input threshold calibration, the packaged-GUI polish, Phase C (upstream
-Ketcher fix) and the Phase D live review.
+and the clean-install validation are in place. The remaining follow-ups are the
+rest of the Phase D live review (the model-parity pilot is complete, both gates
+passed and the thresholds are retained), Phase C (upstream Ketcher fix) and any
+optional preprocessing-parity follow-up.

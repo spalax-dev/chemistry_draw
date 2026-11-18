@@ -763,6 +763,131 @@ for 10 minutes (a lost worker) also becomes the timeout `FAILURE` on its next
 poll, and a resolved job is pruned 10 minutes after it resolved. The worker and
 store tests cover both boundaries without waiting.
 
+### Model parity pilot (Phase D)
+
+Manual and gated: it needs the external decimer-onnx-toolchain checkout, its
+datasets and the installed models. CI never downloads the datasets or runs the
+benchmark. The protocol and acceptance are in
+`docs/benchmarks/model-parity.md`; this section is the run checklist.
+
+**Prerequisites.**
+
+| Item      | Requirement                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| Toolchain | `$TOOLCHAIN` checkout at commit `c2265a6d83f3eb5a7ef0fd5df4741335627c5f20` (outside this repo)            |
+| Datasets  | `$TOOLCHAIN/data/benchmark/classifier-curated/classified/` and `$TOOLCHAIN/data/benchmark/handdrawn-hdm/` |
+| Models    | `models/manifest.json`, the classifier file and the three `ocsr-handdrawn-fp32` artifacts                 |
+| Runtime   | A loadable ONNX Runtime (`ORT_DYLIB_PATH`, or the bundled `lib/<platform>/`)                              |
+| Python    | `$TOOLCHAIN/.venv/bin/python` with Pillow and RDKit 2026.09.1                                             |
+
+1. Verify the model hashes before starting:
+
+   ```bash
+   sha256sum models/image-classifier-fp16/classifier.fp16.onnx \
+             models/ocsr-handdrawn-fp32/encoder.onnx \
+             models/ocsr-handdrawn-fp32/decoder_step.onnx \
+             models/ocsr-handdrawn-fp32/vocab.json
+   ```
+
+   Expected: `d5f5506b…af505a9` (classifier), `996727a2…c78193f52`
+   (encoder), `cfff9788…c6bb6d68197` (decoder), `62c84d90…fa3c7dd` (vocab).
+   A mismatch stops the run: it is a setup failure, not a parity result.
+
+2. Verify the frozen inputs against the SHA-256 table in
+   `docs/benchmarks/model-parity.md` §2 (`classifier.frozen.json`,
+   `handdrawn.frozen.json`, both `labels.jsonl`, and the reference JSON files).
+
+3. The runner starts the sidecar itself. It sets `CHEMISTRY_MODELS_DIR`,
+   `ORT_DYLIB_PATH`, `LD_LIBRARY_PATH=<repo>/src-tauri/lib/linux-x86_64` (Indigo)
+   and an explicit free loopback port (`INDIGO_PORT=<n>`), parses the
+   `INDIGO_PORT=<n>` stdout line, and confirms `/v2/health` lists
+   `image-classifier@Iagea/d21f4cb` and `ocsr-handdrawn@zenodo:10781330`. It
+   never probes or binds 9321 and never touches a running packaged app.
+   `INDIGO_PORT=0` would be the natural choice, but the sidecar binds an
+   ephemeral port and then reports the literal `INDIGO_PORT=0`, so the runner
+   allocates the free port in Node first. To run the sidecar by hand:
+
+   ```bash
+   cargo build --release -p indigo-server --bin indigo-server
+   INDIGO_PORT=44100 CHEMISTRY_MODELS_DIR=$PWD/models \
+     ORT_DYLIB_PATH=$PWD/.ort/linux-x86_64/libonnxruntime.so \
+     LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
+     target/release/indigo-server
+   curl -s http://127.0.0.1:44100/v2/health
+   ```
+
+   Use the **release** binary for the pilot: it is what the app ships, and it
+   is the only build whose latency is comparable to the toolchain. A debug
+   binary (`target/debug/indigo-server`) is fine for a functional smoke test but
+   its latency must never be reported as the app result.
+
+4. Conversion is automatic: the runner converts the **197 TIFF** classifier
+   pilot images to RGB PNG with the toolchain Pillow
+   (`$TOOLCHAIN/.venv/bin/python`): first frame, `convert("RGB")`, no
+   resize/normalization, temporary output only. The app decodes only
+   PNG/JPEG/WebP, so an unconverted TIFF returns `400`; the app's supported
+   formats are unchanged. The ID → PNG map is written to
+   `converted-classifier.json` in the run directory.
+
+5. Run the pilot (defaults: `$DECIMER_TOOLCHAIN_DIR` or
+   `../decimer-onnx-toolchain`, `$PWD/models`, `.ort/linux-x86_64`,
+   `target/release/indigo-server`):
+
+   ```bash
+   node scripts/model-parity.mjs --suite classifier --split pilot
+   node scripts/model-parity.mjs --suite handdrawn --split pilot
+   # or both suites in one sidecar process / run directory:
+   node scripts/model-parity.mjs --suite both --split pilot
+   ```
+
+   `--sidecar <file>` overrides the binary (for example
+   `--sidecar target/debug/indigo-server` for a functional-only run).
+   `--split pilot` is the only accepted split (the pinned aggregate and the
+   300-row gates are pilot-only), and `--out` must stay under
+   `target/benchmarks/` so raw outputs cannot bypass the tracking policy.
+
+   Raw predictions, converted images, the sidecar log and `summary.json` stay
+   under `target/benchmarks/model-parity/<run-id>/`. A gate failure exits
+   non-zero after writing the files; a setup/hash/status failure stops the run.
+
+6. Read the aggregate and fill `docs/benchmarks/model-parity.md` §4:
+   classifier accuracy, confusion, reactions and binary `n` (currently 228
+   binary / 72 reactions); OCSR canonical over comparable pairs, exact, valid
+   and incomplete; p50/p95; per-image agreement and deltas.
+
+7. Check the gates:
+
+   - Classifier: binary accuracy **≥ 0.7231** (same-pilot FP16 reference
+     0.7281 − 0.5 pp), with 228 binary / 72 reactions and all 300 images
+     decoded. Do not use the historical `0.7361`/`n=216` pilot file as the
+     baseline; it is not the current frozen split (see the protocol §2.3).
+   - OCSR: canonical **≥ 0.7092** (reference 0.7192 − 1.0 pp) over comparable
+     pairs; record exact (reference 121/300) and valid (299/300, 1 incomplete).
+   - Artifact hashes equal; every per-image disagreement listed for review.
+   - p50/p95 recorded on the same machine and the **release** build
+     (nearest-rank, after one warm-up); latency is informational and the
+     classifier reference is an in-process toolchain number, not an HTTP one.
+
+8. Investigate any gate failure in this order: artifact hash → conversion →
+   preprocessing → decode path → threshold direction. Do not tune the
+   classifier threshold (`0.000089`) or the OCSR confidence gate (`0.901`) on
+   the pilot; the expected decision is **retain both**, and a change needs a
+   separate calibration activity with a measured delta. Then run
+   `node --test scripts/lib/model-parity.test.mjs` and
+   `node scripts/harness.mjs`.
+
+**Result (2026-11-17; release latency re-measured 2026-11-18).** Both gates
+pass on `target/release/indigo-server` (SHA-256 `b7b850c9…6558263a`): classifier
+0.7281 (166/228, 87/62/0/79, 72 reactions, 300/300 FP16 agreement) and OCSR
+canonical 0.7276 (211/290), exact 122/300, valid 299/1 — identical to the
+accepted debug run on all 600 rows, including every classifier score and OCSR
+answer. Release p50/p95: classifier **124.4 / 425.9 ms**, OCSR
+**1681.7 / 3557.0 ms** (full HTTP round trip, §3.4). The raw run is
+`target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/`; §4 of
+`docs/benchmarks/model-parity.md` has the identity, the classifier latency split
+and the nine OCSR per-image differences. A debug-build latency is not
+representative and must not be quoted as the app result.
+
 ### Ketcher render robustness
 
 Run against the desktop build (`task run`) with the developer console open.
