@@ -373,3 +373,123 @@ re-review.
 - Focus trap, aria-modal, rail roving focus, Escape; all colours from tokens.
 - Review: REQUEST_CHANGES (docs claimed untested behaviour, imageResolution cap,
   unticked C14) → fix → PASS. 279 tests.
+
+## 2026-11-17 — Activity 19: remove-backstage-status-strip
+
+- Removed the backstage footer (`Indigo … · sidecar :…` + app version) and the
+  now-unused `formatBackstageStatus`, `starting` prop and `restoring` state.
+- Also removed the Save & Export section from the backstage rail (New, Recent,
+  Settings, About remain); Save/Save As/Export stay in the File menu only.
+- About still shows the real Indigo version/port and app/Ketcher/React data.
+- Contract tests assert the strip, formatter, `starting` and the section never
+  return; docs updated. 284 tests.
+
+## 2026-11-18 — Activity 20: backstage-models-placeholder
+
+- Added a reserved **Models** entry to the backstage rail (New, Recent, Models,
+  Settings, About) for future OCSR model management. The pane is deliberately
+  empty: heading plus "OCSR models will be managed here.", no list, actions,
+  versions or download affordances.
+- A source contract test rejects any interactive control in the section; docs
+  mark it as a reserved placeholder. 289 tests.
+
+## 2026-11-18 — Activity 21: welcome-templates
+
+- Rail renamed to Welcome, Open, Models, Settings, About and every item gained a
+  16 px currentColor line icon (home, folder-open, cube, sliders, info).
+- Welcome replaced New: title "Welcome", subtitle, Blank canvas / Import
+  structure / Open project, and a Stitch-style TEMPLATES grid with four cards
+  (line preview, name, description, tag).
+- Cards insert real structures into a new dirty tab named after the template
+  (path null, Save As on first save): benzene, cyclohexane and Ala-Gly via
+  SMILES; the reaction uses a KET payload because Indigo's molecule converter
+  rejects reaction SMILES. Cards stay disabled until the editor is ready.
+- Open (formerly Recent) keeps text-only rows; previews are deferred until
+  validated.
+- Review: REQUEST_CHANGES (docs said clean Untitled, preview tests missing) →
+  fix → PASS. 303 tests.
+
+## 2026-11-18 — Activity 22: welcome-templates-polish
+
+- Welcome now uses eight ring templates with a random, width-dependent visible
+  subset (2/4/6/8 by viewport), a More templates button that opens Ketcher's
+  Structure Library, and a prominent Back to editor action labelled with the
+  active tab (dirty marker included) when tabs exist.
+
+## 2026-11-18 — Activity 23: welcome-nonblank-and-more-templates
+
+- Fixed the blank backstage: `renderSection` switches on `normalizeSection`, so
+  a stale/unknown section id (HMR after a removed section) renders Welcome, and
+  the rail highlights Welcome too. The backstage always reopens on Welcome.
+- The template pool grew to 16 real rings (8 carbocycles + pyridine,
+  pyrimidine, furan, thiophene, imidazole, pyrrole, piperidine, morpholine) with
+  N/O/S vertex labels, so a wide window shows a random 8 of 16 and reshuffles
+  each open. All 16 SMILES validated through the sidecar.
+- Review: PASS with nits (rail normalized state, README count, C14 ticks, label
+  contract) → applied. 351 tests.
+
+## 2026-11-18 — Activity 24: real-template-library
+
+- Welcome cards now come from Ketcher's real Structure Library: salts/solvents
+  first, then functional groups (Ketcher appends salts to the groups list, so
+  those names are skipped), each Struct serialized to KET and mapped to a
+  descriptor (slug ids, name dedupe, empty skipped).
+- Previews are rendered by Ketcher/Indigo with `generateImage(ket, {svg})`,
+  cached per KET, with Rendering/No preview states; an empty library shows "No
+  templates available". Click inserts the entry's KET into a dirty, path-less
+  tab named after the entry.
+- An armed template tool no longer leaks: `cancelActiveTool` dispatches Escape
+  to the Ketcher root when the backstage opens or a tab is switched.
+- The curated ring module is kept only as documented legacy; no card path reads
+  it. Provider timing verified live (first render already populated).
+- Review: REQUEST_CHANGES (empty-state claim, C14, stale legacy labels, one
+  header) → fixed; 365 tests.
+
+## 2026-11-19 — Activity 25: welcome-recent-structures
+
+- Welcome gained the Stitch "Recent structures" table (Structure Name +
+  thumbnail, Format, Size, Indigo Validation, Last Modified, Open), capped to
+  the five newest, with loading/empty states.
+- Real data only: `stat` for size/mtime, KET → Struct → molfile with
+  KetSerializer/MolSerializer, then `structService.check` (Indigo) for the
+  badge (Valid / Warnings / Invalid / unknown shown as `—`).
+- Thumbnails are sidecar SVG renders cached at
+  `<appDataDir>/previews/<sha256(molfile)>.svg` and served as data URIs; cache
+  hits skip rendering, failures show a placeholder. `.ket` files are never
+  modified and carry no preview field.
+- A pure `buildRecentRow` covers the degradation matrix; 394 tests. Review:
+  REQUEST_CHANGES (row model untested, cache key docs) → fixed → PASS.
+
+## 2026-11-19 — Activity 26: welcome-first-run-and-four-templates
+
+- Welcome always shows exactly four random cards from the Structure Library;
+  the width-based 2/4/6/8 rule (and its resize listener) is gone.
+- First run (only an untouched empty tab) hides Back to editor and makes Blank
+  canvas primary; once a real document exists, Back to editor is primary and
+  labelled with the active tab, and Blank canvas becomes secondary.
+- The backstage top bar no longer has a Back to Editor control; the rail's Exit
+  Backstage (and Escape) are the only exits.
+- Tests pin the four-card count, the isUntouchedTab document predicate and the
+  top-bar absence; 397 tests, harness green.
+
+## 2026-11-19 — Activity 27: new-reuses-empty-tab
+
+- Blank canvas / New now reuses the active tab when it is an untouched empty
+  canvas instead of stacking another empty tab; with a real document it still
+  creates one.
+- Ketcher's `getKet()` returns a pretty-printed empty KET (`ket_version`), so the
+  byte comparison with EMPTY_KET failed; added `isEmptyCanvasKet` (empty string,
+  compact KET or serialized empty root) and used it in `isUntouchedTab`.
+- `startNewDocument` decides the target before `getKet` and does not
+  commit/flush on reuse; it resets the tab, writes one snapshot/index and skips
+  `setMolecule` when the canvas is already empty.
+- 410 tests, harness green.
+
+## 2026-11-19 — Activity 28: welcome-actions-horizontal
+
+- Welcome actions are a horizontal wrapping row (`row` + `wrap`, 8 px gap,
+  720 px cap) with content-sized 36 px buttons instead of a vertical column;
+  always at most four actions (Back to editor only with a document, Blank
+  canvas, Import, Open). Primary emphasis and the four-card template grid are
+  unchanged.
+- Source/layout tests pin the row, sizing and action cap. 414 tests.

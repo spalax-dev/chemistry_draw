@@ -178,8 +178,9 @@
 - [x] Launch restores content, paths, order, dirty flags and the active tab
       silently; a missing or corrupt snapshot yields an empty tab and never an
       error dialog.
-- [x] Save, Save As and Export act on the active tab; New always opens a new
-      tab; Open reuses an untouched empty tab or opens a new one and never
+- [x] Save, Save As and Export act on the active tab; New reuses an untouched
+      empty active tab and otherwise opens a new one (it never stacks an empty
+      canvas); Open reuses an untouched empty tab or opens a new one and never
       prompts for a dirty tab.
 - [x] Open is **one entry** that dispatches by extension: `openProject` for
       `.ket` (`path`, `name = base(path)`, clean) and `importStructure` for
@@ -255,7 +256,14 @@
       before implementation; the manual step in `docs/verification.md` §2
       "File menu" passes.
 
-## C14 — Backstage
+## C14 — Backstage (activity 21, historical)
+
+> **Superseded by C15.** This section records what activity 21 shipped. The
+> Welcome pane it describes (four fixed cards: Benzene Ring, Cyclohexane Chair,
+> Peptide Fragment, Reaction Scheme) is no longer current — C15 replaced it with
+> the responsive random subset of the eight ring templates plus **More
+> templates** and **Back to editor**. Do not treat the Welcome bullet below as
+> the current UI.
 
 - [x] The backstage replaces the `Loading chemistry editor...` splash from the
       first frame, stays until **Back to Editor**/Escape, and shows on every
@@ -266,14 +274,94 @@
       return to the same active tab, canvas, dirty flags and tab order. (The
       home button is covered while the overlay is open, so it is the way in,
       not the way back.)
-- [x] The rail is a `nav` of real buttons (not a tablist) with New, Recent,
-      Save & Export, Settings and About in order, roving focus and
-      `aria-current="page"`; the overlay is `role="dialog"`, `aria-modal`, with
-      initial focus, a focus trap, Escape and focus return.
-- [x] New exposes Blank canvas (creates a tab), Import structure… and Open
-      project…; Recent lists the last 10 `chemistry-draw.recent` paths with Open
-      and Remove plus the open tabs, reusing the path-uniqueness guard; Save &
-      Export reuses the File menu handlers and shows the active-tab summary.
+- [x] The rail is a `nav` of real buttons (not a tablist) with five sections in
+      order — Welcome, Open, Models, Settings and About (ids `welcome`, `open`,
+      `models`, `settings`, `about`, default `welcome`) — roving focus and
+      `aria-current="page"`, each button showing a 16 px `currentColor` line icon
+      (home, folder-open, cube, sliders, info) before its label; Models is empty
+      (heading and a muted note only, no list, no actions and no fake models,
+      versions or download counters); the overlay is `role="dialog"`,
+      `aria-modal`, with initial focus, a focus trap, Escape and focus return.
+- [x] **Historical (activity 21):** Welcome shows the `Welcome` title, the
+      `Start from a blank canvas or a template.` subtitle, Blank canvas
+      (creates a tab), Import structure… and Open project…, then a four-column
+      `TEMPLATES` grid of Benzene Ring, Cyclohexane Chair, Peptide Fragment and
+      Reaction Scheme; each card shows an inline SVG `currentColor` line preview,
+      the name, a one-line description and a tag chip (`Aromatic`, `Aliphatic`,
+      `Dipeptide`, `Esterification`), and clicking it loads the structure into a
+      new dirty tab titled after the template (e.g. `Benzene Ring*`) with
+      `path: null`, then closes the backstage. Open lists the last 10
+      `chemistry-draw.recent` paths with Open and Remove plus the open tabs,
+      reusing the path-uniqueness guard, and renders no thumbnail or preview.
+      Save, Save As and Export live in the File menu only; the backstage has no
+      status strip and its content pane reaches the bottom edge. (This grid is
+      superseded by C15; the rest of the section still holds.)
+- [x] **Activity 23 — unknown section fallback:** any id outside `welcome`,
+      `open`, `models`, `settings` and `about` — a removed id, the retired
+      `new`, an HMR-orphaned value — renders **Welcome**. `normalizeSection`
+      maps non-section ids to `welcome`, `renderSection`'s `default` branch
+      renders the Welcome pane, and opening the backstage after an edit always
+      lands on Welcome; no id renders a blank content pane.
+
+> **Activity 24 update.** The Welcome cards now come from Ketcher's real
+> Structure Library (functional groups + salts and solvents), with previews
+> rendered through Ketcher/Indigo; the curated ring pool is no longer the card
+> source. The activity-23 pool statements elsewhere in this file are retained as
+> history — the activity-24 checkboxes record the current requirement.
+
+- [x] **Activity 24 — real library source:** the Welcome grid is built from
+      `FunctionalGroupsProvider` + `SaltsAndSolventsProvider` after `onInit`,
+      mapped to entries with slug ids, name/abbreviation dedupe and a KET per
+      entry (`KetSerializer.serializeMicromolecules`); no curated ring list is
+      used for cards. A library that yields no entries shows the muted
+      `No templates available` line and no invented or fallback card.
+- [x] **Activity 24 — rendered previews:** each card preview comes from
+      `ketcher.generateImage(entry.ket, { outputFormat: "svg" })`, cached per
+      entry for the session, with a muted loading placeholder and a neutral
+      `Preview unavailable` state; no hand-drawn, raster or curated preview is
+      used.
+- [x] **Activity 24 — width subset and insertion:** the visible count stays
+      2/4/6/8, `pickTemplates` returns a random distinct subset of library
+      entries in library order from an injected RNG (a smaller library shows all
+      of it), every open reshuffles, and a card click inserts the entry's KET
+      into a new dirty `path: null` tab named after the entry.
+- [x] **Activity 24 — tool reset:** opening the backstage or switching tabs
+      calls `cancelActiveTool`, which dispatches a bubbling Escape `keydown` to
+      `.Ketcher-root` before serializing/loading; no DOM toolbar click, no Redux
+      action. No structure follows the cursor after either action.
+- [x] **Activity 24 — tests and verification:** the pure entry mapping
+      (dedupe/ids/KET/empty input), the random subset and the source contracts
+      (Welcome imports no curated pool; `openBackstage`/`activateTabById` call
+      the cancel helper) are covered by Vitest and were RED before
+      implementation; the updated "Backstage" manual checklist in
+      `docs/verification.md` §2 passes and `node scripts/harness.mjs` is green.
+
+> **Activity 26 update.** The Welcome grid is now exactly **four** cards at every
+> width, the action hierarchy depends on whether a **document** exists, and the
+> top-bar Back to Editor is gone — the rail's **Exit Backstage** is the way back.
+> The activity-24 width-subset and top-bar statements above are historical; the
+> activity-26 checkboxes record the current requirement.
+
+- [x] **Activity 26 — four cards:** the Welcome grid renders exactly four
+      distinct random library entries at every viewport width
+      (`TEMPLATE_CARD_COUNT` is `4`), with no 2/4/6/8 width rule, no resize
+      listener and no `templateCountForWidth`; a smaller library shows all of
+      it and every backstage open re-randomizes.
+- [x] **Activity 26 — first run vs document:** `WelcomeSection` derives
+      `hasDocument` from the tab set with `isUntouchedTab` (the open-reuse
+      predicate), so an untouched empty tab is not a document. With no document
+      Welcome hides Back to editor and renders **Blank canvas** as the primary
+      action; with a document Back to editor is primary and labelled with
+      `tabTitle(active)` (name plus `*`), and Blank canvas is secondary.
+- [x] **Activity 26 — top bar:** the backstage top bar shows only the logo and
+      the `Chemistry Draw | Backstage` title; it has no Back to Editor control.
+      The rail's **Exit Backstage** and `Escape` remain the ways back.
+- [x] **Activity 26 — tests and verification:** Vitest pins the four-card count,
+      the `isUntouchedTab` action branch and the source contract that the top bar
+      has no exit button, RED before implementation; the updated "Backstage"
+      checklist in `docs/verification.md` §2 passes (first launch has no Back to
+      editor and highlights Blank canvas; after a document exists it is primary;
+      no top-right control) and `node scripts/harness.mjs` is green.
 - [x] Settings binds only to `ketcher.settingsService` with the curated keys and
       real unit keys/ranges/options from `docs/architecture.md` §5.11.1, applies
       live, persists through Ketcher, and offers the ACS preset and Reset to
@@ -283,19 +371,131 @@
 (Tauri)` or `Browser`) and the license links (Ketcher Apache-2.0, Indigo
       Apache-2.0, ONNX Runtime MIT), with `Unavailable` for a missing source and
       no fake build SHA, IUPAC version or models counter.
-- [x] Stitch-invented content is absent: templates grid, "Open from Indigo
-      sidecar", coordinate-grid note, validity badges, molecular-weight chips,
-      "Browse all fragments" and the models counter.
-- [x] All backstage surfaces use `src/ui/tokens.ts` only (surface/rail/content/
-      status strip, `#cad3dd` borders, teal accent, 3/8 px radii, Roboto 12/14
-      px) and never a colour literal.
+- [x] The templates grid is the only Stitch mock surface present and it is backed
+      by real structures; other Stitch-invented content is absent: "Open from
+      Indigo sidecar", coordinate-grid note, validity badges, molecular-weight
+      chips, "Browse all fragments" and the models counter. The reserved Models
+      section is not such a counter: it is an empty placeholder with no data.
+- [x] All backstage surfaces use `src/ui/tokens.ts` only (surface/rail/content,
+      `#cad3dd` borders, teal accent, 3/8 px radii, Roboto 12/14 px) and never
+      a colour literal.
 - [x] The pure section list, settings descriptors, value formatting and the
-      status/version helpers are covered by Vitest and were RED before
-      implementation; the manual "Backstage" checklist in
+      version helper are covered by Vitest and were RED before implementation;
+      the manual "Backstage" checklist in `docs/verification.md` §2 passes and
+      `node scripts/harness.mjs` is green.
+
+## C15 — Welcome Refinement
+
+> **Activity 23 update.** The Welcome pool is now sixteen ring templates and an
+> unknown section id falls back to Welcome. The eight-template and pool-size
+> statements below describe the activity-22 state; the activity-23 checkboxes in
+> C14 record the current requirement.
+>
+> **Activity 24 update.** The curated pool is gone as a card source: Welcome
+> cards now come from Ketcher's real Structure Library with rendered previews and
+> the tool reset. The pool statements below are historical; the activity-24
+> checkboxes in C14 are the current requirement.
+>
+> **Activity 26 update.** The visible count is now exactly four at every width
+> (no 2/4/6/8 rule) and the top-bar Back to Editor is gone; the activity-26
+> checkboxes in C14 record the current requirement.
+>
+> **Activity 27 update.** New/Blank canvas now reuses the untouched active tab,
+> and emptiness is a semantic check because Ketcher serializes a pretty-printed
+> empty KET with `ket_version`.
+
+- [x] The Welcome pool is exactly the eight Ketcher ring templates — Benzene
+      Ring, Cyclopentadiene, Cyclohexane, Cyclopentane, Cyclopropane,
+      Cyclobutane, Cycloheptane and Cyclooctane — with the names, SMILES, tags
+      and one-line descriptions in `docs/architecture.md` §5.11; the old Peptide
+      Fragment and Reaction Scheme cards are gone from the pool.
+- [x] The visible count is pure and responsive: 2 below 640 px, 4 at 640–899,
+      6 at 900–1239 and 8 at 1240 px or wider; `pickTemplates` returns distinct
+      pool-ordered descriptors from an injected RNG, never duplicates one,
+      never exceeds the pool and re-randomizes on every backstage open and on
+      breakpoint changes.
+- [x] **More templates** sits beside the `TEMPLATES` heading, is disabled until
+      the editor is ready, closes the backstage first and opens Ketcher's real
+      Structure Library through `MODAL_OPEN` (`templates`, `prop.tab: null`) in
+      `src/ketcherOptions.ts`; selecting a template activates the template tool
+      and closes the dialog; there is no fake gallery.
+- [x] **Back to editor — `<active tab>`** is the first, primary Welcome action
+      when tabs exist, carries the active tab name plus `*` while dirty, and
+      only closes the overlay (no save, no activation, no canvas change); it is
+      absent for an empty tab list, and the top-bar Back to Editor remains.
+- [x] `DEFAULT_BACKSTAGE_SECTION` is `welcome`, `Backstage` uses
+      `useState(DEFAULT_BACKSTAGE_SECTION)` and is unmounted on close, so
+      reopening after an edit always shows Welcome; a test pins the default and
+      documents the committed activity-21 `new` default as the blank-pane cause.
+- [x] The pure helpers, the eight-descriptor pool, the source/wiring contracts
+      for More templates, Back to editor and the responsive `WelcomeSection`
+      grid, and the default reset are covered by Vitest and were RED before
+      implementation; the updated "Backstage" manual checklist in
+      `docs/verification.md` §2 and the live Playwright pass (More templates →
+      Structure Library placement, Back to editor → active tab, reopen →
+      Welcome) are done and `node scripts/harness.mjs` is green.
+- [x] **Activity 27 — reuse rule:** `startNewDocument` computes
+      `newDocumentTarget(tabsRef.current)` **before** `getKet`/commit. When it
+      returns `reuse`, the outgoing tab is neither committed nor flushed: the
+      canvas is reloaded with `EMPTY_KET` only when it still holds a structure
+      (behind `loadingRef`), the tab is reset to
+      `{ path: null, name: null, dirty: false, ket: EMPTY_KET }`, its snapshot
+      and the index are written, the scheduler restarts and no tab is added.
+      The `create` branch keeps the existing commit, flush, snapshot and index
+      behaviour.
+- [x] **Activity 27 — semantic empty check:** `isEmptyCanvasKet` accepts `""`,
+      whitespace, `EMPTY_KET`, and any JSON object whose `root.nodes` is an
+      empty array (tolerating `connections`/`templates`, so Ketcher's real
+      serialized empty KET with `ket_version` counts); malformed JSON, a missing
+      `root.nodes` or a non-empty node list is a document. `isUntouchedTab` uses
+      it instead of the `EMPTY_KET` byte comparison while keeping
+      `path === null && !dirty && name === null`.
+- [x] **Activity 27 — tests and verification:** Vitest covers
+      `isEmptyCanvasKet` with the real serialized empty KET,
+      `isUntouchedTab`/`newDocumentTarget` reuse after a commit and the
+      `hasDocument` predicate (`tabs.tabs.some((tab) => !isUntouchedTab(tab))`
+      false for empty tabs), RED before implementation; `pnpm test`,
+      typecheck, lint, Prettier, `pnpm build` and `node scripts/harness.mjs` are
+      green.
+
+---
+
+## C16 — Recent Structures Table
+
+- [x] Welcome renders a compact **Recent structures** table below the four-card
+      template grid, under a 10 px uppercase `RECENT STRUCTURES` heading, with the Stitch
+      columns in order — Structure Name (40 × 32 px thumbnail + base name under a
+      muted `Ketcher document` line, full path in `title`), Format, Size, Indigo
+      Validation, Last Modified, Actions (Open) — fed only by the real recent
+      list, newest first and capped to the five rows `App` loads; an empty list
+      shows the muted `No recent structures` row and no invented row.
+- [x] Size and Last Modified come from `stat` (`formatFileSize`,
+      `formatModified`), Format and name from the path, and a missing or
+      unreadable file keeps its row with `—` size/date, the muted `—` unknown
+      badge and a neutral thumbnail; no row shows a placeholder size, date or
+      status.
+- [x] Indigo Validation comes from `ketcher.structService.check` on the molfile
+      derived through `KetSerializer.deserializeMicromolecules` →
+      `MolSerializer.serialize`, with the ten documented `types`; empty result is
+      **Valid**, non-empty is **Warnings**/**Invalid**, and a parse/check failure
+      shows the muted `—` badge. Badges use green/amber/red/gray tokens and the
+      exact texts, never an invented status.
+- [x] Thumbnails are sidecar SVG renders (`POST /v2/indigo/render` with
+      `render-output-format: "svg"`) cached at
+      `<appDataDir>/previews/<sha256(molfile)>.svg` (SHA-256 of the UTF-8
+      molfile, via `previewFileName`/`contentHash`) and served as data URIs; a
+      cache hit skips the render, a failed render shows the neutral placeholder
+      and writes nothing, and `.ket` files are never modified or given a preview
+      field. The `previewFilePath` composition is covered manually
+      (`docs/verification.md` §2).
+- [x] `formatFileSize`, `formatModified`, `validationStatus`,
+      `previewFileName`/`contentHash` and the pure `buildRecentRow` row model
+      (including the missing-stat, unreadable-text and null-check cases) are
+      covered by Vitest; the "Recent structures" manual checklist in
       `docs/verification.md` §2 passes and `node scripts/harness.mjs` is green.
 
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C14 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C16 remain empty.

@@ -32,9 +32,14 @@
   Open (`.ket`), Import (Molfile, SMILES, InChI, SDF, RXN), Save, Save As and
   Export, plus a recent-documents list; **Export** is the way to Molfile, SMILES,
   InChI, PNG and SVG.
-- **Backstage** — every launch opens a start screen with New, recent documents,
-  Save & Export, real Ketcher settings and About, and a home button in the tab
-  strip returns to it.
+- **Backstage** — every launch opens on Welcome with blank canvas, import/open,
+  a random 2/4/6/8-card subset of Ketcher's real Structure Library with
+  Ketcher-rendered previews, **More templates** for the full library and a
+  **Back to editor** action for the active tab; open documents, a reserved
+  Models entry (empty for now), real Ketcher settings and About sit beside it,
+  and a home button in the tab strip returns to it. Welcome also shows a compact
+  **Recent structures** table with each document's real size and last-modified
+  time, the Indigo validation result and a cached Indigo-rendered thumbnail.
 - **Document tabs** — keep several `.ket` documents open in one window; every
   tab keeps its own unsaved content and the set is restored on relaunch.
 - **Offline-first** — runs entirely on your machine.
