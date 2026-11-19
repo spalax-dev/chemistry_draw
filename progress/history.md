@@ -724,3 +724,20 @@ Phase D parity pilot against the DECIMER ONNX toolchain benchmark.
   raw predictions and converted images stay in the toolchain/`target/`.
 - Tests: 51 parity (143 Node), 296 Vitest, 238 sidecar; harness green.
 - Review: one round plus fixes; final PASS.
+
+## 2026-11-18/19 — Activity 16: ocsr-incomplete-tail
+
+Bound the OCSR incomplete decode tail found by the Phase D parity pilot.
+
+- The pathological row `hdm::CDK_Depict_5_82` emitted a `C=` cycle to
+  `max_len=302` and took 37,270.7 ms; it now stops via a measured periodic-tail
+  guard after 16 cycles (33 ids / 32 steps) in 2,186.2 ms, still 422/incomplete.
+- `RepetitionGuard`: one-token runs stop after 32 repeats (alkane tier),
+  two-token cycles after 16; 3/4-token cycles stay unguarded. The pilot's
+  longest legitimate tails are 8 one-token and 6 two-token (4x/2.67x margin).
+- The pilot300 is unchanged: canonical 211/290, exact 122/300, valid 299/1,
+  0 per-image differences; the same 9 raw disagreements. `max_len`, the model,
+  thresholds, vocabulary and the 422 contract are untouched; raising `R`/`R1`
+  or `K=0` is the rollback.
+- Tests: 8 fake-decoder cases; sidecar 246, Vitest 296, Node 143; harness green.
+- Report: `docs/benchmarks/ocsr-tail-fix.md`; C16; Phase D still open.

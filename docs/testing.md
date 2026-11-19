@@ -512,6 +512,40 @@ uses the same two-tier split as the classifier, with an extra artifact guard:
   handler: it maps to `AppError::Unprocessable`, and the response is a `422`
   with the actionable message and no `smiles` field.
 
+### OCSR repetition guard (no model)
+
+The guard is a pure function of the emitted ids: no model, no runtime, no
+timing, so every case runs in the always-run tier against `FakeGraphs`. It
+bounds the pathological periodic tail found by the parity pilot (the 302-step
+`C=` loop of `hdm::CDK_Depict_5_82`); the design and the measured parameters are
+in `docs/benchmarks/ocsr-tail-fix.md`.
+
+- A one-token cycle (the same id repeated) stops at the configured run length
+  with `incomplete = true` and no `end_id`.
+- A long alkane run (20 `C` ids then `end_id`) is **not** cut: the one-token
+  tier is high enough that a legitimate chain completes; this is the rule that
+  keeps the guard from truncating long hydrocarbons.
+- A two-token cycle (`C`, `=`) stops far below `max_len = 302`, with the exact
+  stop step asserted; the production stop is 32 generated tokens (33 ids
+  including `start_id`, 16 complete `C`, `=` cycles).
+- A legitimate repeated motif below the cutoff is **not** cut: the decode
+  reaches `end_id` with the motif intact.
+- An `end_id` before the threshold completes normally (`incomplete = false`);
+  the guard never fires on the end step.
+- A long non-repetitive decode still runs to `max_len` and reports
+  `incomplete = true`; the guard never replaces the existing bound.
+- The returned ids, the probability count (one per generated token) and the
+  exact stop step are asserted, not just the `incomplete` flag.
+
+**Mutation rule.** A guard that never fires fails the one-token and `C=` cases;
+a guard that applies the two-token threshold to a one-token run fails the
+long-alkane case; a guard that fires on the legitimate motif fails the
+below-cutoff case; a guard that changes EOS or `max_len` behaviour fails the EOS
+and non-repetitive cases; a boundary error (fires at `R - 1`, not at `R`) fails
+at least one case. The pathological image itself is checked by the pilot
+measurement and `docs/verification.md`, never by a committed
+multi-hundred-megabyte fixture.
+
 ### OCSR fixtures
 
 The OCSR model-gated test runs `caffeine.png` against a temp root that declares

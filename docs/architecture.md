@@ -1537,10 +1537,25 @@ decoder then runs once per emitted token:
    zero inputs.
 3. Take the last position's `[156]` probability row, choose its `argmax` and
    append the id; the chosen value is that step's probability.
-4. Stop after appending `end_id = 14`, or after at most `max_len = 302` decoding
-   steps.
-5. `incomplete` is `true` when the loop stopped at `max_len` and the last id is
-   not `end_id`; otherwise it is `false`.
+4. Stop after appending `end_id = 14`, after at most `max_len = 302` decoding
+   steps, or when the repetition guard below fires.
+5. `incomplete` is `true` when the last id is not `end_id`; otherwise it is
+   `false`.
+
+**Repetition guard.** A bounded periodic-tail detector runs after each appended
+id that is not `end_id`. If the emitted suffix ends in a short cycle repeated at
+least its threshold — a two-token cycle (`C`, `=`-style) repeated **16** times,
+or one token repeated **32** times — the loop stops early and returns the ids and
+probabilities generated so far. The one-token tier is deliberately high because
+a repeated `C` is a legitimate alkane chain, not a degenerate loop. The last id
+is not `end_id`, so `incomplete` is `true` and both transports keep their
+existing failure mapping (`422` on `/v2/ocsr/recognize`, a `FAILURE` job on
+`/v2/imago`); a truncated SMILES is never returned. The guard is pure,
+deterministic and model-free, and it changes nothing else: `max_len = 302`
+remains the hard bound, and a decode without a qualifying periodic tail takes
+exactly the same steps. The measured cycle limit (`K = 2`), repeat counts and
+the fake-decoder cases are in
+[`docs/benchmarks/ocsr-tail-fix.md`](benchmarks/ocsr-tail-fix.md).
 
 `confidence` is the arithmetic mean of the chosen-token probabilities over the
 steps, including the final `end_id` step. `/v2/ocsr/recognize` does **not**
@@ -1619,8 +1634,9 @@ chosen-token probability; `incomplete` is `false` on success; `model` is the
 manifest provenance id.
 
 - `422` when decoding is incomplete (`incomplete: true`): the image decoded and
-  the model ran, but the decoder reached `max_len = 302` without `end_id`. The
-  body is the standard error envelope with an actionable message:
+  the model ran, but the decoder stopped without `end_id` — at `max_len = 302`
+  or at the repetition guard's earlier bound. The body is the standard error
+  envelope with an actionable message:
 
 ```json
 { "error": "could not finish the structure; try a sharper image" }

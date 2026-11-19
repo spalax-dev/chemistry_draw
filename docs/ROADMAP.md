@@ -238,8 +238,15 @@ for the two shipped models through the sidecar, compared with the
 decimer-onnx-toolchain's frozen predictions (toolchain commit `c2265a6d`).
 Both gates passed — classifier 0.7281 (166/228, 300/300 same-ID agreement) and
 OCSR canonical 0.7276 (211/290) — so `0.000089` and `0.901` are retained; the
-nine OCSR per-image differences and latency are recorded. The live functional
-review (real drawing, Indigo, recognition UX and packaging) follows.
+nine OCSR per-image differences and latency are recorded. The follow-up
+activity `ocsr-incomplete-tail` (activity 16) is **implemented and measured;
+review passed; commit pending user approval**: the repetition guard bounds the
+one 37.3 s OCSR incomplete decode
+(`hdm::CDK_Depict_5_82`, a `C=` loop to `max_len = 302`) at **2.19 s** with the
+same `422`/incomplete semantics and **0** per-image differences on the pilot300
+rerun (`docs/benchmarks/ocsr-tail-fix.md`). Phase D is **not** complete: the
+live functional review (real drawing, Indigo, recognition UX and packaging)
+still runs.
 
 **Objective:** validate the real user experience and decide the next backlog with evidence.
 
@@ -260,5 +267,7 @@ _Recognize Molecule_ UI, with `0.901` as a provisional confidence gate). **B3 is
 complete** (2026-11-15): the model catalog/downloader, the first-run setup UI
 and the clean-install validation are in place. The remaining follow-ups are the
 rest of the Phase D live review (the model-parity pilot is complete, both gates
-passed and the thresholds are retained), Phase C (upstream Ketcher fix) and any
+passed and the thresholds are retained), the OCSR incomplete-tail fix
+(implemented and measured; review passed; commit pending user approval;
+`docs/benchmarks/ocsr-tail-fix.md`), Phase C (upstream Ketcher fix) and any
 optional preprocessing-parity follow-up.

@@ -888,6 +888,55 @@ answer. Release p50/p95: classifier **124.4 / 425.9 ms**, OCSR
 and the nine OCSR per-image differences. A debug-build latency is not
 representative and must not be quoted as the app result.
 
+### OCSR incomplete tail (Phase D follow-up)
+
+Manual, release build. Confirms that the repetition guard removes the one
+pathological incomplete decode without changing any pilot300 decision. The
+design, parameters, acceptance and residual risk are in
+`docs/benchmarks/ocsr-tail-fix.md`; this section is the run checklist.
+
+Use the same prerequisites as the model-parity pilot above (toolchain checkout,
+datasets, installed models, loadable ONNX Runtime, **release** sidecar).
+
+1. The accepted pre-guard run is
+   `target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/`. Its
+   `details.jsonl` has `hdm::CDK_Depict_5_82` at status `422` with
+   `latencyMs` **37,270.662** (37.3 s). Keep it as the comparison baseline; do
+   not overwrite it.
+2. Run the hand-drawn pilot with the guarded release binary:
+
+   ```bash
+   node scripts/model-parity.mjs --suite handdrawn --split pilot
+   ```
+
+3. In the new `details.jsonl`, find `hdm::CDK_Depict_5_82`:
+
+   - status `422`, with `valid: false`, `exact: false`, `canonical: null` and
+     `incomparable: true` — the row keeps its parity classification;
+   - `latencyMs` **≤ 5000** (target five seconds). A value in the tens of
+     seconds means the guard did not fire.
+
+4. Check the aggregate is unchanged: canonical **211/290**, exact **122/300**,
+   valid **299/1** (sidecar result; the toolchain reference is 210/292,
+   121/300, 299/1).
+5. Diff every row against the accepted run's `details.jsonl`: status, `got`,
+   `exact`, `canonical` and `incomparable` must be identical, **0 differences**
+   over 300 rows. Any changed `got` on an answered row means a valid decode was
+   cut: stop, raise the guard's repeat threshold (report §8), rerun.
+6. The sidecar log line for the row must still end `incomplete`, with far fewer
+   than 303 ids (start plus 302 generated) and a time consistent with the HTTP
+   latency.
+7. Run `cargo test -p indigo-server` (the fake-decoder guard cases) and
+   `node scripts/harness.mjs`. The manifest, `max_len`, thresholds and model
+   artifacts must be unchanged.
+
+| Item                                | Before                    | Target after |
+| ----------------------------------- | ------------------------- | ------------ |
+| `hdm::CDK_Depict_5_82` status       | `422`                     | `422`        |
+| `hdm::CDK_Depict_5_82` HTTP latency | 37.3 s                    | ≤ 5 s        |
+| Canonical / exact / valid           | 211/290 / 122/300 / 299/1 | unchanged    |
+| Per-image differences (300 rows)    | —                         | 0            |
+
 ### Ketcher render robustness
 
 Run against the desktop build (`task run`) with the developer console open.

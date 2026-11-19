@@ -410,7 +410,10 @@ decoded to `max_len` in 37.3 s, while the 299 answered rows range
 0.97–19.8 s (mean 1.96 s); the overall mean including the `422` is 2.08 s. The
 toolchain pilot has no fresh OCSR latency (`cache_hits = 300`,
 `n_measured = 0`, p50/p95 `null`), so the release p50/p95 is the app measurement
-and no delta is claimed.
+and no delta is claimed. **Addressed by** the OCSR incomplete-tail fix
+(activity 16, `docs/benchmarks/ocsr-tail-fix.md`): the row still answers `422`
+in **2.19 s** with the same parity classification, and a rerun of the 300 rows
+keeps 0 per-image differences and the aggregate above.
 
 **Per-image disagreements (9 exact-string differences, raw rows in
 `details.jsonl`):**
@@ -497,14 +500,15 @@ tuning was performed.
 
 1. **Record the parity pass and keep both thresholds unchanged**; proceed with
    the Phase D live functional review.
-2. **Phase D performance finding (top, OCSR incomplete tail).** The one
-   incomplete decode `hdm::CDK_Depict_5_82` took **37.3 s** to reach `max_len`
-   (HTTP `422`), against 0.97–19.8 s (mean 1.96 s) for the 299 answered rows and
-   2.08 s overall. Verify the app's progress/cancel/timeout path for an
-   incomplete decode (the `/v2/imago` worker is bounded at 120 s; the direct
-   endpoint is synchronous) and consider an earlier stop/length guard in a
-   separate measured activity. This is the top Phase D performance finding after
-   the parity pass; no production code, model or threshold changes here.
+2. **Phase D performance finding (top, OCSR incomplete tail) — addressed by
+   activity 16.** The one incomplete decode `hdm::CDK_Depict_5_82` took
+   **37.3 s** to reach `max_len` (HTTP `422`), against 0.97–19.8 s (mean 1.96 s)
+   for the 299 answered rows and 2.08 s overall. The repetition guard landed in
+   `greedy_decode` (`docs/benchmarks/ocsr-tail-fix.md`): the row now returns the
+   same `422` in **2.19 s** (33 ids instead of 303), and the guarded pilot300
+   rerun keeps 0 per-image differences and canonical 211/290, exact 122/300,
+   valid 299/1. The historical numbers above are the accepted pre-fix
+   measurement.
 3. **Phase D performance finding (latency, classifier).** On the shipped
    release build the classifier round trip is 124.4 / 425.9 ms (p50/p95) against
    the toolchain's 49.20 / 206.48 ms in-process predict; the measured split

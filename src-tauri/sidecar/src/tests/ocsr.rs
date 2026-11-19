@@ -24,7 +24,9 @@ use sha2::{Digest, Sha256};
 
 use crate::error::AppError;
 use crate::service::ml::ocsr::{mean_confidence, OcsrModel, OcsrPrediction};
-use crate::service::ml::ocsr_decode::{greedy_decode, OcsrGraphs};
+use crate::service::ml::ocsr_decode::{
+    greedy_decode, greedy_decode_with_guard, OcsrGraphs, RepetitionGuard, PRODUCTION_GUARD,
+};
 use crate::service::ml::ocsr_preprocess::{crop_empty_borders, ocsr_input, OcsrInput};
 use crate::service::ml::ocsr_vocab::{load as load_vocab, Vocab};
 use crate::service::ml::preprocess::MAX_IMAGE_SIDE;
@@ -958,6 +960,398 @@ fn ocsr_greedy_decode_records_one_probability_per_token() {
 
     assert_eq!(ids.len(), probabilities.len() + 1);
     assert_probabilities(&probabilities, &[0.55, 0.65, 0.45]);
+}
+
+// ── Greedy decode repetition guard (no model) ────────────────
+
+/// Small explicit guard for the fake-decoder cases: detect cycles of up to two
+/// tokens and stop at the third complete repetition. The one-token tier uses the
+/// same small threshold here so the fake cases stay tiny; production keeps a
+/// much higher one-token threshold.
+const TEST_GUARD: RepetitionGuard = RepetitionGuard {
+    max_cycle: 2,
+    min_repeats: 3,
+    single_token_repeats: 3,
+};
+
+/// First id of the fake two-token cycle. The ids are deliberately arbitrary:
+/// the guard only sees ids, and the vocabulary's `C`/`=` are `2`/`3`, not
+/// `20`/`21`; these prove the guard is id-agnostic.
+const CYCLE_A: i32 = 20;
+/// Second id of the fake two-token cycle (see `CYCLE_A`).
+const CYCLE_B: i32 = 21;
+
+#[test]
+fn ocsr_greedy_decode_guard_stops_a_one_token_run() {
+    // The third consecutive copy of the same id completes the `k = 1` cycle, so
+    // the loop must stop after three generated tokens, not at `max_len`.
+    let mut graphs = FakeGraphs::new(vec![probability_row(20, 0.6)]);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        10,
+        TEST_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    assert_eq!(ids, vec![START_ID, 20, 20, 20]);
+    assert_probabilities(&probabilities, &[0.6, 0.6, 0.6]);
+    assert!(
+        incomplete,
+        "a guard stop without end_id must stay incomplete"
+    );
+    assert!(
+        ids.iter().all(|id| *id != END_ID),
+        "the guard must not append an end id"
+    );
+    assert_eq!(
+        graphs.decode_calls, 3,
+        "the guard must stop on the third repetition, before another decoder step"
+    );
+    assert_eq!(
+        graphs.token_sequences,
+        vec![vec![START_ID], vec![START_ID, 20], vec![START_ID, 20, 20]],
+        "the guard must not add or skip a decoder step"
+    );
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_stops_a_two_token_cycle() {
+    // Two arbitrary ids alternating (`k = 2`) repeated three times: the sixth
+    // generated token completes the third cycle, so the exact stop step is six.
+    let mut graphs = FakeGraphs::new(vec![
+        probability_row(CYCLE_A as usize, 0.9),
+        probability_row(CYCLE_B as usize, 0.8),
+        probability_row(CYCLE_A as usize, 0.7),
+        probability_row(CYCLE_B as usize, 0.6),
+        probability_row(CYCLE_A as usize, 0.5),
+        probability_row(CYCLE_B as usize, 0.4),
+    ]);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        12,
+        TEST_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    assert_eq!(
+        ids,
+        vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B]
+    );
+    assert_probabilities(&probabilities, &[0.9, 0.8, 0.7, 0.6, 0.5, 0.4]);
+    assert!(incomplete, "the early stop is an incomplete decode");
+    assert!(
+        ids.iter().all(|id| *id != END_ID),
+        "the guard must not invent an end id"
+    );
+    assert_eq!(
+        graphs.decode_calls, 6,
+        "the guard must fire exactly when the sixth token completes the third cycle"
+    );
+    assert_eq!(
+        graphs.token_sequences,
+        vec![
+            vec![START_ID],
+            vec![START_ID, CYCLE_A],
+            vec![START_ID, CYCLE_A, CYCLE_B],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B, CYCLE_A],
+        ],
+        "each step must feed the exact generated prefix"
+    );
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_keeps_a_motif_below_the_cutoff() {
+    // Two complete two-token cycles are below `min_repeats = 3`; the distinct
+    // tokens that follow break the tail and `end_id` completes the decode.
+    let mut graphs = FakeGraphs::new(vec![
+        probability_row(CYCLE_A as usize, 0.9),
+        probability_row(CYCLE_B as usize, 0.8),
+        probability_row(CYCLE_A as usize, 0.7),
+        probability_row(CYCLE_B as usize, 0.6),
+        probability_row(30, 0.5),
+        probability_row(31, 0.4),
+        probability_row(END_ID as usize, 0.3),
+    ]);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        20,
+        TEST_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    assert_eq!(
+        ids,
+        vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B, 30, 31, END_ID],
+        "the below-cutoff motif must be decoded intact"
+    );
+    assert_probabilities(&probabilities, &[0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3]);
+    assert!(
+        !incomplete,
+        "a motif below the cutoff must not prevent end_id from completing the decode"
+    );
+    assert_eq!(
+        graphs.decode_calls, 7,
+        "the guard must not add or skip steps on a legitimate motif"
+    );
+    assert_eq!(
+        graphs.token_sequences,
+        vec![
+            vec![START_ID],
+            vec![START_ID, CYCLE_A],
+            vec![START_ID, CYCLE_A, CYCLE_B],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B, 30],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B, 30, 31],
+        ]
+    );
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_lets_end_win_before_the_cutoff() {
+    // Two cycles are one short of `min_repeats = 3`: `end_id` arrives first and
+    // wins, so the decode completes and the guard never fires.
+    let mut graphs = FakeGraphs::new(vec![
+        probability_row(CYCLE_A as usize, 0.9),
+        probability_row(CYCLE_B as usize, 0.8),
+        probability_row(CYCLE_A as usize, 0.7),
+        probability_row(CYCLE_B as usize, 0.6),
+        probability_row(END_ID as usize, 0.5),
+    ]);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        20,
+        TEST_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    assert_eq!(
+        ids,
+        vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B, END_ID],
+        "end_id must be kept and no guard sentinel appended"
+    );
+    assert_probabilities(&probabilities, &[0.9, 0.8, 0.7, 0.6, 0.5]);
+    assert!(!incomplete, "end_id before the cutoff is a complete decode");
+    assert_eq!(
+        graphs.decode_calls, 5,
+        "the guard must never replace or delay the end_id stop"
+    );
+    assert_eq!(
+        graphs.token_sequences,
+        vec![
+            vec![START_ID],
+            vec![START_ID, CYCLE_A],
+            vec![START_ID, CYCLE_A, CYCLE_B],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A],
+            vec![START_ID, CYCLE_A, CYCLE_B, CYCLE_A, CYCLE_B],
+        ]
+    );
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_keeps_the_max_len_bound() {
+    // Six strictly increasing ids never form a cycle of at most two tokens: the
+    // guard must leave the existing `max_len` stop untouched.
+    let mut graphs = FakeGraphs::new(vec![
+        probability_row(20, 0.9),
+        probability_row(21, 0.8),
+        probability_row(22, 0.7),
+        probability_row(23, 0.6),
+        probability_row(24, 0.5),
+        probability_row(25, 0.4),
+    ]);
+
+    let (ids, probabilities, incomplete) =
+        greedy_decode_with_guard(&mut graphs, &blank_input(), START_ID, END_ID, 6, TEST_GUARD)
+            .expect("the fake decoder must not fail");
+
+    assert_eq!(ids, vec![START_ID, 20, 21, 22, 23, 24, 25]);
+    assert_probabilities(&probabilities, &[0.9, 0.8, 0.7, 0.6, 0.5, 0.4]);
+    assert!(
+        incomplete,
+        "stopping at max_len without end_id must stay incomplete"
+    );
+    assert_eq!(
+        graphs.decode_calls, 6,
+        "the guard must not shorten a non-repetitive decode"
+    );
+    assert_eq!(
+        graphs.token_sequences,
+        vec![
+            vec![START_ID],
+            vec![START_ID, 20],
+            vec![START_ID, 20, 21],
+            vec![START_ID, 20, 21, 22],
+            vec![START_ID, 20, 21, 22, 23],
+            vec![START_ID, 20, 21, 22, 23, 24],
+        ]
+    );
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_keeps_a_long_alkane_run() {
+    // A repeated id stands in for a legitimate alkane chain: the pilot's
+    // longest one-token run is eight `C` ids, and the production one-token tier
+    // must tolerate runs above the two-token threshold as well. Twenty repeated
+    // ids followed by `end_id` must complete intact.
+    let mut rows: Vec<Vec<f32>> = (0..20)
+        .map(|_| probability_row(CYCLE_A as usize, 0.9))
+        .collect();
+    rows.push(probability_row(END_ID as usize, 0.8));
+    let mut graphs = FakeGraphs::new(rows);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        MAX_DECODE_STEPS,
+        PRODUCTION_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    let mut expected = vec![START_ID];
+    expected.extend(vec![CYCLE_A; 20]);
+    expected.push(END_ID);
+    assert_eq!(
+        ids, expected,
+        "the one-token tier must not cut a legitimate alkane run"
+    );
+    assert_eq!(probabilities.len(), 21);
+    assert!(
+        !incomplete,
+        "an end token after the alkane run is a complete decode"
+    );
+    assert_eq!(graphs.decode_calls, 21);
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_stops_a_long_single_token_run() {
+    // A decoder stuck on one id is the one-token tier's pathological case: it
+    // must stop at the production threshold, far below `max_len`.
+    let rows = (0..MAX_DECODE_STEPS)
+        .map(|_| probability_row(CYCLE_A as usize, 0.9))
+        .collect();
+    let mut graphs = FakeGraphs::new(rows);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        MAX_DECODE_STEPS,
+        PRODUCTION_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    let stop = PRODUCTION_GUARD.single_token_repeats;
+    assert!(
+        stop > 0 && stop < MAX_DECODE_STEPS,
+        "the production one-token threshold must fire before max_len, got {stop}"
+    );
+    assert_eq!(
+        ids.len(),
+        stop + 1,
+        "the guard must stop exactly at the one-token threshold"
+    );
+    assert_eq!(graphs.decode_calls, stop);
+    assert_eq!(probabilities.len(), stop);
+    assert!(incomplete);
+    assert!(ids[1..].iter().all(|id| *id == CYCLE_A));
+}
+
+#[test]
+fn ocsr_greedy_decode_guard_stops_the_pathological_c_eq_pattern() {
+    // The parity pilot row `hdm::CDK_Depict_5_82` alternated `C`, `=` until
+    // `max_len = 302`. The fake supplies one row per step so the alternation
+    // would continue to `max_len` if the production guard never fired.
+    let rows = (0..MAX_DECODE_STEPS)
+        .map(|step| {
+            if step % 2 == 0 {
+                probability_row(CYCLE_A as usize, 0.9)
+            } else {
+                probability_row(CYCLE_B as usize, 0.8)
+            }
+        })
+        .collect();
+    let mut graphs = FakeGraphs::new(rows);
+
+    let (ids, probabilities, incomplete) = greedy_decode_with_guard(
+        &mut graphs,
+        &blank_input(),
+        START_ID,
+        END_ID,
+        MAX_DECODE_STEPS,
+        PRODUCTION_GUARD,
+    )
+    .expect("the fake decoder must not fail");
+
+    // The measured production values are chosen by task `c`; the expected stop
+    // is derived from them instead of encoding them here. A disabled guard
+    // (zero constants) would run to `max_len` and fail the assertions below.
+    let guard = PRODUCTION_GUARD;
+    assert!(
+        guard.max_cycle >= 2 && guard.min_repeats > 0,
+        "the production guard must detect the two-token `C=` cycle, got {guard:?}"
+    );
+    let stop = 2 * PRODUCTION_GUARD.min_repeats;
+    assert!(
+        stop < MAX_DECODE_STEPS,
+        "the production guard must fire before max_len, got stop step {stop}"
+    );
+    assert_eq!(
+        ids.len(),
+        stop + 1,
+        "the guard must stop exactly when the `C`, `=` cycle reaches min_repeats"
+    );
+    assert_eq!(
+        graphs.decode_calls, stop,
+        "the early stop must not cost an extra decoder step"
+    );
+    assert_eq!(
+        probabilities.len(),
+        stop,
+        "one probability must be recorded per generated token"
+    );
+    assert!(
+        incomplete,
+        "the pathological pattern must remain an incomplete decode"
+    );
+    assert!(
+        ids.iter().all(|id| *id != END_ID),
+        "the guard must not invent an end id"
+    );
+    assert_eq!(ids.first(), Some(&START_ID));
+    assert!(
+        ids[1..]
+            .iter()
+            .enumerate()
+            .all(|(step, id)| *id == if step % 2 == 0 { CYCLE_A } else { CYCLE_B }),
+        "the guard must not alter the decoded `C`, `=` cycle"
+    );
+    assert_eq!(
+        graphs.token_sequences.last().map(Vec::as_slice),
+        Some(&ids[..ids.len() - 1]),
+        "the last decoder step must see the exact generated prefix"
+    );
 }
 
 #[test]

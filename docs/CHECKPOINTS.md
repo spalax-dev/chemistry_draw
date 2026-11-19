@@ -511,8 +511,44 @@
       weight, converted PNG or raw per-image prediction is committed;
       `node scripts/harness.mjs` is green.
 
+## C16 — OCSR incomplete-tail fix (Phase D follow-up)
+
+- [x] `docs/benchmarks/ocsr-tail-fix.md` records the failure (`hdm::CDK_Depict_5_82`,
+      the 302-step `C=` cycle, 37.3 s, HTTP `422`, the reference chain), why
+      lowering `max_len` is not the fix, the decode contract, the guard design
+      and semantics, the fake-decoder cases, the pilot300 before/after protocol,
+      acceptance, residual risk and rollback. Every `[task c]` placeholder is
+      replaced with the measured value; the pre-guard token trace is
+      `2026-11-18T22-43-16-297Z` and the guarded run is
+      `2026-11-18T22-58-26-248Z`.
+- [x] The repetition guard only stops a bounded periodic tail; it keeps
+      `incomplete = true` → `422`, and does not change `max_len`, the model, the
+      start/end ids, the thresholds, preprocessing or the normal decode path.
+      `K = 2`, `R = 16` (two-token), `R₁ = 32` (one-token); the pathological row
+      answers `422` in **2,186.158 ms** (before 37,270.662 ms) with 33 ids
+      instead of 303.
+- [x] Fake-decoder tests (no model) cover a one-token run, the two-token `C=`
+      cycle, a legitimate repeated motif below the cutoff, EOS before the
+      cutoff, a non-repetitive long decode and the pathological row, plus a long
+      alkane run for the one-token tier; RED was confirmed before the
+      implementation (`cargo test -p indigo-server ocsr` failed on the missing
+      guard API), the tests are GREEN after it (58 passed, 3 ignored), and the
+      mutation rule holds.
+- [x] The pilot300 before/after shows the pathological row still `422` in
+      **≤ 5 s** (before: 37.3 s; after: **2.19 s**) and the aggregate unchanged —
+      canonical **211/290**, exact **122/300**, valid **299/1** — with **0**
+      per-image differences against the accepted run; no valid row is truncated.
+- [x] The chosen guard parameters, the longest legitimate periodic run
+      (one-token `C` ×8, two-token `O)` ×6), the margins (4× and 2.67×) and the
+      raw run path are recorded; the residual risk (a legitimate periodic tail
+      above the threshold, alkane > C31) and the rollback (raise `R`/`R₁`, never
+      `max_len`) are documented.
+- [x] `docs/architecture.md`, `docs/testing.md`, `docs/verification.md` and
+      `docs/ROADMAP.md` are updated; `node scripts/harness.mjs` is green; the
+      working tree is left uncommitted for user approval.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C15 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C16 remain empty.
