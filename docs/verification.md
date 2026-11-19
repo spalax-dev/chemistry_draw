@@ -413,7 +413,9 @@ Run against the desktop build (`task run`) unless a step says browser.
    only and adopts the path and name. Cancelling either picker leaves the editor
    unchanged.
 5. **Templates come from the real library.** Open the backstage on an initialized
-   editor: the cards match entries of Ketcher's **Structure Library**
+   editor: the `TEMPLATES` area paints four skeleton cards at once — in the grid
+   shape, not clickable, with no name or structure — while the library is built
+   after paint, then the cards match entries of Ketcher's **Structure Library**
    (functional groups plus salts and solvents), not a fixed ring list. Compare
    with the library opened through **More templates**: a card's structure and
    name exist there too, and no card is a hand-written or invented entry.
@@ -422,16 +424,20 @@ Run against the desktop build (`task run`) unless a step says browser.
    there is no width-based count. The grid never shows a card twice and never
    more than four, and a library smaller than four shows all of it. Close and
    reopen the backstage several times: the visible subset changes
-   (re-randomized on open). Each card shows a rendered SVG preview produced by
-   Ketcher/Indigo (sharp, same structure the card inserts), the entry name, a
-   one-line abbreviation (or its group) and a `Functional group` or
-   `Salt or solvent` chip, with no molecular-weight chip; a preview that is
-   still rendering shows its muted loading placeholder and a failed render shows
-   `Preview unavailable`, never a hand-drawn structure. Click a card: a **new**
-   tab opens with that library structure drawn from its KET, the tab is
-   **dirty** and titled after the entry with `path: null`, so the first Save
-   opens Save As, and the backstage closes; clicking a card twice produces two
-   tabs rather than reusing one. With a **document** open — a tab with a path,
+   (re-randomized on open) while the cached library is reused, with no second
+   library serialization. Each card shows a rendered SVG preview produced by
+   Ketcher/Indigo, the entry name, a one-line abbreviation (or its group) and a
+   `Functional group` or `Salt or solvent` chip, with no molecular-weight chip.
+   The preview draws the **expanded** structure — atoms and bonds, not the
+   library abbreviation `CN` or `OMe` — because only the preview KET sets
+   `expanded: true` on its SGroups. While a preview renders, its area shows a
+   small inline SVG spinner; a failed render shows `Preview unavailable`, never
+   a hand-drawn structure. Click a card: a **new** tab opens with that library
+   structure drawn from its KET (the unexpanded entry, so the abbreviation group
+   is preserved), the tab is **dirty** and titled after the entry with
+   `path: null`, so the first Save opens Save As, and the backstage closes;
+   clicking a card twice produces two tabs rather than reusing one. With a
+   **document** open — a tab with a path,
    a name or content, i.e. not an untouched empty tab — the Welcome pane's
    first action is a primary **Back to editor — `<active tab>`** (name plus `*`
    while dirty, e.g. `Back to editor — Boc*`) and Blank canvas is secondary.
@@ -461,14 +467,20 @@ Run against the desktop build (`task run`) unless a step says browser.
    newly activated tab shows its own structure and nothing follows the cursor.
    The reset dispatches Escape to the Ketcher root; no Ketcher toolbar button is
    clicked and neither tab's content changes.
-8. **Open.** Open more than ten `.ket` files, then open the backstage: Open
-   lists at most ten paths, newest first, with Open and Remove on each row, plus
-   the currently open tabs (title and path) and **no thumbnail or preview** on
-   any row. Remove drops only that entry and changes no tab or file. Open a
-   listed path: it opens through `openProject`; if it is already open, the
-   existing tab is activated, the `Already open` notice appears and no tab or
-   entry is duplicated. Choosing an open tab activates it. With no entries, the
-   muted `No recent documents` hint shows.
+8. **Open.** Add more than five real `.ket` files to the recent list, then open
+   the backstage and select Open: it shows the same **Recent structures** table
+   as Welcome — newest first, capped at five, with thumbnail, Format, Size,
+   Indigo Validation, Last Modified and an Actions cell — plus **Remove** beside
+   **Open** on each row, and the currently open tabs (Switch) below the table.
+   The rows and loading match Welcome exactly and the loader runs once (no
+   duplicate stat, validation or render requests between the two panes). Click
+   **Remove**: that row disappears together with its stored recent entry, and no
+   tab or file changes; reopen the backstage and the entry stays gone. Click
+   **Open** on a listed path: it opens through `openProject`; if it is already
+   open, the existing tab is activated, the `Already open` notice appears and no
+   tab or entry is duplicated. Choosing a row in the open-tabs list (Switch)
+   activates that tab and closes the backstage. With no recent entries, the
+   table's muted `No recent structures` row shows and the open-tabs list remains.
 9. **Models.** The rail shows **Models** between Open and Settings. Selecting
    it opens a pane with only a heading and a muted, non-interactive note about
    the section being reserved: no list, no buttons, no model names, versions or
@@ -609,12 +621,15 @@ The reviewer agent must verify:
       no document (only an untouched empty tab) Back to editor is absent and
       Blank canvas is primary, and with a document Back to editor is primary and
       labelled with the active tab; each card
-      shows a Ketcher-rendered SVG preview (cached, loading/error placeholders),
-      name, abbreviation and group chip and opens a new tab; an empty library
+      shows a Ketcher-rendered SVG preview (expanded SGroups, cached, loading
+      spinner and error placeholder), name, abbreviation and group chip and
+      opens a new tab with the original unexpanded entry KET; an empty library
       shows `No templates available` with no curated fallback; opening the
       backstage or switching tabs cancels an armed template tool via Escape to
       the Ketcher root; an unknown section id falls back to Welcome instead of a
-      blank pane; Open lists recent and open documents with no previews; Models
+      blank pane; Open renders the same Recent structures table as Welcome
+      (six columns, shared loader and loading/empty states) with its optional
+      Remove action and the open-tabs list below; Models
       sits between Open and Settings as an empty reserved pane with a note and no
       list or actions; Settings uses only the curated `ketcher.settingsService`
       keys with real units, ranges and options, applying live with ACS preset and

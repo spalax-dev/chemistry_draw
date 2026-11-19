@@ -470,7 +470,13 @@ a second editor or a Tauri native dialog.
   RNG; it never duplicates a card, never exceeds the library (a smaller library
   shows all of it) and never invents data. The subset is re-drawn each time the
   section mounts — the backstage unmounts on close, so every open
-  re-randomizes.
+  re-randomizes. The library itself is built in an effect after paint and
+  cached module-level for the session, never during render: until it exists the
+  grid shows four non-clickable **skeleton cards** (muted preview block plus
+  two placeholder lines), with no invented name or structure. An empty read is
+  not cached; opening the backstage with an empty result retries the build once
+  (unless one is already in flight) and shows the skeletons again until it
+  lands, so a late provider cannot leave the pane stuck empty.
 - **Empty state.** Once the editor is initialized and both providers yield no
   entries, the grid is replaced by a muted, non-interactive
   `No templates available` line. No card, curated substitute or fake gallery
@@ -512,37 +518,54 @@ a second editor or a Tauri native dialog.
   ignores clicks, so `onTemplate` never runs against a canvas that cannot load a
   structure.
 - **Previews are rendered by Ketcher.** Each preview comes from the entry's own
-  KET through `ketcher.generateImage(entry.ket, { outputFormat: "svg" })`, so
-  the native Indigo renderer draws exactly what the card inserts. The result is
+  KET through `ketcher.generateImage(previewKet, { outputFormat: "svg" })` and
+  the native Indigo renderer, so a card draws the library structure rather than
+  an app-authored picture. The result is
   cached per entry id for the session (reshuffles and reopenings do not
-  re-render), shows a muted loading placeholder while it renders and a neutral
-  `Preview unavailable` placeholder when the render fails. Never hand-author the
-  structure as inline SVG, never use `<image>`, an icon font, a raster asset or
-  a preview copied from `src/templates.ts`.
+  re-render), shows a muted loading placeholder with a small inline SVG spinner
+  while it renders and a neutral `Preview unavailable` placeholder when the
+  render fails. Never hand-author the structure as inline SVG, never use
+  `<image>`, an icon font, a raster asset or a preview copied from
+  `src/templates.ts`.
+- **Previews expand the SGroup; insertion does not.** Library entries carry
+  their functional group as an SGroup, and Indigo draws the abbreviation label
+  (`CN`, `OMe`) while it is collapsed. The render therefore receives a preview
+  copy: `expandSgroupsForPreview(entry.ket)` in `src/templateLibrary.ts` sets
+  `expanded: true` on every SGroup of every molecule node (nested molecules
+  included), changes no other field and returns the original text when the KET
+  is not valid JSON. The helper is pure and preview-only: clicking the card
+  still inserts the unexpanded `entry.ket`, so the document keeps the
+  abbreviation group, and no `.ket` file is rewritten.
 - **Clicking a card** cancels any armed tool, inserts the entry's `ket` through
   `setMolecule` behind the loading flag into a **new** tab and then closes the
   backstage; it always allocates a tab, and that tab is **dirty**, named after
   the library entry (e.g. `Benzene*`) with `path: null`, so the first Save opens
   Save As. A failure after `setMolecule` restores the active tab's content into
   the editor so the canvas and the tab state agree, and the backstage stays open.
-- **Open has no previews.** Recent rows and open-tab rows show text (base name,
-  path title) only: no thumbnail, preview or image is rendered until one is
-  validated. The Welcome Recent structures table is the one place with a
-  thumbnail, and only after its preview cache resolves; a row whose render
-  failed keeps a neutral placeholder.
-- **Recent structures table.** Welcome renders a compact table below the
-  template grid under a 10 px uppercase `RECENT STRUCTURES` heading, copied from
-  Stitch: 10 px uppercase header on `surfaceSubtle`, 12 px body rows of 40 px
-  height, 1 px `tokens.color.border` rules between rows, row hover on
-  `surfaceSubtle` and no vertical borders. Columns in order: **Structure Name**
-  (a 40 × 32 px white thumbnail cell plus the base name, full path as `title`,
-  and a muted `Ketcher document` line), **Format**, **Size**, **Indigo
-  Validation**, **Last Modified**, **Actions** (a teal `Open` text button). Only
-  the rows `App` provides are rendered (the loader caps them at five), so the
-  table never lists an entry the recent list does not hold. While the rows load
-  it shows one muted `Loading recent structures…` row; an empty list shows one
-  muted `No recent structures` row. The header is informational only — no
-  sorting, filtering or column control that the app does not implement.
+- **Open reuses the Welcome table.** Open renders the same
+  `RecentStructuresTable` component as Welcome — same six columns, same rows,
+  thumbnails, loading and empty states — never a second plain list or a second
+  loader. The table's **Actions** cell holds the teal **Open** text button
+  always, plus a **Remove** text button only when Open passes `onRemove`; Welcome
+  keeps Open alone. Actions are inline text buttons in reading order (**Open**
+  first, **Remove** second), not icon-only controls and not an overflow menu.
+  Remove prunes the row and the stored recent entry. The open-tabs list (Switch)
+  stays below the table in Open.
+- **Recent structures table.** Welcome and Open render the same compact table
+  (Welcome below the template grid, Open below its title) under a 10 px
+  uppercase `RECENT STRUCTURES` heading, copied from Stitch: 10 px uppercase
+  header on `surfaceSubtle`, 12 px body rows of 40 px height, 1 px
+  `tokens.color.border` rules between rows, row hover on `surfaceSubtle` and no
+  vertical borders. Columns in order: **Structure Name** (a 40 × 32 px white
+  thumbnail cell plus the base name, full path as `title`, and a muted
+  `Ketcher document` line), **Format**, **Size**, **Indigo Validation**,
+  **Last Modified**, **Actions** (a teal `Open` text button, plus a `Remove`
+  text button in Open only). Only the rows `App` provides are rendered (the
+  loader caps them at five and Open reuses that same loader), so the table never
+  lists an entry the recent list does not hold. While the rows load it shows one
+  muted `Loading recent structures…` row; an empty list shows one muted
+  `No recent structures` row. The header is informational only — no sorting,
+  filtering or column control that the app does not implement.
 - **Validation badges.** The badge text is exactly `Valid`, `Warnings`, `Invalid`
   or `—` for an unknown status, from `validationStatus` (never a status invented
   by the view): green `tokens.color.success` for Valid, amber

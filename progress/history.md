@@ -493,3 +493,23 @@ re-review.
   canvas, Import, Open). Primary emphasis and the four-card template grid are
   unchanged.
 - Source/layout tests pin the row, sizing and action cap. 414 tests.
+
+## 2026-11-19 — Activity 29: open-pane-rich-table
+
+- The Open section now renders the same six-column Recent structures table as
+  Welcome (thumbnail, format, size, Indigo validation, modified, actions), with
+  Open and Remove (Welcome keeps Open only); the open-tabs list with Switch
+  stays below. Both panes share the single App loader.
+- Removed the stale "Open has no preview" contract; 419 tests.
+
+## 2026-11-19 — Activity 30: template-previews-expanded
+
+- Library entries are abbreviations, so Indigo rendered their label instead of
+  the structure. Previews now render a copy of the KET with `expanded: true` on
+  every SGroup (verified against the sidecar: expanded draws atoms); insertion
+  still uses the original unexpanded KET.
+- The library builds after paint through a shared promise and session cache, so
+  Welcome paints four skeleton cards immediately instead of blocking on
+  serializing the whole library; preview placeholders show an inline SVG
+  spinner. Empty results are not cached and retry on a later backstage open.
+- 432 tests, harness green.

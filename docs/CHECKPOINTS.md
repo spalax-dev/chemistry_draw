@@ -494,6 +494,31 @@
       covered by Vitest; the "Recent structures" manual checklist in
       `docs/verification.md` §2 passes and `node scripts/harness.mjs` is green.
 
+- [ ] **Activity 29 — shared Open table:** Open renders the same
+      **Recent structures** table as Welcome — the same six columns, thumbnails,
+      loading and empty states — fed by the single `App` loader
+      (`src/recentStructures.ts`), so no second loader or duplicate
+      stat/check/render request exists. The table takes an optional `onRemove`
+      that only Open passes, adding a **Remove** text button that prunes the row
+      and the stored recent entry while touching no tab or file; Welcome keeps
+      **Open** alone. The open-tabs list (Switch) stays below the table in Open.
+      Tests pin the shared table reuse, the optional Remove and the retained
+      tabs list; `docs/architecture.md` §5.11 and `docs/conventions.md` §6.8
+      describe it and the "Open" step in `docs/verification.md` §2 passes.
+
+- [x] **Activity 30 — expanded template previews:** previews render a copy of the
+      entry KET with `expanded: true` on every SGroup (nested molecules
+      included), produced by the pure `expandSgroupsForPreview`, so Indigo draws
+      atoms instead of the `CN`/`OMe` abbreviation; insertion still loads the
+      original unexpanded entry KET and no `.ket` file changes. Welcome paints
+      four non-clickable skeleton cards immediately, builds the library in an
+      effect after paint and caches it module-level for the session, and a
+      preview shows a small inline SVG spinner while it renders. Tests pin the
+      SGroup expansion (including invalid JSON), the preview-vs-insertion split
+      and the loading markers; the "Templates come from the real library" step
+      in `docs/verification.md` §2 passes and `node scripts/harness.mjs` is
+      green.
+
 ---
 
 **How to use this file:** a reviewer agent
