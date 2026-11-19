@@ -1,7 +1,7 @@
 /**
- * Backstage → Recent: the remembered `.ket` paths and the tabs that are open
+ * Backstage → Open: the remembered `.ket` paths and the tabs that are open
  * right now. Presentational only; `App` owns open/remove/switch
- * (`docs/architecture.md` §5.11).
+ * (`docs/architecture.md` §5.11). Rows show text only.
  */
 
 import { recentName } from "../../recent";
@@ -20,7 +20,7 @@ import {
   SUBHEADING,
 } from "./sectionStyles";
 
-export interface RecentSectionProps {
+export interface OpenSectionProps {
   /** Absolute `.ket` paths, newest first, capped by `src/recent.ts`. */
   recent: string[];
   onOpenRecent: (path: string) => void;
@@ -29,17 +29,17 @@ export interface RecentSectionProps {
   onSwitchTab: (id: string) => void;
 }
 
-export function RecentSection({
+export function OpenSection({
   recent,
   onOpenRecent,
   onRemoveRecent,
   tabs,
   onSwitchTab,
-}: RecentSectionProps) {
+}: OpenSectionProps) {
   return (
-    <section aria-labelledby="backstage-recent-title">
-      <h2 id="backstage-recent-title" style={SECTION_TITLE}>
-        Recent
+    <section aria-labelledby="backstage-open-title">
+      <h2 id="backstage-open-title" style={SECTION_TITLE}>
+        Open
       </h2>
       <p style={SECTION_LEAD}>The last documents opened on this machine.</p>
 

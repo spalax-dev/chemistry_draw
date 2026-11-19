@@ -1,13 +1,13 @@
 /**
- * Pure backstage model: the ordered rail sections, the default section and the
- * status-strip formatting (`docs/architecture.md` §5.11).
+ * Pure backstage model: the ordered rail sections and the default section
+ * (`docs/architecture.md` §5.11).
  *
  * The settings descriptors live in `src/settingsModel.ts` because they are a
  * separate concern with their own formatting rules; this module re-exports them
  * so `Backstage.tsx`, task code and the tests have one public import.
  */
 
-export type BackstageSectionId = "new" | "recent" | "save-export" | "settings" | "about";
+export type BackstageSectionId = "welcome" | "open" | "models" | "settings" | "about";
 
 export interface BackstageSection {
   id: BackstageSectionId;
@@ -16,28 +16,27 @@ export interface BackstageSection {
 
 /** Rail order; the only sections the backstage has. */
 export const BACKSTAGE_SECTIONS: BackstageSection[] = [
-  { id: "new", label: "New" },
-  { id: "recent", label: "Recent" },
-  { id: "save-export", label: "Save & Export" },
+  { id: "welcome", label: "Welcome" },
+  { id: "open", label: "Open" },
+  { id: "models", label: "Models" },
   { id: "settings", label: "Settings" },
   { id: "about", label: "About" },
 ];
 
 /** The section shown when the backstage opens. */
-export const DEFAULT_BACKSTAGE_SECTION: BackstageSectionId = "new";
+export const DEFAULT_BACKSTAGE_SECTION: BackstageSectionId = "welcome";
+
+/** The known section ids, so an unknown or stale id never reaches the switch. */
+const KNOWN_SECTION_IDS = new Set<string>(BACKSTAGE_SECTIONS.map((section) => section.id));
 
 /**
- * The status strip's real sidecar line. Both values come from `GET /v2/info`;
- * until it answers the strip says `Connecting…` instead of inventing a version.
+ * The unknown-id guard: a known section id passes through unchanged, every
+ * other value (a removed section, a stale HMR value, an empty string) becomes
+ * Welcome so no id can render an empty pane (`docs/architecture.md` §5.11,
+ * `docs/conventions.md` §6.8).
  */
-export function formatBackstageStatus(
-  indigoVersion: string | null,
-  sidecarPort: number | null,
-): string {
-  if (indigoVersion === null || indigoVersion === "" || sidecarPort === null) {
-    return "Connecting…";
-  }
-  return `Indigo ${indigoVersion} · sidecar :${sidecarPort}`;
+export function normalizeSection(id: string): BackstageSectionId {
+  return KNOWN_SECTION_IDS.has(id) ? (id as BackstageSectionId) : DEFAULT_BACKSTAGE_SECTION;
 }
 
 /**

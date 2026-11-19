@@ -5,8 +5,10 @@
  * It is one full-window `role="dialog"` above the tab strip and Ketcher, not a
  * route or a second editor. The rail is a `nav` of real buttons with roving
  * focus; focus moves in on open, stays inside while open and returns to the
- * trigger on close. Escape and **Back to Editor** close it. Sections are
- * presentational; `App` owns every command and every data source.
+ * trigger on close. Escape closes it; the rail's Exit Backstage is the only
+ * top-level exit control (the Welcome pane offers Back to editor for an open
+ * document). Sections are presentational; `App` owns every command and data
+ * source.
  */
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
@@ -15,16 +17,18 @@ import type { Settings } from "ketcher-core";
 import {
   BACKSTAGE_SECTIONS,
   DEFAULT_BACKSTAGE_SECTION,
-  formatBackstageStatus,
+  normalizeSection,
   type BackstageSectionId,
 } from "../backstage";
+import type { LibraryTemplate } from "../templateLibrary";
+import type { RecentRow } from "../recentStructures";
 import type { TabSet } from "../tabs";
 import { Button } from "./Button";
 import { AboutSection } from "./backstage/AboutSection";
-import { NewSection } from "./backstage/NewSection";
-import { RecentSection } from "./backstage/RecentSection";
-import { SaveExportSection } from "./backstage/SaveExportSection";
+import { ModelsSection } from "./backstage/ModelsSection";
+import { OpenSection } from "./backstage/OpenSection";
 import { SettingsSection, type SettingValue } from "./backstage/SettingsSection";
+import { WelcomeSection } from "./backstage/WelcomeSection";
 import { tokens } from "./tokens";
 
 export interface BackstageProps {
@@ -32,22 +36,30 @@ export interface BackstageProps {
   onNew: () => void;
   onImport: () => void;
   onOpen: () => void;
+  /** Loads a library entry into a new tab; wired by `App`. */
+  onTemplate: (template: LibraryTemplate) => void;
+  /** Closes the backstage and opens Ketcher's Structure Library. */
+  onMoreTemplates: () => void;
+  /** The real Structure Library entries; empty until `App` reads the providers. */
+  templates?: LibraryTemplate[];
+  /** Ketcher's preview renderer; absent until `App` wires `generateImage`. */
+  renderPreview?: (ket: string) => Promise<string>;
+  /** Whether the editor can load a structure; template cards stay inert until it can. */
+  editorReady: boolean;
   /** Absolute `.ket` paths, newest first. */
   recent: string[];
+  /** Welcome's Recent structures rows; empty until `App` loads them. */
+  recentStructures?: RecentRow[];
+  /** True while `App` builds those rows. */
+  recentStructuresLoading?: boolean;
   onOpenRecent: (path: string) => void;
   onRemoveRecent: (path: string) => void;
   tabs: TabSet;
-  activeTabId: string;
   onSwitchTab: (id: string) => void;
-  onSave: () => void;
-  onSaveAs: () => void;
-  onExport: () => void;
   /** From `GET /v2/info`; `null` until the sidecar answers. */
   indigoVersion: string | null;
   /** The actually bound sidecar port from `api_path`. */
   indigoPort: number | null;
-  /** The editor/sidecar startup has not finished; shown in the status strip. */
-  starting?: boolean;
   appVersion: string;
   /** Live Ketcher settings; `null` until `settingsService` exists. */
   ketcherSettings: Settings | null;
@@ -176,25 +188,12 @@ const CONTENT: CSSProperties = {
   background: tokens.color.surface,
 };
 
-const STATUS: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  flex: "0 0 auto",
-  height: 32,
-  padding: "0 16px",
-  boxSizing: "border-box",
-  background: tokens.color.page,
-  borderTop: `${tokens.borderWidth} solid ${tokens.color.border}`,
-  color: tokens.color.muted,
-  fontSize: tokens.fontSize.body,
-};
-
 /** A rail button's colour changes with its active state; the bar is the marker. */
 function railButtonStyle(active: boolean): CSSProperties {
   return {
-    display: "block",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
     width: "100%",
     padding: "10px 16px 10px 13px",
     boxSizing: "border-box",
@@ -213,23 +212,90 @@ function railButtonStyle(active: boolean): CSSProperties {
   };
 }
 
+const ICON: CSSProperties = { flex: "0 0 auto" };
+
+const ICON_PROPS = {
+  width: 16,
+  height: 16,
+  viewBox: "0 0 16 16",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.5,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true,
+  focusable: "false",
+} as const;
+
+/** The 16 px `currentColor` line icon that precedes each rail label (§5.11). */
+function SectionIcon({ id }: { id: BackstageSectionId }) {
+  switch (id) {
+    case "welcome":
+      return (
+        <svg {...ICON_PROPS} style={ICON}>
+          <path d="M2.5 7.5 8 2.5l5.5 5" />
+          <path d="M4 6.8v6.7h8V6.8" />
+        </svg>
+      );
+    case "open":
+      return (
+        <svg {...ICON_PROPS} style={ICON}>
+          <path d="M2 12.5V4h4.2l1.3 2h5v2" />
+          <path d="M2 12.5 4 7h10l-2 5.5z" />
+        </svg>
+      );
+    case "models":
+      return (
+        <svg {...ICON_PROPS} style={ICON}>
+          <path d="M8 1.8 14 5v6L8 14.2 2 11V5z" />
+          <path d="M2 5l6 3 6-3" />
+          <path d="M8 8v6.2" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...ICON_PROPS} style={ICON}>
+          <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+          <circle cx={5.5} cy={4.5} r={1.4} />
+          <circle cx={10.5} cy={8} r={1.4} />
+          <circle cx={6.5} cy={11.5} r={1.4} />
+        </svg>
+      );
+    case "about":
+      return (
+        <svg {...ICON_PROPS} style={ICON}>
+          <circle cx={8} cy={8} r={6} />
+          <path d="M8 7.3v3.9" />
+          <path d="M8 4.7v.01" />
+        </svg>
+      );
+  }
+}
+
+/** A safe default until `App` passes Ketcher's `generateImage` renderer. */
+function unavailablePreview(): Promise<string> {
+  return Promise.reject(new Error("Template preview renderer is not wired"));
+}
+
 export function Backstage({
   onClose,
   onNew,
   onImport,
   onOpen,
+  onTemplate,
+  onMoreTemplates,
+  templates = [],
+  renderPreview = unavailablePreview,
+  editorReady,
   recent,
+  recentStructures = [],
+  recentStructuresLoading = false,
   onOpenRecent,
   onRemoveRecent,
   tabs,
-  activeTabId,
   onSwitchTab,
-  onSave,
-  onSaveAs,
-  onExport,
   indigoVersion,
   indigoPort,
-  starting = false,
   appVersion,
   ketcherSettings,
   onChangeSetting,
@@ -241,6 +307,9 @@ export function Backstage({
   const overlayRef = useRef<HTMLDivElement>(null);
   const railRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [section, setSection] = useState<BackstageSectionId>(DEFAULT_BACKSTAGE_SECTION);
+  // One normalized value drives both the pane and the rail highlight, so a stale
+  // or unknown id falls back to Welcome in both places at once.
+  const current = normalizeSection(section);
 
   // Focus the active rail item on open and return to the trigger on close.
   useEffect(() => {
@@ -323,12 +392,10 @@ export function Backstage({
   }
 
   function renderSection() {
-    switch (section) {
-      case "new":
-        return <NewSection onNew={onNew} onImport={onImport} onOpen={onOpen} />;
-      case "recent":
+    switch (current) {
+      case "open":
         return (
-          <RecentSection
+          <OpenSection
             recent={recent}
             onOpenRecent={onOpenRecent}
             onRemoveRecent={onRemoveRecent}
@@ -336,16 +403,8 @@ export function Backstage({
             onSwitchTab={onSwitchTab}
           />
         );
-      case "save-export":
-        return (
-          <SaveExportSection
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSave={onSave}
-            onSaveAs={onSaveAs}
-            onExport={onExport}
-          />
-        );
+      case "models":
+        return <ModelsSection />;
       case "settings":
         return (
           <SettingsSection
@@ -362,6 +421,27 @@ export function Backstage({
             appVersion={appVersion}
             indigoVersion={indigoVersion}
             indigoPort={indigoPort}
+          />
+        );
+      case "welcome":
+      // An unknown or stale id normalizes to Welcome, so both share this pane.
+      // falls through
+      default:
+        return (
+          <WelcomeSection
+            onNew={onNew}
+            onImport={onImport}
+            onOpen={onOpen}
+            onTemplate={onTemplate}
+            onMoreTemplates={onMoreTemplates}
+            tabs={tabs}
+            onBackToEditor={onClose}
+            templates={templates}
+            renderPreview={renderPreview}
+            disabled={!editorReady}
+            recentStructures={recentStructures}
+            recentStructuresLoading={recentStructuresLoading}
+            onOpenRecent={onOpenRecent}
           />
         );
     }
@@ -402,9 +482,6 @@ export function Backstage({
           </span>
           <span style={MUTED}>Backstage</span>
         </div>
-        <div style={{ marginLeft: "auto" }}>
-          <Button onClick={onClose}>← Back to Editor</Button>
-        </div>
       </header>
 
       <div style={BODY}>
@@ -412,7 +489,7 @@ export function Backstage({
           <div style={RAIL_LABEL}>File operations</div>
           <div style={RAIL_LIST}>
             {BACKSTAGE_SECTIONS.map((entry, index) => {
-              const active = entry.id === section;
+              const active = entry.id === current;
               return (
                 <button
                   key={entry.id}
@@ -426,6 +503,7 @@ export function Backstage({
                   onKeyDown={(event) => handleRailKeyDown(event, index)}
                   style={railButtonStyle(active)}
                 >
+                  <SectionIcon id={entry.id} />
                   {entry.label}
                 </button>
               );
@@ -440,15 +518,6 @@ export function Backstage({
 
         <main style={CONTENT}>{renderSection()}</main>
       </div>
-
-      <footer style={STATUS}>
-        <span aria-live="polite" style={MUTED}>
-          {formatBackstageStatus(indigoVersion, indigoPort)}
-        </span>
-        <span>
-          {starting ? "Loading chemistry editor… · " : ""}Version {appVersion}
-        </span>
-      </footer>
     </div>
   );
 }

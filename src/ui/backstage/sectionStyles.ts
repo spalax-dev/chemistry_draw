@@ -81,15 +81,18 @@ export const EMPTY_HINT: CSSProperties = {
   color: tokens.color.muted,
 };
 
-/** A single-column action list that does not stretch across the whole pane. */
+/** The Welcome actions: one horizontal row that wraps inside the 720 px pane. */
 export const ACTION_LIST: CSSProperties = {
   display: "flex",
-  flexDirection: "column",
+  flexDirection: "row",
+  flexWrap: "wrap",
   gap: 8,
-  maxWidth: 420,
+  alignItems: "center",
+  maxWidth: 720,
 };
 
+/** A content-sized 36 px action; the row never stretches it to the pane. */
 export const ACTION_BUTTON: CSSProperties = {
-  justifyContent: "flex-start",
+  justifyContent: "center",
   minHeight: 36,
 };

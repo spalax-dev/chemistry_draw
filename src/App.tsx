@@ -1,13 +1,18 @@
 import "ketcher-react/dist/index.css";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Editor } from "ketcher-react";
 import {
+  FunctionalGroupsProvider,
+  KetSerializer,
   RemoteStructServiceProvider,
+  SaltsAndSolventsProvider,
+  type CheckTypes,
   type DeepPartial,
   type ISettingsService,
   type Ketcher,
   type Settings,
+  type Struct,
 } from "ketcher-core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -42,7 +47,9 @@ import {
   emptyTabSet,
   EMPTY_KET,
   importedTab,
+  isEmptyCanvasKet,
   isUntouchedTab,
+  newDocumentTarget,
   pathBaseName,
   resolveOpenTarget,
   tabDisplayName,
@@ -73,6 +80,13 @@ import { EDITOR_BUTTONS } from "./ui/editorButtons";
 import { FileMenu } from "./ui/FileMenu";
 import { TabStrip } from "./ui/TabStrip";
 import { addRecent, loadRecent, removeRecent, saveRecent } from "./recent";
+import { loadRecentStructures, type RecentRow } from "./recentStructures";
+import {
+  buildLibraryTemplates,
+  type LibraryTemplate,
+  type TemplateSource,
+} from "./templateLibrary";
+import { cancelActiveTool, openStructureLibrary } from "./ketcherOptions";
 import type { FileMenuId } from "./fileMenu";
 
 /** The Save / Export helpers work on a document view of the active tab. */
@@ -93,6 +107,20 @@ interface TabClosePrompt {
 }
 
 type ClosePrompt = WindowClosePrompt | TabClosePrompt;
+
+/** Check types the Recent structures validation asks Indigo for (§5.11). */
+const RECENT_CHECK_TYPES: CheckTypes[] = [
+  "valence",
+  "radicals",
+  "pseudoatoms",
+  "stereo",
+  "query",
+  "overlapping_atoms",
+  "overlapping_bonds",
+  "rgroups",
+  "chiral",
+  "3d",
+];
 
 const SIMPLE_ERRORS: Record<string, string> = {
   "already have edge between vertices":
@@ -202,21 +230,72 @@ async function resolveApiBase(): Promise<ResolvedApi> {
   return { apiBase: `http://127.0.0.1:${port}/v2/`, info: { version: null, port } };
 }
 
+/**
+ * Reads Ketcher's real Structure Library (§5.11). Ketcher appends salts and
+ * solvents to the functional-groups list, so the salts are classified first
+ * and their names are skipped when mapping groups. Every entry keeps its own
+ * KET, the only structure a card previews or inserts.
+ */
+function readLibraryTemplates(): LibraryTemplate[] {
+  const salts = SaltsAndSolventsProvider.getInstance().getSaltsAndSolventsList();
+  const groups = FunctionalGroupsProvider.getInstance().getFunctionalGroupsList();
+  const serializer = new KetSerializer();
+
+  const nameOf = (struct: Struct): string => (struct.abbreviation || struct.name).trim();
+  const saltNames = new Set(salts.map((struct) => nameOf(struct).toLowerCase()));
+  const entries: TemplateSource[] = [];
+
+  // A struct the serializer cannot handle is skipped: one bad library entry
+  // must not empty or crash the whole Welcome grid (§5.11).
+  const serialize = (struct: Struct): string | null => {
+    try {
+      return serializer.serializeMicromolecules(struct);
+    } catch {
+      return null;
+    }
+  };
+
+  for (const struct of groups) {
+    const name = nameOf(struct);
+    if (saltNames.has(name.toLowerCase())) continue;
+    const ket = serialize(struct);
+    if (ket === null) continue;
+    entries.push({ name, group: "functional-group", ket });
+  }
+  for (const struct of salts) {
+    const ket = serialize(struct);
+    if (ket === null) continue;
+    entries.push({ name: nameOf(struct), group: "salt-solvent", ket });
+  }
+
+  return buildLibraryTemplates(entries);
+}
+
 function App() {
   const lastError = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const [ready, setReady] = useState(false);
-  /** True until the silent tab restore finishes; the backstage status strip shows it. */
-  const [restoring, setRestoring] = useState(true);
   const [provider, setProvider] = useState<RemoteStructServiceProvider | null>(null);
   /** The backstage is the start surface, so every launch begins here. */
   const [backstageOpen, setBackstageOpen] = useState(true);
   const [indigoInfo, setIndigoInfo] = useState<IndigoInfo>({ version: null, port: null });
+  /** The resolved sidecar base (`http://127.0.0.1:<port>/v2/`), null until ready. */
+  const [apiBase, setApiBase] = useState<string | null>(null);
 
   const ketcherRef = useRef<Ketcher | null>(null);
   /** The mounted editor's settings service; `null` before `onInit` (§5.11.1). */
   const settingsServiceRef = useRef<ISettingsService | null>(null);
   /** Live Ketcher settings for the backstage; the service is the only owner. */
   const [ketcherSettings, setKetcherSettings] = useState<Settings | null>(null);
+  /** The real Structure Library entries; empty until the editor reports ready. */
+  const templates = useMemo(() => {
+    if (!ready) return [];
+    try {
+      return readLibraryTemplates();
+    } catch (error) {
+      console.warn("[chemistry-draw] could not read the structure library:", error);
+      return [];
+    }
+  }, [ready]);
   const [tabSet, setTabSetState] = useState<TabSet>(() => emptyTabSet("tab-1"));
   const tabsRef = useRef(tabSet);
   const nextTabIdRef = useRef(1);
@@ -226,6 +305,9 @@ function App() {
   /** Remembered `.ket` paths, newest first (`docs/architecture.md` §5.9). */
   const [recent, setRecent] = useState<string[]>(() => loadRecent());
   const recentRef = useRef<string[]>(recent);
+  /** Welcome's Recent structures rows and their in-flight flag (§5.11). */
+  const [recentRows, setRecentRows] = useState<RecentRow[]>([]);
+  const [recentRowsLoading, setRecentRowsLoading] = useState(false);
 
   const [exportOpen, setExportOpen] = useState(false);
   const [closePrompt, setClosePrompt] = useState<ClosePrompt | null>(null);
@@ -280,6 +362,7 @@ function App() {
     resolveApiBase().then(({ apiBase, info }) => {
       if (cancelled) return;
       console.info("[chemistry-draw] Indigo API:", apiBase);
+      setApiBase(apiBase);
       setProvider(new RemoteStructServiceProvider(apiBase));
       setIndigoInfo(info);
     });
@@ -317,6 +400,56 @@ function App() {
       settingsServiceRef.current = null;
     };
   }, [ready]);
+
+  /**
+   * Builds the Welcome Recent structures rows (§5.11) once the backstage is
+   * open: it stats and reads each recent `.ket`, validates the derived molfile
+   * through the mounted editor's struct service and resolves a cached Indigo
+   * preview. The run is skipped outside Tauri or before the editor and the
+   * sidecar base are ready, restarts when the recent list changes while the
+   * backstage stays open, and a cancelled run never repaints.
+   */
+  useEffect(() => {
+    if (!backstageOpen) return;
+
+    const ketcher = ketcherRef.current;
+    if (!isTauri() || !ready || apiBase === null || !ketcher) {
+      setRecentRows([]);
+      setRecentRowsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRecentRowsLoading(true);
+
+    void loadRecentStructures(recent, {
+      apiBase,
+      check: (molfile) =>
+        ketcher.structService.check({ struct: molfile, types: RECENT_CHECK_TYPES }),
+    })
+      .then((rows) => {
+        if (!cancelled) setRecentRows(rows);
+      })
+      .catch((error) => {
+        console.warn("[chemistry-draw] could not load the recent structures:", error);
+        if (!cancelled) setRecentRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentRowsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backstageOpen, recent, ready, apiBase]);
+
+  /** Renders one library entry's KET to a preview object URL through Ketcher. */
+  const renderTemplatePreview = useCallback(async (ket: string): Promise<string> => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher) throw new Error("The editor is not ready to render a template preview.");
+    const image = await ketcher.generateImage(ket, { outputFormat: "svg" });
+    return URL.createObjectURL(image);
+  }, []);
 
   const handleError = useCallback((raw: unknown) => {
     const msg = typeof raw === "string" ? raw : String(raw);
@@ -421,6 +554,10 @@ function App() {
 
       const target = tabsRef.current.tabs.find((tab) => tab.id === id);
       if (!target) return;
+
+      // An armed template tool must not follow the pointer onto the tab that is
+      // about to be loaded (§5.11, "Tool reset").
+      cancelActiveTool(ketcher);
 
       busyRef.current = true;
       try {
@@ -578,7 +715,13 @@ function App() {
     resolve?.(choice);
   }, []);
 
-  /** New always opens an empty tab; the outgoing tab is preserved, not saved. */
+  /**
+   * New reuses an untouched empty active tab, so an empty canvas is never
+   * stacked on top of itself; any document or edit opens a new tab. The
+   * decision is made before `getKet`, so the reuse branch never commits or
+   * flushes the outgoing tab (the canvas may hold a stale structure after a
+   * commit, which the semantic empty check catches).
+   */
   const startNewDocument = useCallback(async () => {
     const ketcher = ketcherRef.current;
     if (!ketcher || busyRef.current) return;
@@ -586,6 +729,38 @@ function App() {
     busyRef.current = true;
     try {
       const outgoing = activeTab(tabsRef.current);
+      const target = newDocumentTarget(tabsRef.current);
+
+      if (target.kind === "reuse") {
+        // The reused tab is empty by definition; reload only if the canvas
+        // still carries a structure, behind the loading flag.
+        if (!isEmptyCanvasKet(await ketcher.getKet())) {
+          loadingRef.current = true;
+          try {
+            await ketcher.setMolecule(EMPTY_KET);
+          } finally {
+            loadingRef.current = false;
+          }
+        }
+
+        const next = updateTab(tabsRef.current, target.tabId, {
+          path: null,
+          name: null,
+          dirty: false,
+          ket: EMPTY_KET,
+        });
+        setTabs(next);
+
+        const reused = next.tabs.find((tab) => tab.id === target.tabId);
+        if (reused) await writeTabSnapshot(reused, Date.now());
+        await writeTabIndex(
+          next.tabs.map((entry) => entry.id),
+          next.activeId,
+        );
+        restartScheduler();
+        return;
+      }
+
       const ket = await ketcher.getKet();
       const committed = updateTab(tabsRef.current, outgoing.id, { ket });
       setTabs(committed);
@@ -757,7 +932,12 @@ function App() {
     [openProject, updateRecent],
   );
 
-  const openBackstage = useCallback(() => setBackstageOpen(true), []);
+  const openBackstage = useCallback(() => {
+    // A template armed in the Structure Library must not follow the pointer
+    // over the backstage (§5.11, "Tool reset").
+    cancelActiveTool(ketcherRef.current);
+    setBackstageOpen(true);
+  }, []);
   const closeBackstage = useCallback(() => setBackstageOpen(false), []);
 
   /**
@@ -801,15 +981,90 @@ function App() {
     [activateTabById],
   );
 
-  const handleBackstageSave = useCallback(() => {
-    void saveActiveTab("save");
-  }, [saveActiveTab]);
+  /**
+   * **More templates** closes the overlay first, then opens Ketcher's real
+   * Structure Library, so its dialog is not trapped under the backstage. The
+   * store lookup is deferred one frame to let the overlay unmount.
+   */
+  const handleMoreTemplates = useCallback(() => {
+    setBackstageOpen(false);
+    requestAnimationFrame(() => {
+      if (!openStructureLibrary(ketcherRef.current)) {
+        showError("Could not open the structure library.");
+      }
+    });
+  }, [showError]);
 
-  const handleBackstageSaveAs = useCallback(() => {
-    void saveActiveTab("save-as");
-  }, [saveActiveTab]);
+  /**
+   * A template card always opens a new tab. The outgoing tab is flushed first,
+   * then the descriptor is loaded behind the loading flag (so the programmatic
+   * `setMolecule` never dirties an incoming tab), serialized with `getKet` and
+   * committed as an unsaved document named after the template. The backstage
+   * closes only on success; an error shows in-app and leaves it open.
+   */
+  const insertTemplate = useCallback(
+    async (template: LibraryTemplate) => {
+      const ketcher = ketcherRef.current;
+      if (!ketcher || busyRef.current) return;
 
-  const handleBackstageExport = useCallback(() => setExportOpen(true), []);
+      busyRef.current = true;
+      let editorReplaced = false;
+      try {
+        const outgoing = activeTab(tabsRef.current);
+        const outgoingKet = await ketcher.getKet();
+        const committed = updateTab(tabsRef.current, outgoing.id, { ket: outgoingKet });
+        setTabs(committed);
+
+        const outgoingTab = committed.tabs.find((tab) => tab.id === outgoing.id);
+        if (outgoingTab) await writeTabSnapshot(outgoingTab, Date.now());
+
+        const id = allocateTabId();
+        let ket: string;
+        loadingRef.current = true;
+        try {
+          // From here the canvas no longer shows the active tab, so a failure
+          // (even one thrown by `setMolecule` itself) must restore it.
+          editorReplaced = true;
+          await ketcher.setMolecule(template.ket);
+          ket = await ketcher.getKet();
+        } finally {
+          loadingRef.current = false;
+        }
+
+        const tab = createTab(id, {
+          ket,
+          path: null,
+          name: template.name,
+          dirty: true,
+        });
+        const next = addTab(tabsRef.current, tab);
+        setTabs(next);
+
+        await writeTabSnapshot(tab, Date.now());
+        await writeTabIndex(
+          next.tabs.map((entry) => entry.id),
+          next.activeId,
+        );
+        restartScheduler();
+        setBackstageOpen(false);
+      } catch (error) {
+        loadingRef.current = false;
+        // The canvas may already hold the template while `tabs` still points at
+        // the previous document: put the active tab back before reporting.
+        if (editorReplaced) {
+          try {
+            await loadTabIntoEditor(activeTab(tabsRef.current));
+          } catch (restoreError) {
+            console.error("[chemistry-draw] could not restore the editor:", restoreError);
+          }
+        }
+        showError(`Could not insert ${template.name}: ${describeError(error)}`);
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError],
+  );
 
   /**
    * Sends one validated change to the editor's settings service. The service
@@ -1135,7 +1390,6 @@ function App() {
       } finally {
         if (!cancelled) {
           loadingRef.current = false;
-          setRestoring(false);
         }
       }
     })();
@@ -1318,18 +1572,20 @@ function App() {
           onNew={handleBackstageNew}
           onImport={handleBackstageImport}
           onOpen={handleBackstageOpen}
+          onTemplate={(template) => void insertTemplate(template)}
+          onMoreTemplates={handleMoreTemplates}
+          templates={templates}
+          renderPreview={renderTemplatePreview}
+          editorReady={ready}
           recent={recent}
+          recentStructures={recentRows}
+          recentStructuresLoading={recentRowsLoading}
           onOpenRecent={handleBackstageOpenRecent}
           onRemoveRecent={handleBackstageRemoveRecent}
           tabs={tabSet}
-          activeTabId={tabSet.activeId}
           onSwitchTab={handleBackstageSwitchTab}
-          onSave={handleBackstageSave}
-          onSaveAs={handleBackstageSaveAs}
-          onExport={handleBackstageExport}
           indigoVersion={indigoInfo.version}
           indigoPort={indigoInfo.port}
-          starting={!provider || !ready || restoring}
           appVersion={packageJson.version}
           ketcherSettings={ketcherSettings}
           onChangeSetting={handleChangeSetting}

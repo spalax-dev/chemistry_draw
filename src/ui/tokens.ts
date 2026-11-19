@@ -10,12 +10,22 @@ export const tokens = {
     error: "#ff4a4a",
     /** Wash under a hovered danger button. */
     errorWash: "rgba(255,74,74,0.08)",
+    /** Valid validation badge: the palette's teal-green accent. */
+    success: "#167782",
+    /** Low-emphasis wash under a Valid badge. */
+    successWash: "rgba(22,119,130,0.08)",
+    /** Warning validation badge (amber); badges only. */
+    warning: "#b26b00",
+    /** Low-emphasis wash under a Warnings badge. */
+    warningWash: "rgba(178,107,0,0.08)",
     text: "#333",
     textSecondary: "#585858",
     muted: "#7c7c7f",
     border: "#cad3dd",
     surface: "#ffffff",
     surfaceSubtle: "#eff2f5",
+    /** Template-card preview wash; one step lighter than `surfaceSubtle`. */
+    surfacePreview: "#fafbfc",
     page: "#f5f5f5",
     /** Ketcher's `.Modal-module_modalOverlay`; translucent so the editor stays visible. */
     overlay: "rgba(94,94,94,0.2)",

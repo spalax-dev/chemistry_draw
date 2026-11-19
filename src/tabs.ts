@@ -176,8 +176,46 @@ export function isKetDocument(text: string): boolean {
 
 /** An untouched tab Open may reuse instead of opening a new one. */
 export function isUntouchedTab(tab: TabState): boolean {
-  const ket = tab.ket.trim();
-  return tab.name === null && tab.path === null && !tab.dirty && (ket === "" || ket === EMPTY_KET);
+  return tab.name === null && tab.path === null && !tab.dirty && isEmptyCanvasKet(tab.ket);
+}
+
+/**
+ * Whether serialized editor content is an empty canvas. `""` and whitespace are
+ * the untouched tab, and Ketcher's `getKet()` returns pretty-printed KET with
+ * `ket_version` and empty `root.nodes` (plus empty `connections`/`templates`),
+ * so a byte comparison with `EMPTY_KET` is not enough. Anything else —
+ * malformed JSON, a missing or non-empty `root.nodes` — is a real structure.
+ */
+export function isEmptyCanvasKet(ket: string): boolean {
+  if (ket.trim().length === 0) return true;
+
+  try {
+    const parsed: unknown = JSON.parse(ket);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+
+    const root = (parsed as { root?: unknown }).root;
+    if (typeof root !== "object" || root === null || Array.isArray(root)) return false;
+
+    const nodes = (root as { nodes?: unknown }).nodes;
+    return Array.isArray(nodes) && nodes.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** What New does with the current set: empty the active tab, or add one. */
+export type NewDocumentTarget = { kind: "reuse"; tabId: string } | { kind: "create" };
+
+/**
+ * New reuses the active tab only when it is an untouched empty tab, so an empty
+ * canvas is not stacked on top of itself; any document or edit forces a new
+ * tab.
+ */
+export function newDocumentTarget(set: TabSet): NewDocumentTarget {
+  const tab = set.tabs.find((entry) => entry.id === set.activeId);
+  return tab !== undefined && isUntouchedTab(tab)
+    ? { kind: "reuse", tabId: tab.id }
+    : { kind: "create" };
 }
 
 /**
