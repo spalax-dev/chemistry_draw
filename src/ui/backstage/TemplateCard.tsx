@@ -60,6 +60,13 @@ const PREVIEW_PLACEHOLDER: CSSProperties = {
   color: tokens.color.textSecondary,
 };
 
+const PREVIEW_LOADING: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  color: tokens.color.textSecondary,
+};
+
 const BODY: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -114,7 +121,34 @@ function TemplatePreviewArea({ preview }: { preview?: TemplatePreviewState }) {
 
   return (
     <span style={PREVIEW}>
-      <span style={PREVIEW_PLACEHOLDER}>{label}</span>
+      {preview?.status === "error" ? (
+        <span style={PREVIEW_PLACEHOLDER}>{label}</span>
+      ) : (
+        <span style={PREVIEW_LOADING}>
+          <svg width={14} height={14} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray="42 15"
+            >
+              <animateTransform
+                attributeName="transform"
+                type="rotate"
+                from="0 12 12"
+                to="360 12 12"
+                dur="0.9s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          </svg>
+          <span style={PREVIEW_PLACEHOLDER}>{label}</span>
+        </span>
+      )}
     </span>
   );
 }

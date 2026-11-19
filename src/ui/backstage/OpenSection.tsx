@@ -1,15 +1,17 @@
 /**
- * Backstage → Open: the remembered `.ket` paths and the tabs that are open
- * right now. Presentational only; `App` owns open/remove/switch
- * (`docs/architecture.md` §5.11). Rows show text only.
+ * Backstage → Open: the shared **Recent structures** table with an added
+ * **Remove** action, then the tabs that are open right now. Presentational
+ * only; `App` owns open/remove/switch (`docs/architecture.md` §5.11). The table
+ * is the single loader-backed source shared with Welcome, so this pane never
+ * builds a second list and never renders artwork of its own.
  */
 
-import { recentName } from "../../recent";
+import type { RecentRow } from "../../recentStructures";
 import { tabDisplayName, type TabSet } from "../../tabs";
 import { Button } from "../Button";
+import { RecentStructuresTable } from "./RecentStructuresTable";
 import {
   CARD,
-  EMPTY_HINT,
   ROW,
   ROW_DIVIDER,
   ROW_META,
@@ -21,8 +23,10 @@ import {
 } from "./sectionStyles";
 
 export interface OpenSectionProps {
-  /** Absolute `.ket` paths, newest first, capped by `src/recent.ts`. */
-  recent: string[];
+  /** The same rows `App` loaded for Welcome (`loadRecentStructures`). */
+  recentStructures: RecentRow[];
+  /** True while `App` loads those rows; the table shows its loading row. */
+  recentStructuresLoading: boolean;
   onOpenRecent: (path: string) => void;
   onRemoveRecent: (path: string) => void;
   tabs: TabSet;
@@ -30,7 +34,8 @@ export interface OpenSectionProps {
 }
 
 export function OpenSection({
-  recent,
+  recentStructures,
+  recentStructuresLoading,
   onOpenRecent,
   onRemoveRecent,
   tabs,
@@ -43,29 +48,12 @@ export function OpenSection({
       </h2>
       <p style={SECTION_LEAD}>The last documents opened on this machine.</p>
 
-      {recent.length === 0 ? (
-        <p style={EMPTY_HINT}>No recent documents</p>
-      ) : (
-        <ul style={CARD}>
-          {recent.map((path, index) => {
-            const name = recentName(path);
-            return (
-              <li key={path} style={{ ...ROW, ...(index === 0 ? {} : { borderTop: ROW_DIVIDER }) }}>
-                <span style={ROW_TEXT}>
-                  <span style={ROW_NAME} title={path}>
-                    {name}
-                  </span>
-                  <span style={ROW_META} title={path}>
-                    {path}
-                  </span>
-                </span>
-                <Button onClick={() => onOpenRecent(path)}>Open</Button>
-                <Button onClick={() => onRemoveRecent(path)}>Remove</Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <RecentStructuresTable
+        rows={recentStructures}
+        loading={recentStructuresLoading}
+        onOpen={onOpenRecent}
+        onRemove={onRemoveRecent}
+      />
 
       <h3 style={SUBHEADING}>Open documents</h3>
       <ul style={CARD}>

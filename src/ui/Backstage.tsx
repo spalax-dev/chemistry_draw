@@ -42,13 +42,13 @@ export interface BackstageProps {
   onMoreTemplates: () => void;
   /** The real Structure Library entries; empty until `App` reads the providers. */
   templates?: LibraryTemplate[];
+  /** True while `App` builds that library after paint; Welcome paints skeletons. */
+  templatesLoading?: boolean;
   /** Ketcher's preview renderer; absent until `App` wires `generateImage`. */
   renderPreview?: (ket: string) => Promise<string>;
   /** Whether the editor can load a structure; template cards stay inert until it can. */
   editorReady: boolean;
-  /** Absolute `.ket` paths, newest first. */
-  recent: string[];
-  /** Welcome's Recent structures rows; empty until `App` loads them. */
+  /** Welcome's and Open's Recent structures rows; empty until `App` loads them. */
   recentStructures?: RecentRow[];
   /** True while `App` builds those rows. */
   recentStructuresLoading?: boolean;
@@ -285,9 +285,9 @@ export function Backstage({
   onTemplate,
   onMoreTemplates,
   templates = [],
+  templatesLoading = false,
   renderPreview = unavailablePreview,
   editorReady,
-  recent,
   recentStructures = [],
   recentStructuresLoading = false,
   onOpenRecent,
@@ -396,7 +396,8 @@ export function Backstage({
       case "open":
         return (
           <OpenSection
-            recent={recent}
+            recentStructures={recentStructures}
+            recentStructuresLoading={recentStructuresLoading}
             onOpenRecent={onOpenRecent}
             onRemoveRecent={onRemoveRecent}
             tabs={tabs}
@@ -437,6 +438,7 @@ export function Backstage({
             tabs={tabs}
             onBackToEditor={onClose}
             templates={templates}
+            templatesLoading={templatesLoading}
             renderPreview={renderPreview}
             disabled={!editorReady}
             recentStructures={recentStructures}

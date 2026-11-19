@@ -77,6 +77,43 @@ export function buildLibraryTemplates(entries: readonly TemplateSource[]): Libra
   return templates;
 }
 
+/** Marks every `sgroups[]` entry of a parsed KET document as expanded. */
+function expandSgroupsIn(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) expandSgroupsIn(item);
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.sgroups)) {
+    for (const sgroup of record.sgroups) {
+      if (sgroup !== null && typeof sgroup === "object") {
+        (sgroup as Record<string, unknown>).expanded = true;
+      }
+    }
+  }
+  for (const child of Object.values(record)) expandSgroupsIn(child);
+}
+
+/**
+ * Returns the entry's KET with every SGroup expanded, for the preview only
+ * (`docs/architecture.md` §5.11): Indigo draws a collapsed SGroup as its
+ * abbreviation, so a "Boc" card would otherwise hide the structure. The input
+ * is the original entry KET, never mutated; text that is not JSON comes back
+ * unchanged so the preview renderer can report the real error.
+ */
+export function expandSgroupsForPreview(ket: string): string {
+  let document: unknown;
+  try {
+    document = JSON.parse(ket);
+  } catch {
+    return ket;
+  }
+  expandSgroupsIn(document);
+  return JSON.stringify(document);
+}
+
 /**
  * How many cards the Welcome grid shows, independent of the viewport width
  * (`docs/architecture.md` §5.11): always exactly four.

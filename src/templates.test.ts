@@ -462,12 +462,40 @@ describe("welcome responsive template wiring", () => {
 });
 
 describe("template card previews", () => {
-  it("renders Ketcher's preview as an image, never an inline drawing", () => {
+  it("renders Ketcher's preview as an image, never an inline structure drawing", () => {
     expect(TEMPLATE_CARD_SOURCE).toMatch(/<img\b/);
     expect(TEMPLATE_CARD_SOURCE).toContain("preview.url");
-    expect(TEMPLATE_CARD_SOURCE).not.toMatch(/<svg\b/);
     expect(TEMPLATE_CARD_SOURCE).not.toMatch(/<text\b/);
     expect(TEMPLATE_CARD_SOURCE).not.toMatch(/strokeWidth=\{1\.5\}|stroke-width="1\.5"/);
+
+    // Exactly one inline SVG exists, and it is the loading spinner: the source
+    // may not hand-author a structure anywhere on the card.
+    expect(TEMPLATE_CARD_SOURCE.match(/<svg\b/g) ?? []).toHaveLength(1);
+
+    const previewAreaStart = TEMPLATE_CARD_SOURCE.indexOf("function TemplatePreviewArea");
+    expect(previewAreaStart).toBeGreaterThan(-1);
+    const previewAreaEnd = TEMPLATE_CARD_SOURCE.indexOf("\nexport interface TemplateCardProps");
+    expect(previewAreaEnd).toBeGreaterThan(previewAreaStart);
+
+    const svgIndex = TEMPLATE_CARD_SOURCE.indexOf("<svg");
+    expect(svgIndex).toBeGreaterThan(previewAreaStart);
+    expect(svgIndex).toBeLessThan(previewAreaEnd);
+
+    const previewArea = TEMPLATE_CARD_SOURCE.slice(previewAreaStart, previewAreaEnd);
+    const spinnerStart = previewArea.indexOf("<svg");
+    const spinnerEnd = previewArea.indexOf("</svg>", spinnerStart);
+    expect(spinnerStart).toBeGreaterThan(-1);
+    expect(spinnerEnd).toBeGreaterThan(spinnerStart);
+
+    const spinner = previewArea.slice(spinnerStart, spinnerEnd + "</svg>".length);
+    expect(spinner).toContain("animateTransform");
+    expect(spinner).toContain("<circle");
+
+    // Outside the spinner block the card draws no vector primitives at all.
+    const outsideSpinner = TEMPLATE_CARD_SOURCE.replace(spinner, "");
+    for (const primitive of [/<path\b/, /<polygon\b/, /<circle\b/, /<text\b/]) {
+      expect(outsideSpinner).not.toMatch(primitive);
+    }
   });
 
   it("shows only Ketcher-produced previews, never a bundled raster asset", () => {
@@ -480,6 +508,46 @@ describe("template card previews", () => {
     expect(TEMPLATE_CARD_SOURCE).not.toMatch(/<text\b/);
     expect(TEMPLATE_CARD_SOURCE).not.toMatch(/fontSize=\{10\}/);
     expect(TEMPLATE_CARD_SOURCE).not.toMatch(/fill=\{tokens\.color\.textSecondary\}/);
+  });
+});
+
+/**
+ * While the deferred library build lands the grid paints placeholder cards, not
+ * a curated or partial set (`docs/architecture.md` §5.11, `docs/conventions.md`
+ * §6.8). No DOM runner exists, so the count and the inert wiring are pinned
+ * against the source: a hardcoded skeleton count, a missing `aria-hidden` or a
+ * clickable skeleton must each fail.
+ */
+describe("welcome template skeletons", () => {
+  it("renders exactly four skeletons from TEMPLATE_CARD_COUNT", async () => {
+    const { TEMPLATE_CARD_COUNT } = await import("./templateLibrary");
+
+    expect(TEMPLATE_CARD_COUNT).toBe(4);
+    expect(WELCOME_SECTION_SOURCE).toMatch(
+      /Array\.from\(\s*\{\s*length:\s*TEMPLATE_CARD_COUNT\s*\}/,
+    );
+
+    const loadingStart = WELCOME_SECTION_SOURCE.indexOf("{templatesLoading && (");
+    expect(loadingStart).toBeGreaterThan(-1);
+    const loadingEnd = WELCOME_SECTION_SOURCE.indexOf("{!templatesLoading &&", loadingStart);
+    expect(loadingEnd).toBeGreaterThan(loadingStart);
+    const skeletonBlock = WELCOME_SECTION_SOURCE.slice(loadingStart, loadingEnd);
+
+    expect(skeletonBlock).toMatch(/<TemplateSkeletonCard\b/);
+    expect(skeletonBlock).not.toMatch(/onClick/);
+  });
+
+  it("keeps the skeleton cards aria-hidden and non-interactive", () => {
+    const cardStart = WELCOME_SECTION_SOURCE.indexOf("function TemplateSkeletonCard");
+    expect(cardStart).toBeGreaterThan(-1);
+    const cardEnd = WELCOME_SECTION_SOURCE.indexOf("const RECENT_HEADER", cardStart);
+    expect(cardEnd).toBeGreaterThan(cardStart);
+    const skeletonCard = WELCOME_SECTION_SOURCE.slice(cardStart, cardEnd);
+
+    expect(skeletonCard).toMatch(/aria-hidden="true"/);
+    expect(skeletonCard).toMatch(/<div\b/);
+    expect(skeletonCard).not.toMatch(/<button\b/);
+    expect(skeletonCard).not.toMatch(/onClick/);
   });
 });
 
@@ -692,11 +760,13 @@ describe("backstage Open pane", () => {
     expect(existsSync(RECENT_SECTION_URL)).toBe(false);
   });
 
-  it("renders no image, thumbnail or preview", () => {
+  it("delegates previews to the shared recent table instead of drawing its own", () => {
     const source = openSectionSource();
 
     expect(source).not.toBe("");
-    for (const forbidden of [/<img\b/i, /<svg\b/i, /thumbnail/i, /preview/i]) {
+    // Previews now live in RecentStructuresTable; the section only wires it.
+    expect(source).toContain("RecentStructuresTable");
+    for (const forbidden of [/<img\b/i, /<svg\b/i]) {
       expect(source).not.toMatch(forbidden);
     }
   });
@@ -772,5 +842,84 @@ describe("welcome action row layout", () => {
       /sampleTemplates\(templates,\s*TEMPLATE_CARD_COUNT,\s*random\)/,
     );
     expect(WELCOME_SECTION_SOURCE).toMatch(/visibleTemplates\.map\(/);
+  });
+});
+
+/**
+ * The Open pane renders the same **Recent structures** table as Welcome
+ * (`docs/architecture.md` §5.11), with an added **Remove** action. No DOM test
+ * runner exists, so the delegation, the optional action and the App wiring are
+ * checked against the source: a second hand-built list, an unconditional
+ * Remove button or an unwired pane must each fail these assertions.
+ */
+const RECENT_STRUCTURES_TABLE_URL = new URL(
+  "./ui/backstage/RecentStructuresTable.tsx",
+  import.meta.url,
+);
+
+function recentStructuresTableSource(): string {
+  return existsSync(RECENT_STRUCTURES_TABLE_URL)
+    ? readFileSync(RECENT_STRUCTURES_TABLE_URL, "utf8")
+    : "";
+}
+
+/** The `<Tag ... />` element in `source`, from its opening to its self-close. */
+function selfClosingElement(source: string, tag: string): string {
+  const start = source.indexOf(`<${tag}`);
+  expect(start).toBeGreaterThan(-1);
+
+  const end = source.indexOf("/>", start);
+  expect(end).toBeGreaterThan(start);
+  return source.slice(start, end + 2);
+}
+
+describe("backstage Open shared recent table", () => {
+  it("imports and renders RecentStructuresTable with rows, loading, onOpen and onRemove", () => {
+    const source = openSectionSource();
+
+    expect(source).toMatch(
+      /import\s*\{\s*RecentStructuresTable\s*\}\s*from\s*["']\.\/RecentStructuresTable["']/,
+    );
+
+    const table = selfClosingElement(source, "RecentStructuresTable");
+
+    expect(table).toMatch(/\brows=\{/);
+    expect(table).toMatch(/\bloading=\{/);
+    expect(table).toMatch(/\bonOpen=\{/);
+    expect(table).toMatch(/\bonRemove=\{/);
+  });
+
+  it("keeps the open-tabs list with its Switch action below the table", () => {
+    const source = openSectionSource();
+    const tableIndex = source.indexOf("<RecentStructuresTable");
+    const tabsIndex = source.indexOf("tabs.tabs.map(");
+
+    expect(tableIndex).toBeGreaterThan(-1);
+    expect(tabsIndex).toBeGreaterThan(tableIndex);
+    expect(source).toMatch(/onClick=\{\(\) => onSwitchTab\(tab\.id\)\}/);
+    expect(source).toMatch(/>\s*Switch\s*</);
+  });
+
+  it("accepts an optional onRemove on the shared table", () => {
+    const source = recentStructuresTableSource();
+
+    expect(source).not.toBe("");
+    expect(source).toMatch(/onRemove\?:\s*\(path:\s*string\)\s*=>\s*void/);
+  });
+
+  it("renders the Remove action only when onRemove is provided", () => {
+    const source = recentStructuresTableSource();
+    const guard = source.search(/\bonRemove\s*(?:&&|\?\s*\()/);
+    const removeIndex = source.search(/>\s*Remove\s*</);
+
+    expect(guard).toBeGreaterThan(-1);
+    expect(removeIndex).toBeGreaterThan(guard);
+  });
+
+  it("passes the loaded rows and loading flag from Backstage to OpenSection", () => {
+    const openSection = selfClosingElement(BACKSTAGE_UI_SOURCE, "OpenSection");
+
+    expect(openSection).toMatch(/\brecentStructures\b/);
+    expect(openSection).toMatch(/\brecentStructuresLoading\b/);
   });
 });

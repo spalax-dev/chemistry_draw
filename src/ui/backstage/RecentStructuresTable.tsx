@@ -4,7 +4,8 @@
  *
  * A compact, presentational table over the rows `App` built with
  * `loadRecentStructures`: thumbnail + name, format, size, the Indigo validation
- * badge, last modified and one **Open** action. Every value is a label the
+ * badge, last modified and the **Open** action, plus an optional **Remove**
+ * action that only the Open pane supplies. Every value is a label the
  * loader already produced, so a row never invents a size, date, status or
  * preview. The table only renders the rows it is given (the App caps them to the
  * recent list), shows one muted loading row while the loader runs and one muted
@@ -24,6 +25,11 @@ export interface RecentStructuresTableProps {
   loading: boolean;
   /** Opens a row's document through the App's recent-open handler. */
   onOpen: (path: string) => void;
+  /**
+   * Optional second action. Only the Open pane supplies it, adding a **Remove**
+   * text button beside **Open**; Welcome omits it and keeps Open alone.
+   */
+  onRemove?: (path: string) => void;
 }
 
 const TABLE: CSSProperties = {
@@ -157,6 +163,20 @@ const OPEN_BUTTON: CSSProperties = {
   outlineOffset: 2,
 };
 
+/** The optional second action: muted until the row is hovered, then accent. */
+const REMOVE_BUTTON: CSSProperties = {
+  ...OPEN_BUTTON,
+  color: tokens.color.muted,
+  outlineColor: tokens.color.muted,
+};
+
+/** Inline action group so Open and Remove share one cell in reading order. */
+const ACTIONS: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+};
+
 /** Badge label and palette per status; the view never invents one. */
 const BADGES: Record<ValidationStatus, { label: string; color: string; wash: string }> = {
   valid: { label: "Valid", color: tokens.color.success, wash: tokens.color.successWash },
@@ -179,10 +199,12 @@ function RecentStructureRow({
   row,
   last,
   onOpen,
+  onRemove,
 }: {
   row: RecentRow;
   last: boolean;
   onOpen: (path: string) => void;
+  onRemove?: (path: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const badge = BADGES[row.status];
@@ -192,6 +214,10 @@ function RecentStructureRow({
   };
   const openStyle: CSSProperties = {
     ...OPEN_BUTTON,
+    ...(hovered ? { color: tokens.color.accentHover, textDecoration: "underline" } : null),
+  };
+  const removeStyle: CSSProperties = {
+    ...REMOVE_BUTTON,
     ...(hovered ? { color: tokens.color.accentHover, textDecoration: "underline" } : null),
   };
 
@@ -228,20 +254,37 @@ function RecentStructureRow({
       </td>
       <td style={META_CELL}>{row.modifiedLabel}</td>
       <td style={CELL}>
-        <button
-          type="button"
-          aria-label={`Open ${row.name}`}
-          onClick={() => onOpen(row.path)}
-          style={openStyle}
-        >
-          Open
-        </button>
+        <span style={ACTIONS}>
+          <button
+            type="button"
+            aria-label={`Open ${row.name}`}
+            onClick={() => onOpen(row.path)}
+            style={openStyle}
+          >
+            Open
+          </button>
+          {onRemove ? (
+            <button
+              type="button"
+              aria-label={`Remove ${row.name}`}
+              onClick={() => onRemove(row.path)}
+              style={removeStyle}
+            >
+              Remove
+            </button>
+          ) : null}
+        </span>
       </td>
     </tr>
   );
 }
 
-export function RecentStructuresTable({ rows, loading, onOpen }: RecentStructuresTableProps) {
+export function RecentStructuresTable({
+  rows,
+  loading,
+  onOpen,
+  onRemove,
+}: RecentStructuresTableProps) {
   return (
     <table aria-label="Recent structures" style={TABLE}>
       <thead>
@@ -286,6 +329,7 @@ export function RecentStructuresTable({ rows, loading, onOpen }: RecentStructure
               row={row}
               last={index === rows.length - 1}
               onOpen={onOpen}
+              onRemove={onRemove}
             />
           ))
         )}

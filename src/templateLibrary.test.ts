@@ -22,6 +22,11 @@ const WELCOME_SECTION_SOURCE = readFileSync(
 
 const BACKSTAGE_UI_SOURCE = readFileSync(new URL("./ui/Backstage.tsx", import.meta.url), "utf8");
 
+const TEMPLATE_CARD_SOURCE = readFileSync(
+  new URL("./ui/backstage/TemplateCard.tsx", import.meta.url),
+  "utf8",
+);
+
 const APP_SOURCE = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 
 const KETCHER_OPTIONS_SOURCE = readFileSync(
@@ -203,5 +208,206 @@ describe("template tool reset contract", () => {
     expect(helper).toMatch(/cancelable:\s*true/);
     expect(helper).toMatch(/dispatchEvent\(/);
     expect(helper).not.toMatch(/\.click\(/);
+  });
+});
+
+/** Loads the expansion helper lazily so every source contract still runs. */
+async function expand(ket: string): Promise<string> {
+  const { expandSgroupsForPreview } = await import("./templateLibrary");
+  return expandSgroupsForPreview(ket);
+}
+
+interface SgroupEntry {
+  abbreviation?: string;
+  expanded?: boolean;
+  [field: string]: unknown;
+}
+
+/** The parts of a KET document the expansion test inspects. */
+interface KetDocument {
+  root?: unknown;
+  mol0?: {
+    type?: string;
+    atoms?: unknown[];
+    bonds?: unknown[];
+    sgroups?: SgroupEntry[];
+    fragments?: { sgroups?: SgroupEntry[] }[];
+    nested?: { deeper?: { sgroups?: SgroupEntry[] } };
+  };
+}
+
+/**
+ * A real library entry shape: the SGroup carries the label Indigo would draw
+ * (`Et`, `Boc`); one entry omits `expanded`, the other collapses it.
+ */
+const SGROUP_KET = JSON.stringify({
+  root: { nodes: [{ $ref: "mol0" }] },
+  mol0: {
+    type: "molecule",
+    atoms: [
+      { label: "C", location: [0, 0, 0] },
+      { label: "O", location: [1.5, 0, 0] },
+    ],
+    bonds: [{ type: 1, atoms: [0, 1] }],
+    sgroups: [
+      { type: "SUP", abbreviation: "Et", atoms: [0] },
+      { type: "SUP", abbreviation: "Boc", atoms: [1], expanded: false },
+    ],
+  },
+});
+
+/** SGroups live inside the molecule node, an array child and a deeper object. */
+const NESTED_SGROUP_KET = JSON.stringify({
+  root: { nodes: [{ $ref: "mol0" }] },
+  mol0: {
+    type: "molecule",
+    atoms: [{ label: "N", location: [0, 0, 0] }],
+    sgroups: [{ type: "SUP", abbreviation: "OMe", expanded: false }],
+    fragments: [{ type: "fragment", sgroups: [{ abbreviation: "Ac", expanded: false }] }],
+    nested: { deeper: { sgroups: [{ abbreviation: "Bz" }] } },
+  },
+});
+
+const PLAIN_KET = JSON.stringify({
+  root: { nodes: [{ $ref: "mol0" }] },
+  mol0: {
+    type: "molecule",
+    atoms: [{ label: "C", location: [0, 0, 0] }],
+    bonds: [],
+  },
+});
+
+/**
+ * Indigo draws the abbreviation of a collapsed SGroup, so the preview KET — and
+ * only the preview KET — is expanded (`docs/architecture.md` §5.11, activity 30).
+ */
+describe("expandSgroupsForPreview", () => {
+  it("sets expanded on every sgroup and keeps the abbreviations and other fields", async () => {
+    const result = JSON.parse(await expand(SGROUP_KET)) as KetDocument;
+    const source = JSON.parse(SGROUP_KET) as KetDocument;
+
+    expect(result.mol0?.sgroups?.map((sgroup) => sgroup.expanded)).toEqual([true, true]);
+    expect(result.mol0?.sgroups?.map((sgroup) => sgroup.abbreviation)).toEqual(["Et", "Boc"]);
+    expect(result.mol0?.atoms).toEqual(source.mol0?.atoms);
+    expect(result.mol0?.bonds).toEqual(source.mol0?.bonds);
+    expect(result.root).toEqual(source.root);
+  });
+
+  it("expands sgroups nested in molecule objects and arrays", async () => {
+    const result = JSON.parse(await expand(NESTED_SGROUP_KET)) as KetDocument;
+
+    expect(result.mol0?.sgroups?.[0]?.expanded).toBe(true);
+    expect(result.mol0?.fragments?.[0]?.sgroups?.[0]?.expanded).toBe(true);
+    expect(result.mol0?.nested?.deeper?.sgroups?.[0]?.expanded).toBe(true);
+  });
+
+  it("returns an equivalent document when there is no sgroup", async () => {
+    const result = JSON.parse(await expand(PLAIN_KET)) as unknown;
+
+    expect(result).toEqual(JSON.parse(PLAIN_KET));
+  });
+
+  it("returns malformed JSON unchanged", async () => {
+    expect(await expand("not json")).toBe("not json");
+  });
+});
+
+/**
+ * The expansion is preview-only: `App`'s preview renderer expands the copy,
+ * while a card click still inserts the entry's original KET
+ * (`docs/conventions.md` §6.8, activity 30).
+ */
+describe("expanded preview contract", () => {
+  it("expands the KET in the preview renderer before Ketcher draws it", () => {
+    const preview = sourceBetween(
+      APP_SOURCE,
+      "const renderTemplatePreview = useCallback(",
+      "\n  const handleError",
+    );
+
+    expect(APP_SOURCE).toMatch(
+      /import\s*\{[^}]*expandSgroupsForPreview[^}]*\}\s*from\s*["']\.\/templateLibrary["']/,
+    );
+    expect(preview).toMatch(/expandSgroupsForPreview\(\s*ket\s*\)/);
+    expect(preview).not.toMatch(/generateImage\(\s*ket\s*,/);
+    expect(preview).toMatch(/generateImage\(\s*\w+\s*,\s*\{\s*outputFormat:\s*["']svg["']/);
+  });
+
+  it("inserts the original unexpanded entry KET", () => {
+    const insert = sourceBetween(
+      APP_SOURCE,
+      "const insertTemplate = useCallback(",
+      "\n  const applySetting",
+    );
+
+    expect(insert).toMatch(/setMolecule\(\s*template\.ket\s*\)/);
+    expect(insert).not.toMatch(/expandSgroupsForPreview/);
+  });
+});
+
+/**
+ * The library is built after paint, so Welcome paints placeholders at once:
+ * four non-clickable skeleton cards in the empty branch and an inline SVG
+ * spinner in the card's preview placeholder (`docs/conventions.md` §6.8).
+ */
+describe("template loading placeholder contract", () => {
+  it("paints non-clickable skeleton cards when the template list is empty", () => {
+    const emptyBranch = sourceBetween(
+      WELCOME_SECTION_SOURCE,
+      "templates.length === 0 ? (",
+      ") : (",
+    );
+
+    expect(emptyBranch).toMatch(/Skeleton/);
+    expect(emptyBranch).toContain("TEMPLATE_CARD_COUNT");
+    expect(emptyBranch).not.toMatch(/onTemplate/);
+  });
+
+  it("draws an inline SVG spinner in the preview placeholder", () => {
+    const previewArea = sourceBetween(
+      TEMPLATE_CARD_SOURCE,
+      "function TemplatePreviewArea",
+      "export interface TemplateCardProps",
+    );
+
+    expect(previewArea).toMatch(/<svg[\s>]/);
+    expect(previewArea).toMatch(/animateTransform/);
+  });
+});
+
+/**
+ * An empty read is not cached because the providers may not be populated yet,
+ * so a later backstage open retries the build (`docs/architecture.md` §5.11,
+ * activity 30). The effect is keyed on the open flag and readiness, never on
+ * the result, so an again-empty read cannot loop.
+ */
+describe("empty library retry contract", () => {
+  const retryEffect = sourceBetween(
+    APP_SOURCE,
+    "// A later backstage open retries an empty library build.",
+    "\n  const [tabSet",
+  );
+
+  it("keys the retry on backstageOpen and ready, not on the templates result", () => {
+    expect(retryEffect).toMatch(/useEffect\(/);
+
+    const dependencies = retryEffect.match(/\},\s*\[([^\]]*)\]\);/)?.[1] ?? "";
+    expect(dependencies).toContain("backstageOpen");
+    expect(dependencies).toContain("ready");
+    expect(dependencies).not.toMatch(/\btemplates\b/);
+  });
+
+  it("reloads the library only when the current result is an empty list", () => {
+    expect(retryEffect).toMatch(/if\s*\(\s*!backstageOpen\s*\|\|\s*!ready\s*\)\s*return;/);
+    expect(retryEffect).toMatch(/templatesRef\.current/);
+    expect(retryEffect).toMatch(
+      /current\s*===\s*null\s*\|\|\s*current\.length\s*>\s*0\)\s*return;/,
+    );
+    expect(retryEffect).toContain("loadLibraryTemplates()");
+  });
+
+  it("skips while a shared build is in flight and keeps the loading state", () => {
+    expect(retryEffect).toMatch(/libraryBuild\s*!==\s*null\)\s*return;/);
+    expect(retryEffect).toMatch(/setTemplates\(null\)/);
   });
 });

@@ -54,6 +54,51 @@ const TEMPLATE_GRID: CSSProperties = {
   maxWidth: 720,
 };
 
+const SKELETON_CARD: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  minWidth: 0,
+  borderStyle: "solid",
+  borderWidth: tokens.borderWidth,
+  borderRadius: tokens.dialog.radius,
+  borderColor: tokens.color.border,
+  background: tokens.color.surface,
+  overflow: "hidden",
+};
+
+const SKELETON_PREVIEW: CSSProperties = {
+  height: 96,
+  boxSizing: "border-box",
+  background: tokens.color.surfacePreview,
+  borderBottom: `${tokens.borderWidth} solid ${tokens.color.border}`,
+};
+
+const SKELETON_BODY: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  padding: 10,
+};
+
+const SKELETON_BONE: CSSProperties = {
+  height: 10,
+  borderRadius: tokens.radius,
+  background: tokens.color.surfaceSubtle,
+};
+
+/** One placeholder card with the real card's box, until the library lands. */
+function TemplateSkeletonCard() {
+  return (
+    <div aria-hidden="true" style={SKELETON_CARD}>
+      <div style={SKELETON_PREVIEW} />
+      <div style={SKELETON_BODY}>
+        <div style={{ ...SKELETON_BONE, width: "70%" }} />
+        <div style={{ ...SKELETON_BONE, width: "45%", height: 8 }} />
+      </div>
+    </div>
+  );
+}
+
 /** The `RECENT STRUCTURES` heading: same 10 px uppercase label as Templates. */
 const RECENT_HEADER: CSSProperties = {
   ...TEMPLATES_LABEL,
@@ -77,6 +122,8 @@ export interface WelcomeSectionProps {
   onBackToEditor: () => void;
   /** The real Structure Library entries; the only source of cards. */
   templates: LibraryTemplate[];
+  /** True until the deferred library build lands; shows skeleton cards. */
+  templatesLoading?: boolean;
   /** Renders one entry's KET to a preview object URL through Ketcher. */
   renderPreview: (ket: string) => Promise<string>;
   /** True until the editor reports ready; the template cards stay inert. */
@@ -124,6 +171,7 @@ export function WelcomeSection({
   tabs,
   onBackToEditor,
   templates,
+  templatesLoading = false,
   renderPreview,
   disabled = false,
   recentStructures,
@@ -173,7 +221,16 @@ export function WelcomeSection({
         </Button>
       </div>
       {templates.length === 0 ? (
-        <p style={EMPTY_HINT}>No templates available</p>
+        <>
+          {templatesLoading && (
+            <div style={TEMPLATE_GRID} aria-hidden="true">
+              {Array.from({ length: TEMPLATE_CARD_COUNT }, (_, index) => (
+                <TemplateSkeletonCard key={index} />
+              ))}
+            </div>
+          )}
+          {!templatesLoading && <p style={EMPTY_HINT}>No templates available</p>}
+        </>
       ) : (
         <div style={TEMPLATE_GRID}>
           {visibleTemplates.map((template) => (

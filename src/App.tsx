@@ -1,6 +1,6 @@
 import "ketcher-react/dist/index.css";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Editor } from "ketcher-react";
 import {
   FunctionalGroupsProvider,
@@ -83,6 +83,7 @@ import { addRecent, loadRecent, removeRecent, saveRecent } from "./recent";
 import { loadRecentStructures, type RecentRow } from "./recentStructures";
 import {
   buildLibraryTemplates,
+  expandSgroupsForPreview,
   type LibraryTemplate,
   type TemplateSource,
 } from "./templateLibrary";
@@ -271,6 +272,54 @@ function readLibraryTemplates(): LibraryTemplate[] {
   return buildLibraryTemplates(entries);
 }
 
+/**
+ * The shared Structure Library build (§5.11). Building it serializes every
+ * entry, so it runs after the first paint and its result is reused by every
+ * later backstage open; the in-flight promise keeps two openers from reading
+ * the providers twice.
+ */
+let libraryCache: LibraryTemplate[] | null = null;
+let libraryBuild: Promise<LibraryTemplate[]> | null = null;
+
+/** Defers `run` to the next idle slot, falling back to a macrotask. */
+function afterPaint(run: () => void): void {
+  const idle = (
+    globalThis as {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+    }
+  ).requestIdleCallback;
+  if (typeof idle === "function") {
+    idle(run, { timeout: 1_000 });
+    return;
+  }
+  setTimeout(run, 0);
+}
+
+/** Resolves the cached library, scheduling one deferred build when absent. */
+function loadLibraryTemplates(): Promise<LibraryTemplate[]> {
+  if (libraryCache !== null) return Promise.resolve(libraryCache);
+  if (libraryBuild !== null) return libraryBuild;
+
+  libraryBuild = new Promise<LibraryTemplate[]>((resolve) => {
+    afterPaint(() => {
+      let entries: LibraryTemplate[];
+      try {
+        entries = readLibraryTemplates();
+        // An empty read is not cached: the providers may not be populated yet,
+        // so a later backstage open gets to try again (§5.11).
+        if (entries.length > 0) libraryCache = entries;
+      } catch (error) {
+        // Not cached, so a later open retries once the providers are usable.
+        console.warn("[chemistry-draw] could not read the structure library:", error);
+        entries = [];
+      }
+      libraryBuild = null;
+      resolve(entries);
+    });
+  });
+  return libraryBuild;
+}
+
 function App() {
   const lastError = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const [ready, setReady] = useState(false);
@@ -286,16 +335,45 @@ function App() {
   const settingsServiceRef = useRef<ISettingsService | null>(null);
   /** Live Ketcher settings for the backstage; the service is the only owner. */
   const [ketcherSettings, setKetcherSettings] = useState<Settings | null>(null);
-  /** The real Structure Library entries; empty until the editor reports ready. */
-  const templates = useMemo(() => {
-    if (!ready) return [];
-    try {
-      return readLibraryTemplates();
-    } catch (error) {
-      console.warn("[chemistry-draw] could not read the structure library:", error);
-      return [];
-    }
+  /**
+   * The real Structure Library entries, `null` until the deferred build lands
+   * (§5.11). Welcome paints skeletons meanwhile and later opens reuse the cache.
+   */
+  const [templates, setTemplates] = useState<LibraryTemplate[] | null>(null);
+  /** Mirrors `templates` so the retry effect reads it without a dependency. */
+  const templatesRef = useRef<LibraryTemplate[] | null>(null);
+
+  // The library is read once the editor reports ready, after paint.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    void loadLibraryTemplates().then((entries) => {
+      if (cancelled) return;
+      templatesRef.current = entries;
+      setTemplates(entries);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [ready]);
+
+  // A later backstage open retries an empty library build. The effect is keyed
+  // on the open flag and readiness, never on `templates`, so an again-empty
+  // read cannot loop; `libraryBuild` makes a concurrent retry a no-op and
+  // `templates` returns to `null` so the skeletons stay while the retry runs.
+  useEffect(() => {
+    if (!backstageOpen || !ready) return;
+    if (libraryBuild !== null) return;
+    const current = templatesRef.current;
+    if (current === null || current.length > 0) return;
+
+    templatesRef.current = null;
+    setTemplates(null);
+    void loadLibraryTemplates().then((entries) => {
+      templatesRef.current = entries;
+      setTemplates(entries);
+    });
+  }, [backstageOpen, ready]);
   const [tabSet, setTabSetState] = useState<TabSet>(() => emptyTabSet("tab-1"));
   const tabsRef = useRef(tabSet);
   const nextTabIdRef = useRef(1);
@@ -443,11 +521,15 @@ function App() {
     };
   }, [backstageOpen, recent, ready, apiBase]);
 
-  /** Renders one library entry's KET to a preview object URL through Ketcher. */
+  /**
+   * Renders one library entry's KET to a preview object URL through Ketcher.
+   * Only the copy is expanded: the card still inserts the original entry KET.
+   */
   const renderTemplatePreview = useCallback(async (ket: string): Promise<string> => {
     const ketcher = ketcherRef.current;
     if (!ketcher) throw new Error("The editor is not ready to render a template preview.");
-    const image = await ketcher.generateImage(ket, { outputFormat: "svg" });
+    const previewKet = expandSgroupsForPreview(ket);
+    const image = await ketcher.generateImage(previewKet, { outputFormat: "svg" });
     return URL.createObjectURL(image);
   }, []);
 
@@ -1574,10 +1656,10 @@ function App() {
           onOpen={handleBackstageOpen}
           onTemplate={(template) => void insertTemplate(template)}
           onMoreTemplates={handleMoreTemplates}
-          templates={templates}
+          templates={templates ?? []}
+          templatesLoading={templates === null}
           renderPreview={renderTemplatePreview}
           editorReady={ready}
-          recent={recent}
           recentStructures={recentRows}
           recentStructuresLoading={recentRowsLoading}
           onOpenRecent={handleBackstageOpenRecent}
