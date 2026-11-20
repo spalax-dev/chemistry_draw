@@ -242,9 +242,7 @@ so Vitest can exercise them (`docs/testing.md` §5):
 - autosave scheduling and the recovery decision (`src/autosave.ts`);
 - recent-document list operations (`src/recent.ts`) and the File menu item
   model (`src/fileMenu.ts`);
-- the backstage section list, status-strip formatting and declared-version
-  helper (`src/backstage.ts`);
-- settings descriptors and value formatting (`src/settingsModel.ts`).
+- the backstage section list and declared-version helper (`src/backstage.ts`).
 
 React components and Tauri calls stay thin adapters around those helpers; do
 not put decisions inline in JSX or in an event handler.
@@ -403,19 +401,19 @@ in-app overlay above the tab strip and Ketcher, never a route, a second window,
 a second editor or a Tauri native dialog.
 
 - **Only real capabilities.** Every row, card and button maps to a function the
-  app already has: New/Open/Import, the recent list, the template structures,
-  Ketcher settings and real version sources. Do not add a control, badge,
+  app already has: New/Open/Import, the recent list, the template structures
+  and real version sources. Do not add a control, badge,
   counter, chip or link that has no implementation behind it, and do not
   reproduce Stitch mock content that has no backing capability ("Open from
   Indigo sidecar", coordinate-grid note, molecular-weight chips, "Browse all
   fragments", models counter). The Recent structures validation badge and
   thumbnail are backed by the real Indigo check and render, so they are not mock
   content.
-- **Rail sections.** In order: Welcome, Open, Models, Settings, About (ids
-  `welcome`, `open`, `models`, `settings`, `about`; default `welcome`), with the
-  **Exit Backstage** button at the bottom of the rail. Each section
+- **Rail sections.** In order: Welcome, Open, Models, About (ids `welcome`,
+  `open`, `models`, `about`; default `welcome`), with the **Back to editor**
+  button at the bottom of the rail. Each section
   button renders a 16 px `currentColor` line icon before the label — home,
-  folder-open, cube, sliders, info — stroked with `strokeWidth` 1.5 and no
+  folder-open, cube, info — stroked with `strokeWidth` 1.5 and no
   colour literal, so it inherits the button's text colour in every state.
   **Models** is reserved for OCSR model management and ships as an empty
   placeholder: a heading plus a muted, non-interactive note, with no list and no
@@ -450,7 +448,7 @@ a second editor or a Tauri native dialog.
   tab's name and the `*` dirty marker (e.g. `Back to editor — Boc*`). Without a
   document it is not rendered at all rather than disabled, and **Blank canvas**
   takes the primary style. It only closes the overlay: no tab activation, save,
-  reload or `setMolecule`. The rail's **Exit Backstage** stays; the top bar has
+  reload or `setMolecule`. The rail's **Back to editor** stays; the top bar has
   no exit control.
 - **Templates come from the real library.** The Welcome grid is built only from
   the entries of Ketcher's real **Structure Library**, read after `onInit`:
@@ -521,21 +519,22 @@ a second editor or a Tauri native dialog.
   KET through `ketcher.generateImage(previewKet, { outputFormat: "svg" })` and
   the native Indigo renderer, so a card draws the library structure rather than
   an app-authored picture. The result is
-  cached per entry id for the session (reshuffles and reopenings do not
+  cached per KET string for the session (reshuffles and reopenings do not
   re-render), shows a muted loading placeholder with a small inline SVG spinner
   while it renders and a neutral `Preview unavailable` placeholder when the
   render fails. Never hand-author the structure as inline SVG, never use
   `<image>`, an icon font, a raster asset or a preview copied from
   `src/templates.ts`.
-- **Previews expand the SGroup; insertion does not.** Library entries carry
+- **Previews strip the SGroup; insertion does not.** Library entries carry
   their functional group as an SGroup, and Indigo draws the abbreviation label
-  (`CN`, `OMe`) while it is collapsed. The render therefore receives a preview
-  copy: `expandSgroupsForPreview(entry.ket)` in `src/templateLibrary.ts` sets
-  `expanded: true` on every SGroup of every molecule node (nested molecules
-  included), changes no other field and returns the original text when the KET
-  is not valid JSON. The helper is pure and preview-only: clicking the card
-  still inserts the unexpanded `entry.ket`, so the document keeps the
-  abbreviation group, and no `.ket` file is rewritten.
+  (`CN`, `OMe`) or its brackets instead of the atoms. The render therefore
+  receives an **SGroup-free preview copy**: the helper in
+  `src/templateLibrary.ts` parses the KET JSON and empties every `sgroups` array
+  on every molecule node (nested molecules included), changes no other field and
+  returns the original text when the KET is not valid JSON. Indigo then draws
+  only the atoms and bonds of the real structure. The helper is pure and
+  preview-only: clicking the card still inserts the original `entry.ket`, so the
+  document keeps the abbreviation group, and no `.ket` file is rewritten.
 - **Clicking a card** cancels any armed tool, inserts the entry's `ket` through
   `setMolecule` behind the loading flag into a **new** tab and then closes the
   backstage; it always allocates a tab, and that tab is **dirty**, named after
@@ -584,7 +583,7 @@ a second editor or a Tauri native dialog.
 - **Accessibility.** The overlay is `role="dialog"` with `aria-modal="true"` and
   `aria-labelledby` pointing at its title; focus moves in on open, is trapped
   and returns to the trigger (the home button) on close. `Escape` and the rail's
-  **Exit Backstage** action close it; the top bar carries no exit control. The
+  **Back to editor** action close it; the top bar carries no exit control. The
   rail is a `nav` of real
   `<button type="button">` elements — not a `tablist` — with roving `tabIndex`,
   ArrowUp/ArrowDown/Home/End movement and `aria-current="page"` on the active
@@ -598,12 +597,12 @@ a second editor or a Tauri native dialog.
   stays until dismissed; it never auto-closes when Ketcher becomes ready. It
   must not block or delay the silent tab restore, and dismissing it must not
   wait for that restore.
-- **Settings.** Bind only to `ketcher.settingsService` (`getSettings`,
-  `updateSettings`, `subscribe`, `resetToDefaults`, `loadPreset`). Use the
-  curated keys in `docs/architecture.md` §5.11.1 with their real unit keys,
-  options and the documented bounds; apply each change live, show the ACS preset
-  and Reset to defaults. Never invent an option Ketcher does not have, never keep a second
-  settings object and never persist settings in `.ket` or a tab snapshot.
+- **No settings duplication.** The backstage has no Settings section: settings
+  are Ketcher's own dialog, opened from the native **Settings** button in the
+  editor toolbar (`src/ui/editorButtons.ts` keeps it visible). The app does not
+  subscribe to `settingsService`, update settings, load the ACS preset or reset
+  to defaults, and keeps no second settings object. Never persist settings in
+  `.ket` or a tab snapshot.
 - **About.** Show only values with a real source (app, Ketcher and React
   versions, `/v2/info` Indigo version and port, webview platform, runtime,
   license links). No fake build SHA, commit, date, IUPAC version or model count;

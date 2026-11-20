@@ -367,23 +367,25 @@ Run against the desktop build (`task run`) unless a step says browser.
    from the first frame instead of `Loading chemistry editor...`, and it stays
    visible after Ketcher finishes initializing. With the backstage still open,
    no loading splash flashes and the tabs finish restoring underneath. Choose
-   the rail's **Exit Backstage**: the same active tab, canvas and dirty dots are
+   the rail's **Back to editor**: the same active tab, canvas and dirty dots are
    shown. Quit and relaunch: the backstage appears again. The top bar shows only
-   the logo and `Chemistry Draw | Backstage`; there is no top-right Back to
-   Editor control.
+   the logo and the `Chemistry Draw` brand line, with no `| Backstage` suffix and
+   no top-right Back to Editor control.
 2. **Home button.** A 16 px house icon sits at the left of the tab strip,
    immediately before the File button and outside the tab bar. It has no visible
    label: its accessible name is `Backstage` and the hover title shows the same,
    while hovering recolours the icon to the accent and back (`currentColor`).
    Click it: the backstage opens. While the overlay covers the strip the home
-   button is not reachable, so return with the rail's **Exit Backstage** or
+   button is not reachable, so return with the rail's **Back to editor** or
    `Escape`: the active tab, canvas, dirty dots and tab order are unchanged.
-   Press `Escape`, then repeat and press **Exit Backstage**: the same state
-   returns.
-3. **Rail and focus.** The rail is a `nav`, not a tab list: Welcome, Open,
-   Models, Settings and About are real buttons, each with a 16 px line icon
-   before its label (home, folder-open, cube, sliders, info) drawn in the text
-   colour, and the active one carries `aria-current="page"`. The default on
+   Press `Escape`, then repeat and press **Back to editor**: the same state
+   returns. The rail's exit button reads **Back to editor**, never
+   "Exit Backstage": it does not quit the application.
+3. **Rail and focus.** The rail is a `nav`, not a tab list, and has exactly four
+   sections: Welcome, Open, Models and About. They are real buttons, each with a
+   16 px line icon before its label (home, folder-open, cube, info) drawn in the
+   text colour, and the active one carries `aria-current="page"`. The rail has
+   no **Settings** entry. The default on
    first open is Welcome. ArrowUp/ArrowDown/Home/End move focus. `Tab` cycles
    inside the overlay and never reaches the editor behind it; the overlay has
    `role="dialog"` and `aria-modal="true"`.
@@ -428,12 +430,12 @@ Run against the desktop build (`task run`) unless a step says browser.
    library serialization. Each card shows a rendered SVG preview produced by
    Ketcher/Indigo, the entry name, a one-line abbreviation (or its group) and a
    `Functional group` or `Salt or solvent` chip, with no molecular-weight chip.
-   The preview draws the **expanded** structure — atoms and bonds, not the
-   library abbreviation `CN` or `OMe` — because only the preview KET sets
-   `expanded: true` on its SGroups. While a preview renders, its area shows a
+   The preview draws the **structure with bonds** — atoms and bonds, never the
+   library abbreviation `CN` or `OMe` and never brackets — because the preview
+   copy removes its SGroups. While a preview renders, its area shows a
    small inline SVG spinner; a failed render shows `Preview unavailable`, never
    a hand-drawn structure. Click a card: a **new** tab opens with that library
-   structure drawn from its KET (the unexpanded entry, so the abbreviation group
+   structure drawn from its KET (the original entry, so the abbreviation group
    is preserved), the tab is **dirty** and titled after the entry with
    `path: null`, so the first Save opens Save As, and the backstage closes;
    clicking a card twice produces two tabs rather than reusing one. With a
@@ -481,31 +483,24 @@ Run against the desktop build (`task run`) unless a step says browser.
    tab or entry is duplicated. Choosing a row in the open-tabs list (Switch)
    activates that tab and closes the backstage. With no recent entries, the
    table's muted `No recent structures` row shows and the open-tabs list remains.
-9. **Models.** The rail shows **Models** between Open and Settings. Selecting
+9. **Models.** The rail shows **Models** between Open and About. Selecting
    it opens a pane with only a heading and a muted, non-interactive note about
    the section being reserved: no list, no buttons, no model names, versions or
    download counters, and nothing that can be clicked.
 10. **No file section.** The backstage has no Save & Export section and no
     status strip: the content pane reaches the bottom edge. Save, Save As and
     Export are reachable from the File menu only, exactly as before.
-11. **Settings live.** Change atom coloring, bond length, bond thickness, bond
-    spacing, atom label size and image resolution: the canvas reflects each
-    change immediately, with no Apply button. Toggle `showHydrogenLabels`,
-    `stereoLabelStyle` and `valence-mode`: the options are exactly Ketcher's enums
-    and the canvas follows. Quit and relaunch: the values persist through
-    Ketcher's own `ketcher-opts` storage. The section lists exactly the real
-    settings, with a unit select beside each unit-bearing number; there is no
-    theme toggle, grid or model threshold.
-12. **Preset and reset.** Click **ACS preset**: atom coloring turns off and the
-    values match `docs/architecture.md` §5.11.1 (bond length 14.4 pt, bond
-    thickness 0.6 pt, image resolution 600, …). Click **Reset to defaults**:
-    Ketcher's defaults return (bond length 40 px, image resolution 72, …), the
-    canvas redraws and a relaunch keeps the reset values.
-13. **Settings before ready.** Launch with a cold sidecar/editor: the Settings
-    section shows the muted starting message with disabled controls until the
-    editor initializes, then reads the real values. It never shows a hard-coded
-    copy of the settings.
-14. **About.** Compare with `curl -s http://127.0.0.1:<port>/v2/info`: the Indigo
+11. **No Settings pane.** The backstage has no Settings section and no settings
+    controls: no value, unit, preset, reset or sliders icon anywhere in the
+    rail or content pane. Settings are not duplicated from Ketcher.
+12. **Ketcher's toolbar settings.** The editor toolbar still shows the native
+    **Settings** button (`src/ui/editorButtons.ts`). Click it: Ketcher's own
+    settings dialog opens. Change atom coloring, bond length and image
+    resolution there and confirm the canvas follows; quit and relaunch and the
+    values persist through Ketcher's own `ketcher-opts` storage. Ketcher's ACS
+    preset and reset-to-defaults inside that dialog still work. The app keeps no
+    settings state of its own.
+13. **About.** Compare with `curl -s http://127.0.0.1:<port>/v2/info`: the Indigo
     version and the sidecar port match `indigo_version` and `api_path`. The app
     version matches `package.json`/the installed release, and the Ketcher and
     React versions match the `ketcher-react` and `react` dependencies. The
@@ -514,15 +509,15 @@ Run against the desktop build (`task run`) unless a step says browser.
     (Apache-2.0) and ONNX Runtime (MIT) links open in the system browser. No
     build SHA, commit, build date, IUPAC version or models counter is shown;
     while `/v2/info` is unavailable the Indigo and port rows read `Unavailable`.
-15. **Removed content.** The templates grid is the only Stitch mock surface that
+14. **Removed content.** The templates grid is the only Stitch mock surface that
     exists, and it carries real structures only. The backstage contains no "Open
     from Indigo sidecar", coordinate-grid note, validity badges,
     molecular-weight chips, "Browse all fragments" or models counter, and no
     disabled placeholder for any of them.
-16. **Browser fallback.** `pnpm dev` in a normal browser: the backstage opens,
+15. **Browser fallback.** `pnpm dev` in a normal browser: the backstage opens,
     New and the template cards work in memory, Save/Export download, Open/Import
-    need the desktop picker, Settings still bind to the in-browser Ketcher, and
-    the About app version comes from the compiled constant with Indigo/port
+    need the desktop picker, Ketcher's own toolbar Settings dialog still works,
+    and the About app version comes from the compiled constant with Indigo/port
     `Unavailable`. The console stays free of errors.
 
 ### Recent structures
@@ -605,10 +600,11 @@ The reviewer agent must verify:
       `chemistry-draw.recent`, deduped, capped at 10 and pruned with an in-app
       error when a file is missing
 - [ ] The backstage replaces the loading splash on every launch, keeps the
-      editor mounted while tabs restore, and Exit Backstage/Escape return to the
-      same tab and canvas; the top bar carries no Back to Editor control; the
-      rail is a `nav` with `aria-current` and five
-      labelled buttons (Welcome, Open, Models, Settings, About) each with a
+      editor mounted while tabs restore, and Back to editor/Escape return to the
+      same tab and canvas; the top bar shows only the `Chemistry Draw` brand line
+      (no `| Backstage` suffix) and no Back to Editor control; the
+      rail is a `nav` with `aria-current` and four
+      labelled buttons (Welcome, Open, Models, About) each with a
       16 px `currentColor` line icon, the overlay is `role="dialog"`/`aria-modal`
       with a focus trap, and the home button sits before File outside the tablist
 - [ ] The backstage exposes only real capabilities: Welcome's actions and the
@@ -621,19 +617,20 @@ The reviewer agent must verify:
       no document (only an untouched empty tab) Back to editor is absent and
       Blank canvas is primary, and with a document Back to editor is primary and
       labelled with the active tab; each card
-      shows a Ketcher-rendered SVG preview (expanded SGroups, cached, loading
+      shows a Ketcher-rendered SVG preview (SGroup-free, so the structure with
+      its bonds and no abbreviation or brackets; cached, loading
       spinner and error placeholder), name, abbreviation and group chip and
-      opens a new tab with the original unexpanded entry KET; an empty library
+      opens a new tab with the original entry KET; an empty library
       shows `No templates available` with no curated fallback; opening the
       backstage or switching tabs cancels an armed template tool via Escape to
       the Ketcher root; an unknown section id falls back to Welcome instead of a
       blank pane; Open renders the same Recent structures table as Welcome
       (six columns, shared loader and loading/empty states) with its optional
       Remove action and the open-tabs list below; Models
-      sits between Open and Settings as an empty reserved pane with a note and no
-      list or actions; Settings uses only the curated `ketcher.settingsService`
-      keys with real units, ranges and options, applying live with ACS preset and
-      reset; About has no fake build, IUPAC or model data and matches `/v2/info`
+      sits between Open and About as an empty reserved pane with a note and no
+      list or actions; the backstage has no Settings section and keeps no
+      settings state (settings live only in Ketcher's toolbar dialog); About has
+      no fake build, IUPAC or model data and matches `/v2/info`
 - [ ] Documents live in tabs over a single Ketcher instance: tabs hold file
       state, switching uses `getKet` → loading flag → `setMolecule`, per-tab
       snapshots plus `index.json` are written/flushed safely, launch restores the

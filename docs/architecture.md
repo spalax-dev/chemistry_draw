@@ -687,18 +687,17 @@ second editor; Ketcher stays mounted underneath and keeps its state.
 
 | Region         | Content                                                                                                                                                             | Tokens                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Top bar        | app logo and `Chemistry Draw \| Backstage` title only; no exit control (the rail's **Exit Backstage** is the way out)                                               | `surface`, `border` 1 px bottom edge, 12/14 px text |
-| Left rail      | 260 px column with 10 px uppercase `FILE OPERATIONS`, the five section buttons (16 px `currentColor` line icon before each label) and the bottom **Exit Backstage** | `surfaceSubtle` (`#eff2f5`)                         |
+| Top bar        | app logo and `Chemistry Draw` title only; no exit control (the rail's **Back to editor** is the way out)                                                            | `surface`, `border` 1 px bottom edge, 12/14 px text |
+| Left rail      | 260 px column with 10 px uppercase `FILE OPERATIONS`, the four section buttons (16 px `currentColor` line icon before each label) and the bottom **Back to editor** | `surfaceSubtle` (`#eff2f5`)                         |
 | Content pane   | white section panel, 24 px padding, `8px` surface corners                                                                                                           | `surface`, `border`, `radius` (3 px controls)       |
 | Accent/borders | `#167782` accent, `#cad3dd` borders, Roboto 12/14 px, no colour outside the token palette                                                                           | `tokens.color.accent`, `tokens.color.border`, fonts |
 
-The rail sections are, in order: **Welcome**, **Open**, **Models**, **Settings**,
-**About** (ids `welcome`, `open`, `models`, `settings`, `about`; the default is
-`welcome`). Each rail button renders a 16 px `currentColor` line icon before its
-label: home for Welcome, folder-open for Open, cube for Models, sliders for
-Settings and info for About. **Models** is reserved for future OCSR model
-management and ships as an empty placeholder (see the sections table below). The
-rail is a `nav` of real buttons, not a `tablist`:
+The rail sections are, in order: **Welcome**, **Open**, **Models**, **About** (ids
+`welcome`, `open`, `models`, `about`; the default is `welcome`). Each rail button
+renders a 16 px `currentColor` line icon before its label: home for Welcome,
+folder-open for Open, cube for Models and info for About. **Models** is reserved
+for future OCSR model management and ships as an empty placeholder (see the
+sections table below). The rail is a `nav` of real buttons, not a `tablist`:
 the active section carries `aria-current="page"` and roving `tabIndex`, and
 ArrowUp/ArrowDown/Home/End move focus between sections. The top bar title is the
 dialog's `aria-labelledby` target. The panel scrolls inside the content pane, so
@@ -708,10 +707,10 @@ the rail and top bar stay fixed.
 splash: `App.tsx` renders it from the first frame instead of the splash, while
 the provider resolves, Ketcher initializes and `readTabSet()` restores the tab
 set underneath. Readiness does **not** dismiss it — every launch shows the
-backstage until the user leaves it through the rail's **Exit Backstage** or
+backstage until the user leaves it through the rail's **Back to editor** or
 `Escape` (or uses the home button later in the session), or starts a document
-from Welcome. Controls that need the editor (Settings and
-the About versions that come from Ketcher or the sidecar) show a muted
+from Welcome. Controls that need the editor (the About versions that come from
+Ketcher or the sidecar) show a muted
 `Unavailable` state until their source answers; the rest of the
 backstage is usable immediately. Dismissing the backstage never waits for the
 restore and never triggers a save, a tab activation or `setMolecule`.
@@ -720,20 +719,24 @@ restore and never triggers a save, a tab activation or `setMolecule`.
 immediately left of the File button and a sibling of the `role="tablist"`
 (`docs/conventions.md` §6.8). It is a real `<button type="button">` with
 `aria-label="Backstage"` and a 16 px `currentColor` line icon, and it opens the
-backstage. `Escape` and the rail's **Exit Backstage** close it. Opening and
+backstage. `Escape` and the rail's **Back to editor** close it. Opening and
 closing only toggle the overlay: the active tab, the canvas and every dirty flag
 are left untouched, and focus returns to the home button when it was the
 trigger. The top bar carries no exit control.
 
 **Sections and data sources.**
 
-| Section  | Rows/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Real source                                                                                                                                                                                                                                                                                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Welcome  | title `Welcome`, subtitle `Start from a blank canvas or a template.`; with an existing document, a primary **Back to editor — `<active tab>`** first and **Blank canvas** second; with no document, **Blank canvas** is the primary action and Back to editor is absent; then **Import structure…**, **Open project…**, a `TEMPLATES` heading with **More templates**, exactly four random cards from the real Structure Library (or the `No templates available` empty state) and the **Recent structures** table (thumbnail + name, Format, Size, Indigo Validation, Last Modified, Open) | `startNewDocument()`, `importStructure(path)`, `openProject(path)` (§5.3, §5.4); `src/templateLibrary.ts` over the Ketcher library providers; `tabTitle` for the active tab and `isUntouchedTab` for the document predicate; `src/ketcherOptions.ts` for **More templates**; `src/recentDetails.ts` + `src/previewCache.ts` for the Recent structures table (see below) |
-| Open     | the same **Recent structures** table as Welcome (thumbnail + name, Format, Size, Indigo Validation, Last Modified, Open) with an added **Remove** action, then the currently open tabs (Switch) below the table                                                                                                                                                                                                                                                                                                                                                                             | the single recent loader shared with Welcome (`src/recentStructures.ts` + `src/previewCache.ts`); `src/recent.ts` for removal; open tabs from `TabSet` (§5.9)                                                                                                                                                                                                           |
-| Models   | reserved for OCSR model management (not implemented): heading plus a muted empty-state note only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | none yet — empty state only                                                                                                                                                                                                                                                                                                                                             |
-| Settings | curated Ketcher settings with value + unit, **ACS preset**, **Reset to defaults**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `ketcher.settingsService` after `onInit` (§5.11.1)                                                                                                                                                                                                                                                                                                                      |
-| About    | app, Ketcher and React versions, Indigo version and sidecar port, platform, runtime, license links                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `package.json.version` passed as `appVersion`; `ketcher-react`/`react` dependencies; `/v2/info` (`indigo_version`, `api_path`); `navigator.userAgentData?.platform` with `navigator.platform`/UA fallback, and `isTauri()`                                                                                                                                              |
+| Section | Rows/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Real source                                                                                                                                                                                                                                                                                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Welcome | title `Welcome`, subtitle `Start from a blank canvas or a template.`; with an existing document, a primary **Back to editor — `<active tab>`** first and **Blank canvas** second; with no document, **Blank canvas** is the primary action and Back to editor is absent; then **Import structure…**, **Open project…**, a `TEMPLATES` heading with **More templates**, exactly four random cards from the real Structure Library (or the `No templates available` empty state) and the **Recent structures** table (thumbnail + name, Format, Size, Indigo Validation, Last Modified, Open) | `startNewDocument()`, `importStructure(path)`, `openProject(path)` (§5.3, §5.4); `src/templateLibrary.ts` over the Ketcher library providers; `tabTitle` for the active tab and `isUntouchedTab` for the document predicate; `src/ketcherOptions.ts` for **More templates**; `src/recentDetails.ts` + `src/previewCache.ts` for the Recent structures table (see below) |
+| Open    | the same **Recent structures** table as Welcome (thumbnail + name, Format, Size, Indigo Validation, Last Modified, Open) with an added **Remove** action, then the currently open tabs (Switch) below the table                                                                                                                                                                                                                                                                                                                                                                             | the single recent loader shared with Welcome (`src/recentStructures.ts` + `src/previewCache.ts`); `src/recent.ts` for removal; open tabs from `TabSet` (§5.9)                                                                                                                                                                                                           |
+| Models  | reserved for OCSR model management (not implemented): heading plus a muted empty-state note only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | none yet — empty state only                                                                                                                                                                                                                                                                                                                                             |
+| About   | app, Ketcher and React versions, Indigo version and sidecar port, platform, runtime, license links                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `package.json.version` passed as `appVersion`; `ketcher-react`/`react` dependencies; `/v2/info` (`indigo_version`, `api_path`); `navigator.userAgentData?.platform` with `navigator.platform`/UA fallback, and `isTauri()`                                                                                                                                              |
+
+Settings do not appear in the backstage. The app keeps no settings state of its
+own: the only settings UI is Ketcher's native **Settings** dialog, opened from
+the **Settings** button in the editor toolbar (`src/ui/editorButtons.ts` keeps it
+visible; §5.11.1).
 
 **Template source.** Welcome cards are the entries of Ketcher's real **Structure
 Library**, never a hand-maintained ring list. After the editor reports `onInit`,
@@ -779,18 +782,18 @@ replace. **More templates** stays disabled until the editor is ready.
 the entry's KET, not drawn by the app:
 `ketcher.generateImage(previewKet, { outputFormat: "svg" })` returns an SVG blob
 through the native Indigo renderer. Library structs store a functional group as
-an SGroup whose `expanded` flag is `false`, so an unexpanded KET makes Indigo
-draw the abbreviation (`CN`, `OMe`) instead of the atoms. The preview copy sets
-`expanded: true` on every SGroup of every molecule node, nested molecules
-included; `expandSgroupsForPreview(entry.ket)` in `src/templateLibrary.ts` does
-that mapping, parsing the KET JSON, expanding the SGroups and serializing the
-copy while touching no other field; invalid JSON returns the original text
-unchanged. The helper is pure and the expansion is **preview-only**: the card
-click still inserts `entry.ket` unchanged, so the new tab keeps the library's
-abbreviation group, and no `.ket` file is read, rewritten or given an expanded
-flag. The preview helper (`src/ui/backstage/useTemplatePreview.ts`) renders each
+an SGroup, so an SGroup-carrying KET makes Indigo draw the abbreviation (`CN`,
+`OMe`) or its brackets instead of the atoms. The preview copy therefore removes
+the SGroups entirely: the helper in `src/templateLibrary.ts` parses the KET JSON
+and empties every `sgroups` array on every molecule node, nested molecules
+included, then serializes the copy while touching no other field; invalid JSON
+returns the original text unchanged. Indigo then draws nothing but the atoms and
+bonds of the real structure — no abbreviation label, no brackets. The helper is
+pure and the SGroup-free copy is **preview-only**: the card click still inserts
+`entry.ket` unchanged, so the new tab keeps the library's abbreviation group,
+and no `.ket` file is read, rewritten or stripped of its SGroups. The preview helper (`src/ui/backstage/useTemplatePreview.ts`) renders each
 entry once after the editor is ready, converts the blob to an object URL and
-caches it by entry id for the session, so resizing, reshuffling and reopening
+caches it by KET string for the session, so resizing, reshuffling and reopening
 the backstage never re-render the same structure. While a preview is being
 produced the card shows a muted, fixed-size **loading placeholder with a small
 inline SVG spinner**; a failed render leaves a neutral `Preview unavailable`
@@ -964,7 +967,7 @@ loading flag. `isUntouchedTab` checks emptiness semantically through
 pretty-printed KET with `ket_version` and empty `root.nodes` (plus empty
 `connections`/`templates`), which a byte comparison with `EMPTY_KET` rejects.
 
-The rail's **Exit Backstage** remains in both cases and is the only top-level
+The rail's **Back to editor** remains in both cases and is the only top-level
 way back; the top bar has no exit control.
 
 Clicking a card inserts that library entry's KET into a **new** tab and then
@@ -981,11 +984,11 @@ it in `useState(DEFAULT_BACKSTAGE_SECTION)` and `App` renders it only while
 starts from Welcome again. There is no persisted section and no reset effect to
 forget. This is the fix for the blank-on-reopen bug: the committed
 activity-21 build defaulted to `new`, a section id that no longer had a body
-after the rail became Welcome/Open/Models/Settings/About, so reopening after an
+after the rail stopped carrying it, so reopening after an
 edit mounted a blank content pane. The default must stay `welcome`; a test pins
 it.
 
-**Unknown section fallback.** `renderSection` switches over the five known ids
+**Unknown section fallback.** `renderSection` switches over the four known ids
 and its `default` branch renders **Welcome**; `normalizeSection` in
 `src/backstage.ts` maps any id that is not in the section list to `welcome`
 before it is stored. A stale persisted id, an id whose section was removed, or
@@ -1056,72 +1059,23 @@ status.
 | `src/recentDetails.ts`                       | pure recent-table helpers: `formatFileSize`, `formatModified`, `validationStatus` mapping, `previewFileName` and `contentHash`                                                                                                                                                           |
 | `src/recentStructures.ts`                    | recent-table loader plus the pure `buildRecentRow` over path, `stat`, text, check result and preview (+ missing-file placeholders)                                                                                                                                                       |
 | `src/previewCache.ts`                        | on-disk preview cache under `<appDataDir>/previews`: sha-256 molfile key, read, write and the sidecar SVG render fallback                                                                                                                                                                |
-| `src/ui/backstage/SettingsSection.tsx`       | controls bound to `ketcher.settingsService`, ACS preset and reset                                                                                                                                                                                                                        |
 | `src/ui/backstage/AboutSection.tsx`          | version rows, platform and license links                                                                                                                                                                                                                                                 |
-| `src/backstage.ts`                           | pure model: ordered section list and default, `normalizeSection` (unknown id → Welcome), declared-version helper; re-exports the settings descriptors                                                                                                                                    |
-| `src/templateLibrary.ts`                     | pure real-library model: provider lists → `TemplateEntry[]` with slug ids and name/abbreviation dedupe, KET per entry, the `TEMPLATE_CARD_COUNT` (4), `sampleTemplates`, the preview-only `expandSgroupsForPreview` and `cancelActiveTool` dispatching Escape to the Ketcher root        |
+| `src/backstage.ts`                           | pure model: ordered section list and default, `normalizeSection` (unknown id → Welcome), declared-version helper                                                                                                                                                                         |
+| `src/templateLibrary.ts`                     | pure real-library model: provider lists → `TemplateEntry[]` with slug ids and name/abbreviation dedupe, KET per entry, the `TEMPLATE_CARD_COUNT` (4), `sampleTemplates`, the preview-only SGroup-free preview-copy helper and `cancelActiveTool` dispatching Escape to the Ketcher root  |
 | `src/templates.ts`                           | legacy curated ring descriptors, retained only as a documented fallback; never rendered as cards and never used when the library is empty                                                                                                                                                |
 | `src/ketcherOptions.ts`                      | narrow Ketcher store adapter: `findKetcherRoot` and `openStructureLibrary`, dispatching `MODAL_OPEN` (`templates`, `tab: null`)                                                                                                                                                          |
-| `src/settingsModel.ts`                       | pure settings descriptors (key, label, control, unit key, bounds/options) and value formatting                                                                                                                                                                                           |
 | `src/ui/HomeButton.tsx`                      | house button in the tab strip that opens the backstage                                                                                                                                                                                                                                   |
 
-#### 5.11.1 Settings binding
+#### 5.11.1 Settings
 
-Settings come from the mounted editor, never from a copy: after `onInit`,
-`ketcher.settingsService` exposes `getSettings()`,
-`updateSettings(partial)`, `subscribe(listener)`, `resetToDefaults()` and
-`loadPreset(name)`. The section reads the service when it mounts and on every
-subscription event, so an external change is reflected immediately. A control
-change sends a **single-key** partial to `updateSettings`; the service validates
-it, persists it (Ketcher's own `ketcher-opts` `localStorage` entry) and emits the
-update, which is what redraws the canvas. Settings are global editor
-preferences, not document data: they are not stored in `.ket`, not per tab and
-not snapshotted.
-
-The curated keys are exactly the real Ketcher 3.18 settings below; labels are
-sentence case and every key with a companion `…Unit` key renders a unit select
-beside the number input. No other setting, and nothing Ketcher does not have
-(theme toggle, grid, model thresholds), is exposed. Numeric bounds are the
-schema's where Ketcher defines one; where it does not (`imageResolution`), the
-UI keeps a documented floor and no maximum.
-
-| Ketcher key                     | Label                         | Control       | Unit key / range or options                                        |
-| ------------------------------- | ----------------------------- | ------------- | ------------------------------------------------------------------ |
-| `atomColoring`                  | Atom coloring                 | checkbox      | —                                                                  |
-| `carbonExplicitly`              | Show carbon explicitly        | checkbox      | —                                                                  |
-| `showHydrogenLabels`            | Hydrogen labels               | select        | `off`, `Hetero`, `Terminal`, `Terminal and Hetero`, `On`           |
-| `showCharge`                    | Show charges                  | checkbox      | —                                                                  |
-| `showValence`                   | Show valence                  | checkbox      | —                                                                  |
-| `aromaticCircle`                | Aromatic circle               | checkbox      | —                                                                  |
-| `showStereoFlags`               | Stereo flags                  | checkbox      | —                                                                  |
-| `stereoLabelStyle`              | Stereo label style            | select        | `IUPAC`, `classic`, `On-Atoms`, `off`                              |
-| `bondLength`                    | Bond length                   | number + unit | `bondLengthUnit`: `px`/`pt`/`cm`/`inch`; 0.1–1000                  |
-| `bondThickness`                 | Bond thickness                | number + unit | `bondThicknessUnit`: `px`/`pt`/`cm`/`inch`; 0.1–96                 |
-| `bondSpacing`                   | Bond spacing                  | number        | integer 1–100; Ketcher has no unit key for it                      |
-| `stereoBondWidth`               | Stereo bond width             | number + unit | `stereoBondWidthUnit`: `px`/`pt`/`cm`/`inch`; 0.1–96               |
-| `hashSpacing`                   | Hash spacing                  | number + unit | `hashSpacingUnit`: `px`/`pt`/`cm`/`inch`; 0.1–1000                 |
-| `reactionComponentMarginSize`   | Reaction component margin     | number + unit | `reactionComponentMarginSizeUnit`: `px`/`pt`/`cm`/`inch`; 0.1–1000 |
-| `fontsz`                        | Atom label size               | number + unit | `fontszUnit`: `px`/`pt`/`cm`/`inch`; 0.1–96                        |
-| `imageResolution`               | Image resolution              | number        | DPI, no unit key; unbounded in Ketcher (UI floor 1, no maximum)    |
-| `rotationStep`                  | Rotation step                 | number        | integer 1–90 degrees                                               |
-| `valence-mode`                  | Valence mode                  | select        | `default`, `biovia-2009`, `biovia-2017`                            |
-| `smart-layout`                  | Smart layout                  | checkbox      | —                                                                  |
-| `ignore-stereochemistry-errors` | Ignore stereochemistry errors | checkbox      | —                                                                  |
-| `dearomatize-on-load`           | Dearomatize on load           | checkbox      | —                                                                  |
-
-- **ACS preset** calls `loadPreset("acs")`. Ketcher defines it as
-  `atomColoring: false`, `fontsz`/`fontszsub: 10 pt`, `bondLength: 14.4 pt`,
-  `bondSpacing: 18`, `bondThickness: 0.6 pt`, `stereoBondWidth: 2 pt`,
-  `hashSpacing: 2.5 pt`, `reactionComponentMarginSize: 1.6 pt` and
-  `imageResolution: 600`.
-- **Reset to defaults** calls `resetToDefaults()`, restoring Ketcher's own
-  defaults (`atomColoring: true`, `bondLength: 40 px`, `bondThickness: 2 px`,
-  `stereoBondWidth: 6 px`, `hashSpacing: 1.2 px`, `fontsz: 13 px`,
-  `imageResolution: 72`, `rotationStep: 15`, …). The section never writes a
-  settings object of its own.
-- Before the editor reports `onInit`, the section shows a muted
-  `Settings become available when the editor is ready` line with disabled
-  controls; it never falls back to a hard-coded copy of the settings.
+The backstage does not duplicate Ketcher's settings and the app keeps no settings
+state of its own: it does not subscribe to `settingsService`, call
+`updateSettings`, load the ACS preset or reset to defaults. The only settings UI
+is Ketcher's native **Settings** dialog, opened from the **Settings** button in
+the editor toolbar, which stays visible in `src/ui/editorButtons.ts`. Ketcher
+owns the values, validates them, persists them in its own `ketcher-opts`
+storage and redraws the canvas; the app never stores a copy in `.ket`, in a tab
+or in a snapshot.
 
 #### 5.11.2 About sources
 

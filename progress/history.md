@@ -513,3 +513,20 @@ re-review.
   serializing the whole library; preview placeholders show an inline SVG
   spinner. Empty results are not cached and retry on a later backstage open.
 - 432 tests, harness green.
+
+## 2026-11-19 — Activity 31: backstage-rail-cleanup
+
+- The rail has four sections (Welcome, Open, Models, About); Settings is gone
+  along with `SettingsSection.tsx`, `settingsModel.ts` and the App-side
+  subscription/update/preset/reset wiring. Ketcher's own Settings dialog in the
+  editor toolbar stays visible and is the only settings UI.
+- The brand line reads only "Chemistry Draw" and the rail's exit button reads
+  "Back to editor" (it was read as quitting the app). 437 tests.
+
+## 2026-11-19 — Activity 32: template-preview-structure
+
+- Marking SGroups `expanded` still left the abbreviation and brackets in the
+  card. The preview copy now empties every `sgroups` array, so Indigo draws the
+  real atoms and bonds (verified against the sidecar: Boc 4.5 KB label vs 8.5 KB
+  with bond strokes). Insertion keeps the original KET, so the document still
+  carries the abbreviation SGroup. 439 tests, harness green.

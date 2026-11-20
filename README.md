@@ -35,9 +35,11 @@
 - **Backstage** — every launch opens on Welcome with blank canvas, import/open,
   a random 2/4/6/8-card subset of Ketcher's real Structure Library with
   Ketcher-rendered previews, **More templates** for the full library and a
-  **Back to editor** action for the active tab; open documents, a reserved
-  Models entry (empty for now), real Ketcher settings and About sit beside it,
-  and a home button in the tab strip returns to it. Welcome also shows a compact
+  **Back to editor** action for the active tab; the rail has four sections —
+  Welcome, Open, Models and About — with a reserved Models entry (empty for
+  now) and a **Back to editor** button at the bottom, and a home button in the
+  tab strip returns to it. Settings are Ketcher's own toolbar dialog, not a
+  backstage section. Welcome also shows a compact
   **Recent structures** table with each document's real size and last-modified
   time, the Indigo validation result and a cached Indigo-rendered thumbnail.
 - **Document tabs** — keep several `.ket` documents open in one window; every

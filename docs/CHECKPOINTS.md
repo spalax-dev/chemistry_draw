@@ -274,14 +274,15 @@
       return to the same active tab, canvas, dirty flags and tab order. (The
       home button is covered while the overlay is open, so it is the way in,
       not the way back.)
-- [x] The rail is a `nav` of real buttons (not a tablist) with five sections in
-      order — Welcome, Open, Models, Settings and About (ids `welcome`, `open`,
-      `models`, `settings`, `about`, default `welcome`) — roving focus and
+- [x] The rail is a `nav` of real buttons (not a tablist) with four sections in
+      order — Welcome, Open, Models and About (ids `welcome`, `open`, `models`,
+      `about`, default `welcome`) — roving focus and
       `aria-current="page"`, each button showing a 16 px `currentColor` line icon
-      (home, folder-open, cube, sliders, info) before its label; Models is empty
+      (home, folder-open, cube, info) before its label; Models is empty
       (heading and a muted note only, no list, no actions and no fake models,
       versions or download counters); the overlay is `role="dialog"`,
       `aria-modal`, with initial focus, a focus trap, Escape and focus return.
+      The rail has no Settings entry (activity 31).
 - [x] **Historical (activity 21):** Welcome shows the `Welcome` title, the
       `Start from a blank canvas or a template.` subtitle, Blank canvas
       (creates a tab), Import structure… and Open project…, then a four-column
@@ -297,8 +298,8 @@
       status strip and its content pane reaches the bottom edge. (This grid is
       superseded by C15; the rest of the section still holds.)
 - [x] **Activity 23 — unknown section fallback:** any id outside `welcome`,
-      `open`, `models`, `settings` and `about` — a removed id, the retired
-      `new`, an HMR-orphaned value — renders **Welcome**. `normalizeSection`
+      `open`, `models` and `about` — a removed id such as the retired `settings`
+      or `new`, an HMR-orphaned value — renders **Welcome**. `normalizeSection`
       maps non-section ids to `welcome`, `renderSection`'s `default` branch
       renders the Welcome pane, and opening the backstage after an edit always
       lands on Welcome; no id renders a blank content pane.
@@ -338,7 +339,7 @@
 
 > **Activity 26 update.** The Welcome grid is now exactly **four** cards at every
 > width, the action hierarchy depends on whether a **document** exists, and the
-> top-bar Back to Editor is gone — the rail's **Exit Backstage** is the way back.
+> top-bar Back to Editor is gone — the rail's **Back to editor** is the way back.
 > The activity-24 width-subset and top-bar statements above are historical; the
 > activity-26 checkboxes record the current requirement.
 
@@ -354,18 +355,22 @@
       action; with a document Back to editor is primary and labelled with
       `tabTitle(active)` (name plus `*`), and Blank canvas is secondary.
 - [x] **Activity 26 — top bar:** the backstage top bar shows only the logo and
-      the `Chemistry Draw | Backstage` title; it has no Back to Editor control.
-      The rail's **Exit Backstage** and `Escape` remain the ways back.
+      the `Chemistry Draw` brand line, without the `| Backstage` suffix; it has
+      no Back to Editor control. The rail's **Back to editor** and `Escape`
+      remain the ways back.
 - [x] **Activity 26 — tests and verification:** Vitest pins the four-card count,
       the `isUntouchedTab` action branch and the source contract that the top bar
       has no exit button, RED before implementation; the updated "Backstage"
       checklist in `docs/verification.md` §2 passes (first launch has no Back to
       editor and highlights Blank canvas; after a document exists it is primary;
       no top-right control) and `node scripts/harness.mjs` is green.
-- [x] Settings binds only to `ketcher.settingsService` with the curated keys and
-      real unit keys/ranges/options from `docs/architecture.md` §5.11.1, applies
-      live, persists through Ketcher, and offers the ACS preset and Reset to
-      defaults; no invented option exists.
+- [x] **Retired (activity 31) — backstage settings:** the Settings section is
+      gone. Settings live only in Ketcher's native **Settings** dialog, opened
+      from the **Settings** button in the editor toolbar that stays visible in
+      `src/ui/editorButtons.ts`; the backstage does not subscribe to
+      `settingsService`, update settings, load the ACS preset or reset to
+      defaults, and the app keeps no settings state. The architecture/settings
+      mapping that used to live here is retired with the section.
 - [x] About shows the app, Ketcher and React versions, the Indigo version and
       sidecar port from `/v2/info`, the platform, the runtime row (`Desktop
 (Tauri)` or `Browser`) and the license links (Ketcher Apache-2.0, Indigo
@@ -379,10 +384,9 @@
 - [x] All backstage surfaces use `src/ui/tokens.ts` only (surface/rail/content,
       `#cad3dd` borders, teal accent, 3/8 px radii, Roboto 12/14 px) and never
       a colour literal.
-- [x] The pure section list, settings descriptors, value formatting and the
-      version helper are covered by Vitest and were RED before implementation;
-      the manual "Backstage" checklist in `docs/verification.md` §2 passes and
-      `node scripts/harness.mjs` is green.
+- [x] The pure section list and the version helper are covered by Vitest and
+      were RED before implementation; the manual "Backstage" checklist in
+      `docs/verification.md` §2 passes and `node scripts/harness.mjs` is green.
 
 ## C15 — Welcome Refinement
 
@@ -506,7 +510,9 @@
       tabs list; `docs/architecture.md` §5.11 and `docs/conventions.md` §6.8
       describe it and the "Open" step in `docs/verification.md` §2 passes.
 
-- [x] **Activity 30 — expanded template previews:** previews render a copy of the
+- [x] **Activity 30 — expanded template previews (historical):** superseded by
+      Activity 32, which strips the SGroups instead of marking them expanded.
+      Previews render a copy of the
       entry KET with `expanded: true` on every SGroup (nested molecules
       included), produced by the pure `expandSgroupsForPreview`, so Indigo draws
       atoms instead of the `CN`/`OMe` abbreviation; insertion still loads the
@@ -518,6 +524,32 @@
       and the loading markers; the "Templates come from the real library" step
       in `docs/verification.md` §2 passes and `node scripts/harness.mjs` is
       green.
+
+- [x] **Activity 31 — four-section rail, no duplicate settings:** the rail has
+      exactly four sections — Welcome, Open, Models, About (ids `welcome`,
+      `open`, `models`, `about`) — with no Settings entry; `settings` is no
+      longer a valid id and an unknown or stale id such as `settings` still
+      falls back to Welcome. The backstage does not bind to `settingsService`,
+      update settings, load the ACS preset or reset to defaults, and the app
+      keeps no settings state; the only settings UI is Ketcher's native
+      **Settings** dialog from the toolbar button that stays visible in
+      `src/ui/editorButtons.ts`. The brand line reads just `Chemistry Draw`
+      (no `| Backstage` suffix) and the rail's exit button reads
+      **Back to editor** instead of "Exit Backstage"; Escape still closes the
+      overlay and the Welcome **Back to editor** action keeps its
+      document-only rule. The rail test pins the four sections and
+      `docs/verification.md` §2 passes.
+
+- [x] **Activity 32 — SGroup-free template previews:** previews render a copy of
+      the entry KET whose SGroups are removed — every `sgroups` array emptied,
+      nested molecules included — produced by the pure helper so Indigo draws
+      the atoms and bonds of the real structure instead of the `CN`/`OMe`
+      abbreviation or its brackets; insertion still loads the original entry KET
+      so the document keeps the abbreviation SGroup and no `.ket` file changes.
+      Tests pin the SGroup removal (including invalid JSON and nested
+      molecules), the preview-vs-insertion split and the loading markers; the
+      template step in `docs/verification.md` §2 passes and
+      `node scripts/harness.mjs` is green.
 
 ---
 
