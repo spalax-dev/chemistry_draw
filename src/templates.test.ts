@@ -707,10 +707,10 @@ describe("backstage default Welcome reset", () => {
 });
 
 /**
- * The top bar carries only the logo and the `Chemistry Draw | Backstage` title;
- * the rail's **Exit Backstage** is the only way out (`docs/architecture.md`
- * §5.11). There is no DOM test runner, so the absence is checked against the
- * source slice of the `<header>`.
+ * The top bar carries only the logo and the `Chemistry Draw` title; the rail's
+ * **Back to editor** is the only way out (`docs/architecture.md` §5.11). There
+ * is no DOM test runner, so the absence is checked against the source slice of
+ * the `<header>`.
  */
 describe("backstage top bar", () => {
   function between(source: string, startMarker: string, endMarker: string): string {
@@ -730,10 +730,11 @@ describe("backstage top bar", () => {
     expect(topBar).not.toMatch(/←|u2190|&larr;/);
   });
 
-  it("keeps Exit Backstage in the rail as the close control", () => {
+  it("keeps the rail's Back to editor as the close control", () => {
     const footer = between(BACKSTAGE_UI_SOURCE, "<div style={RAIL_FOOTER}>", "</div>");
 
-    expect(footer).toMatch(/Exit Backstage/);
+    expect(footer).toMatch(/Back to editor/);
+    expect(footer).not.toMatch(/Exit Backstage/);
     expect(footer).toMatch(/onClick=\{onClose\}/);
   });
 });

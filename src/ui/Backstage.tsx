@@ -5,14 +5,13 @@
  * It is one full-window `role="dialog"` above the tab strip and Ketcher, not a
  * route or a second editor. The rail is a `nav` of real buttons with roving
  * focus; focus moves in on open, stays inside while open and returns to the
- * trigger on close. Escape closes it; the rail's Exit Backstage is the only
+ * trigger on close. Escape closes it; the rail's Back to editor is the only
  * top-level exit control (the Welcome pane offers Back to editor for an open
  * document). Sections are presentational; `App` owns every command and data
  * source.
  */
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
-import type { Settings } from "ketcher-core";
 
 import {
   BACKSTAGE_SECTIONS,
@@ -27,7 +26,6 @@ import { Button } from "./Button";
 import { AboutSection } from "./backstage/AboutSection";
 import { ModelsSection } from "./backstage/ModelsSection";
 import { OpenSection } from "./backstage/OpenSection";
-import { SettingsSection, type SettingValue } from "./backstage/SettingsSection";
 import { WelcomeSection } from "./backstage/WelcomeSection";
 import { tokens } from "./tokens";
 
@@ -61,12 +59,6 @@ export interface BackstageProps {
   /** The actually bound sidecar port from `api_path`. */
   indigoPort: number | null;
   appVersion: string;
-  /** Live Ketcher settings; `null` until `settingsService` exists. */
-  ketcherSettings: Settings | null;
-  onChangeSetting: (key: string, value: SettingValue) => void;
-  onChangeSettingUnit: (key: string, unitKey: string, value: number | string) => void;
-  onPresetSetting: () => void;
-  onResetSettings: () => void;
 }
 
 const FOCUSABLE = [
@@ -128,12 +120,6 @@ const TITLE: CSSProperties = {
   fontSize: tokens.fontSize.title,
   fontWeight: 500,
   color: tokens.color.text,
-};
-
-const MUTED: CSSProperties = {
-  fontSize: tokens.fontSize.body,
-  fontWeight: 400,
-  color: tokens.color.muted,
 };
 
 const BODY: CSSProperties = {
@@ -252,15 +238,6 @@ function SectionIcon({ id }: { id: BackstageSectionId }) {
           <path d="M8 8v6.2" />
         </svg>
       );
-    case "settings":
-      return (
-        <svg {...ICON_PROPS} style={ICON}>
-          <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
-          <circle cx={5.5} cy={4.5} r={1.4} />
-          <circle cx={10.5} cy={8} r={1.4} />
-          <circle cx={6.5} cy={11.5} r={1.4} />
-        </svg>
-      );
     case "about":
       return (
         <svg {...ICON_PROPS} style={ICON}>
@@ -297,11 +274,6 @@ export function Backstage({
   indigoVersion,
   indigoPort,
   appVersion,
-  ketcherSettings,
-  onChangeSetting,
-  onChangeSettingUnit,
-  onPresetSetting,
-  onResetSettings,
 }: BackstageProps) {
   const titleId = useId();
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -406,16 +378,6 @@ export function Backstage({
         );
       case "models":
         return <ModelsSection />;
-      case "settings":
-        return (
-          <SettingsSection
-            settings={ketcherSettings}
-            onChangeSetting={onChangeSetting}
-            onChangeSettingUnit={onChangeSettingUnit}
-            onPresetSetting={onPresetSetting}
-            onResetSettings={onResetSettings}
-          />
-        );
       case "about":
         return (
           <AboutSection
@@ -479,10 +441,6 @@ export function Backstage({
           <h1 id={titleId} style={TITLE}>
             Chemistry Draw
           </h1>
-          <span aria-hidden="true" style={MUTED}>
-            |
-          </span>
-          <span style={MUTED}>Backstage</span>
         </div>
       </header>
 
@@ -513,7 +471,7 @@ export function Backstage({
           </div>
           <div style={RAIL_FOOTER}>
             <Button style={{ width: "100%" }} onClick={onClose}>
-              Exit Backstage
+              Back to editor
             </Button>
           </div>
         </nav>

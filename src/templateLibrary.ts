@@ -77,40 +77,39 @@ export function buildLibraryTemplates(entries: readonly TemplateSource[]): Libra
   return templates;
 }
 
-/** Marks every `sgroups[]` entry of a parsed KET document as expanded. */
-function expandSgroupsIn(value: unknown): void {
+/** Empties every `sgroups[]` array of a parsed KET document, keeping the rest. */
+function emptySgroupsIn(value: unknown): void {
   if (Array.isArray(value)) {
-    for (const item of value) expandSgroupsIn(item);
+    for (const item of value) emptySgroupsIn(item);
     return;
   }
   if (value === null || typeof value !== "object") return;
 
   const record = value as Record<string, unknown>;
   if (Array.isArray(record.sgroups)) {
-    for (const sgroup of record.sgroups) {
-      if (sgroup !== null && typeof sgroup === "object") {
-        (sgroup as Record<string, unknown>).expanded = true;
-      }
-    }
+    record.sgroups.length = 0;
   }
-  for (const child of Object.values(record)) expandSgroupsIn(child);
+  for (const child of Object.values(record)) emptySgroupsIn(child);
 }
 
 /**
- * Returns the entry's KET with every SGroup expanded, for the preview only
- * (`docs/architecture.md` §5.11): Indigo draws a collapsed SGroup as its
- * abbreviation, so a "Boc" card would otherwise hide the structure. The input
- * is the original entry KET, never mutated; text that is not JSON comes back
- * unchanged so the preview renderer can report the real error.
+ * Returns a copy of the entry's KET with every SGroup dropped, for the preview
+ * only (`docs/architecture.md` §5.11): Indigo draws a collapsed SGroup as its
+ * abbreviation, so a "Boc" card would otherwise show a label instead of the
+ * atoms and bonds. The preview therefore strips the SGroups and Ketcher draws
+ * the plain structure, while insertion still loads the original entry KET with
+ * its SGroups intact. The input is parsed into a fresh copy and never mutated;
+ * text that is not JSON comes back unchanged so the preview renderer can report
+ * the real error.
  */
-export function expandSgroupsForPreview(ket: string): string {
+export function previewKetWithoutSgroups(ket: string): string {
   let document: unknown;
   try {
     document = JSON.parse(ket);
   } catch {
     return ket;
   }
-  expandSgroupsIn(document);
+  emptySgroupsIn(document);
   return JSON.stringify(document);
 }
 

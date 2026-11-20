@@ -1,13 +1,9 @@
 /**
  * Pure backstage model: the ordered rail sections and the default section
  * (`docs/architecture.md` §5.11).
- *
- * The settings descriptors live in `src/settingsModel.ts` because they are a
- * separate concern with their own formatting rules; this module re-exports them
- * so `Backstage.tsx`, task code and the tests have one public import.
  */
 
-export type BackstageSectionId = "welcome" | "open" | "models" | "settings" | "about";
+export type BackstageSectionId = "welcome" | "open" | "models" | "about";
 
 export interface BackstageSection {
   id: BackstageSectionId;
@@ -19,7 +15,6 @@ export const BACKSTAGE_SECTIONS: BackstageSection[] = [
   { id: "welcome", label: "Welcome" },
   { id: "open", label: "Open" },
   { id: "models", label: "Models" },
-  { id: "settings", label: "Settings" },
   { id: "about", label: "About" },
 ];
 
@@ -49,6 +44,3 @@ export function declaredVersion(range: string): string {
   const match = /\d+(?:\.\d+)*/.exec(range);
   return match ? match[0] : range.trim();
 }
-
-export { formatSettingValue, SETTINGS_GROUPS } from "./settingsModel";
-export type { SettingControl, SettingDescriptor, SettingsGroup } from "./settingsModel";

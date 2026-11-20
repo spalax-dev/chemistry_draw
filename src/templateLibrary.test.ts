@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
@@ -211,20 +211,20 @@ describe("template tool reset contract", () => {
   });
 });
 
-/** Loads the expansion helper lazily so every source contract still runs. */
-async function expand(ket: string): Promise<string> {
-  const { expandSgroupsForPreview } = await import("./templateLibrary");
-  return expandSgroupsForPreview(ket);
+/** Loads the preview helper lazily so every source contract still runs. */
+async function preview(ket: string): Promise<string> {
+  const { previewKetWithoutSgroups } = await import("./templateLibrary");
+  return previewKetWithoutSgroups(ket);
 }
 
 interface SgroupEntry {
   abbreviation?: string;
-  expanded?: boolean;
   [field: string]: unknown;
 }
 
-/** The parts of a KET document the expansion test inspects. */
+/** The parts of a KET document the preview test inspects. */
 interface KetDocument {
+  header?: unknown;
   root?: unknown;
   mol0?: {
     type?: string;
@@ -234,13 +234,19 @@ interface KetDocument {
     fragments?: { sgroups?: SgroupEntry[] }[];
     nested?: { deeper?: { sgroups?: SgroupEntry[] } };
   };
+  mol1?: {
+    type?: string;
+    atoms?: unknown[];
+    sgroups?: SgroupEntry[];
+  };
 }
 
 /**
- * A real library entry shape: the SGroup carries the label Indigo would draw
- * (`Et`, `Boc`); one entry omits `expanded`, the other collapses it.
+ * A real library entry shape: the SGroups carry the labels Indigo would draw
+ * (`Et`, `Boc`) next to the atoms and bonds that must survive the copy.
  */
 const SGROUP_KET = JSON.stringify({
+  header: { version: "0.1", moleculeCount: 1 },
   root: { nodes: [{ $ref: "mol0" }] },
   mol0: {
     type: "molecule",
@@ -251,24 +257,31 @@ const SGROUP_KET = JSON.stringify({
     bonds: [{ type: 1, atoms: [0, 1] }],
     sgroups: [
       { type: "SUP", abbreviation: "Et", atoms: [0] },
-      { type: "SUP", abbreviation: "Boc", atoms: [1], expanded: false },
+      { type: "SUP", abbreviation: "Boc", atoms: [1] },
     ],
   },
 });
 
-/** SGroups live inside the molecule node, an array child and a deeper object. */
+/** SGroups live in two molecule nodes, an array child and a deeper object. */
 const NESTED_SGROUP_KET = JSON.stringify({
-  root: { nodes: [{ $ref: "mol0" }] },
+  header: { version: "0.1", moleculeCount: 2 },
+  root: { nodes: [{ $ref: "mol0" }, { $ref: "mol1" }] },
   mol0: {
     type: "molecule",
     atoms: [{ label: "N", location: [0, 0, 0] }],
-    sgroups: [{ type: "SUP", abbreviation: "OMe", expanded: false }],
-    fragments: [{ type: "fragment", sgroups: [{ abbreviation: "Ac", expanded: false }] }],
+    sgroups: [{ type: "SUP", abbreviation: "OMe" }],
+    fragments: [{ type: "fragment", sgroups: [{ abbreviation: "Ac" }] }],
     nested: { deeper: { sgroups: [{ abbreviation: "Bz" }] } },
+  },
+  mol1: {
+    type: "molecule",
+    atoms: [{ label: "S", location: [3, 0, 0] }],
+    sgroups: [{ type: "SUP", abbreviation: "Tos" }],
   },
 });
 
 const PLAIN_KET = JSON.stringify({
+  header: { version: "0.1", moleculeCount: 1 },
   root: { nodes: [{ $ref: "mol0" }] },
   mol0: {
     type: "molecule",
@@ -278,62 +291,88 @@ const PLAIN_KET = JSON.stringify({
 });
 
 /**
- * Indigo draws the abbreviation of a collapsed SGroup, so the preview KET — and
- * only the preview KET — is expanded (`docs/architecture.md` §5.11, activity 30).
+ * Indigo draws a collapsed SGroup as its abbreviation, so the preview copy has
+ * no SGroups at all while atoms, bonds and the header stay untouched
+ * (`docs/architecture.md` §5.11).
  */
-describe("expandSgroupsForPreview", () => {
-  it("sets expanded on every sgroup and keeps the abbreviations and other fields", async () => {
-    const result = JSON.parse(await expand(SGROUP_KET)) as KetDocument;
+describe("previewKetWithoutSgroups", () => {
+  it("empties the sgroups and keeps the atoms, bonds and header", async () => {
+    const result = JSON.parse(await preview(SGROUP_KET)) as KetDocument;
     const source = JSON.parse(SGROUP_KET) as KetDocument;
 
-    expect(result.mol0?.sgroups?.map((sgroup) => sgroup.expanded)).toEqual([true, true]);
-    expect(result.mol0?.sgroups?.map((sgroup) => sgroup.abbreviation)).toEqual(["Et", "Boc"]);
+    expect(result.mol0?.sgroups).toEqual([]);
     expect(result.mol0?.atoms).toEqual(source.mol0?.atoms);
     expect(result.mol0?.bonds).toEqual(source.mol0?.bonds);
+    expect(result.header).toEqual(source.header);
     expect(result.root).toEqual(source.root);
   });
 
-  it("expands sgroups nested in molecule objects and arrays", async () => {
-    const result = JSON.parse(await expand(NESTED_SGROUP_KET)) as KetDocument;
+  it("empties sgroups nested in every molecule object and array", async () => {
+    const result = JSON.parse(await preview(NESTED_SGROUP_KET)) as KetDocument;
 
-    expect(result.mol0?.sgroups?.[0]?.expanded).toBe(true);
-    expect(result.mol0?.fragments?.[0]?.sgroups?.[0]?.expanded).toBe(true);
-    expect(result.mol0?.nested?.deeper?.sgroups?.[0]?.expanded).toBe(true);
+    expect(result.mol0?.sgroups).toEqual([]);
+    expect(result.mol0?.fragments?.[0]?.sgroups).toEqual([]);
+    expect(result.mol0?.nested?.deeper?.sgroups).toEqual([]);
+    expect(result.mol1?.sgroups).toEqual([]);
   });
 
   it("returns an equivalent document when there is no sgroup", async () => {
-    const result = JSON.parse(await expand(PLAIN_KET)) as unknown;
+    const result = JSON.parse(await preview(PLAIN_KET)) as unknown;
 
     expect(result).toEqual(JSON.parse(PLAIN_KET));
   });
 
   it("returns malformed JSON unchanged", async () => {
-    expect(await expand("not json")).toBe("not json");
+    expect(await preview("not json")).toBe("not json");
+  });
+
+  it("is deterministic and leaves the source constant intact", async () => {
+    const once = await preview(SGROUP_KET);
+    const twice = await preview(SGROUP_KET);
+
+    expect(twice).toBe(once);
+    const original = JSON.parse(SGROUP_KET) as KetDocument;
+    expect(original.mol0?.sgroups?.map((sgroup) => sgroup.abbreviation)).toEqual(["Et", "Boc"]);
   });
 });
 
+/** Collects every source file under `src/` so the legacy name can be traced. */
+function listSourceFiles(directory: URL): URL[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const child = new URL(entry.name, directory);
+    if (entry.isDirectory()) return listSourceFiles(new URL(`${entry.name}/`, directory));
+    return entry.isFile() ? [child] : [];
+  });
+}
+
+/** Split so the test file itself never contains the legacy identifier. */
+const LEGACY_EXPANSION_HELPER = ["expandSgroups", "ForPreview"].join("");
+
 /**
- * The expansion is preview-only: `App`'s preview renderer expands the copy,
- * while a card click still inserts the entry's original KET
- * (`docs/conventions.md` §6.8, activity 30).
+ * The preview strips SGroups from a copy only: `App`'s preview renderer
+ * generates the image from the stripped copy, while a card click still inserts
+ * the entry's original KET (`docs/conventions.md` §6.8).
  */
-describe("expanded preview contract", () => {
-  it("expands the KET in the preview renderer before Ketcher draws it", () => {
-    const preview = sourceBetween(
+describe("sgroup-free preview contract", () => {
+  it("strips the SGroups in the preview renderer before Ketcher draws it", () => {
+    const previewBlock = sourceBetween(
       APP_SOURCE,
       "const renderTemplatePreview = useCallback(",
       "\n  const handleError",
     );
 
     expect(APP_SOURCE).toMatch(
-      /import\s*\{[^}]*expandSgroupsForPreview[^}]*\}\s*from\s*["']\.\/templateLibrary["']/,
+      /import\s*\{[^}]*previewKetWithoutSgroups[^}]*\}\s*from\s*["']\.\/templateLibrary["']/,
     );
-    expect(preview).toMatch(/expandSgroupsForPreview\(\s*ket\s*\)/);
-    expect(preview).not.toMatch(/generateImage\(\s*ket\s*,/);
-    expect(preview).toMatch(/generateImage\(\s*\w+\s*,\s*\{\s*outputFormat:\s*["']svg["']/);
+    expect(previewBlock).toMatch(/previewKetWithoutSgroups\(\s*ket\s*\)/);
+    expect(previewBlock.indexOf("previewKetWithoutSgroups(")).toBeLessThan(
+      previewBlock.indexOf("generateImage("),
+    );
+    expect(previewBlock).not.toMatch(/generateImage\(\s*ket\s*,/);
+    expect(previewBlock).toMatch(/generateImage\(\s*\w+\s*,\s*\{\s*outputFormat:\s*["']svg["']/);
   });
 
-  it("inserts the original unexpanded entry KET", () => {
+  it("inserts the original entry KET without stripping it", () => {
     const insert = sourceBetween(
       APP_SOURCE,
       "const insertTemplate = useCallback(",
@@ -341,7 +380,15 @@ describe("expanded preview contract", () => {
     );
 
     expect(insert).toMatch(/setMolecule\(\s*template\.ket\s*\)/);
-    expect(insert).not.toMatch(/expandSgroupsForPreview/);
+    expect(insert).not.toMatch(/previewKetWithoutSgroups/);
+  });
+
+  it("leaves no reference to the legacy expansion helper under src", () => {
+    const offenders = listSourceFiles(new URL("./", import.meta.url))
+      .filter((file) => readFileSync(file, "utf8").includes(LEGACY_EXPANSION_HELPER))
+      .map((file) => file.pathname);
+
+    expect(offenders).toEqual([]);
   });
 });
 

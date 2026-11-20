@@ -8,10 +8,7 @@ import {
   RemoteStructServiceProvider,
   SaltsAndSolventsProvider,
   type CheckTypes,
-  type DeepPartial,
-  type ISettingsService,
   type Ketcher,
-  type Settings,
   type Struct,
 } from "ketcher-core";
 import { message } from "@tauri-apps/plugin-dialog";
@@ -75,7 +72,6 @@ import {
 import { routeSavedBlob } from "./saveRoute";
 import { CloseGuardDialog, ErrorDialog, ExportDialog, NoticeDialog } from "./ui/DocumentDialogs";
 import { Backstage } from "./ui/Backstage";
-import type { SettingValue } from "./ui/backstage/SettingsSection";
 import { EDITOR_BUTTONS } from "./ui/editorButtons";
 import { FileMenu } from "./ui/FileMenu";
 import { TabStrip } from "./ui/TabStrip";
@@ -83,7 +79,7 @@ import { addRecent, loadRecent, removeRecent, saveRecent } from "./recent";
 import { loadRecentStructures, type RecentRow } from "./recentStructures";
 import {
   buildLibraryTemplates,
-  expandSgroupsForPreview,
+  previewKetWithoutSgroups,
   type LibraryTemplate,
   type TemplateSource,
 } from "./templateLibrary";
@@ -331,10 +327,6 @@ function App() {
   const [apiBase, setApiBase] = useState<string | null>(null);
 
   const ketcherRef = useRef<Ketcher | null>(null);
-  /** The mounted editor's settings service; `null` before `onInit` (§5.11.1). */
-  const settingsServiceRef = useRef<ISettingsService | null>(null);
-  /** Live Ketcher settings for the backstage; the service is the only owner. */
-  const [ketcherSettings, setKetcherSettings] = useState<Settings | null>(null);
   /**
    * The real Structure Library entries, `null` until the deferred build lands
    * (§5.11). Welcome paints skeletons meanwhile and later opens reuse the cache.
@@ -460,26 +452,6 @@ function App() {
   }, []);
 
   /**
-   * Binds the backstage to the mounted editor's settings service: seed the
-   * state from `getSettings()` and follow every change it emits, so an external
-   * change is reflected immediately (§5.11.1). The section never keeps a copy.
-   */
-  useEffect(() => {
-    if (!ready) return;
-    const service = ketcherRef.current?.settingsService;
-    if (!service) return;
-
-    settingsServiceRef.current = service;
-    setKetcherSettings(service.getSettings());
-    const unsubscribe = service.subscribe(setKetcherSettings);
-
-    return () => {
-      unsubscribe();
-      settingsServiceRef.current = null;
-    };
-  }, [ready]);
-
-  /**
    * Builds the Welcome Recent structures rows (§5.11) once the backstage is
    * open: it stats and reads each recent `.ket`, validates the derived molfile
    * through the mounted editor's struct service and resolves a cached Indigo
@@ -523,12 +495,12 @@ function App() {
 
   /**
    * Renders one library entry's KET to a preview object URL through Ketcher.
-   * Only the copy is expanded: the card still inserts the original entry KET.
+   * Only the copy drops its SGroups: the card still inserts the original KET.
    */
   const renderTemplatePreview = useCallback(async (ket: string): Promise<string> => {
     const ketcher = ketcherRef.current;
     if (!ketcher) throw new Error("The editor is not ready to render a template preview.");
-    const previewKet = expandSgroupsForPreview(ket);
+    const previewKet = previewKetWithoutSgroups(ket);
     const image = await ketcher.generateImage(previewKet, { outputFormat: "svg" });
     return URL.createObjectURL(image);
   }, []);
@@ -1148,63 +1120,6 @@ function App() {
     [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError],
   );
 
-  /**
-   * Sends one validated change to the editor's settings service. The service
-   * persists it in Ketcher's own `ketcher-opts` entry and emits the update that
-   * redraws the canvas (§5.11.1); a rejected value surfaces in the error dialog.
-   */
-  const applySetting = useCallback(
-    async (partial: DeepPartial<Settings>) => {
-      const service = settingsServiceRef.current;
-      if (!service) return;
-      try {
-        setKetcherSettings(await service.updateSettings(partial));
-      } catch (error) {
-        showError(`Could not apply the setting: ${describeError(error)}`);
-      }
-    },
-    [showError],
-  );
-
-  const handleChangeSetting = useCallback(
-    (key: string, value: SettingValue) => {
-      void applySetting({ [key]: value } as DeepPartial<Settings>);
-    },
-    [applySetting],
-  );
-
-  /**
-   * Ketcher keeps a measure's number and its unit as two independent keys: a
-   * numeric value patches the key, a unit name patches the unit key.
-   */
-  const handleChangeSettingUnit = useCallback(
-    (key: string, unitKey: string, value: number | string) => {
-      const partial = typeof value === "string" ? { [unitKey]: value } : { [key]: value };
-      void applySetting(partial as DeepPartial<Settings>);
-    },
-    [applySetting],
-  );
-
-  const handlePresetSetting = useCallback(async () => {
-    const service = settingsServiceRef.current;
-    if (!service) return;
-    try {
-      setKetcherSettings(await service.loadPreset("acs"));
-    } catch (error) {
-      showError(`Could not load the ACS preset: ${describeError(error)}`);
-    }
-  }, [showError]);
-
-  const handleResetSettings = useCallback(async () => {
-    const service = settingsServiceRef.current;
-    if (!service) return;
-    try {
-      setKetcherSettings(await service.resetToDefaults());
-    } catch (error) {
-      showError(`Could not reset the settings: ${describeError(error)}`);
-    }
-  }, [showError]);
-
   /** Dispatches a File menu item id to the command it runs (§5.9). */
   const handleFileAction = useCallback(
     (id: FileMenuId) => {
@@ -1669,11 +1584,6 @@ function App() {
           indigoVersion={indigoInfo.version}
           indigoPort={indigoInfo.port}
           appVersion={packageJson.version}
-          ketcherSettings={ketcherSettings}
-          onChangeSetting={handleChangeSetting}
-          onChangeSettingUnit={handleChangeSettingUnit}
-          onPresetSetting={() => void handlePresetSetting()}
-          onResetSettings={() => void handleResetSettings()}
         />
       )}
       {exportOpen && (

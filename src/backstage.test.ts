@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -6,66 +8,32 @@ import {
   BACKSTAGE_SECTIONS,
   DEFAULT_BACKSTAGE_SECTION,
   declaredVersion,
-  formatSettingValue,
   normalizeSection,
-  SETTINGS_GROUPS,
   type BackstageSection,
   type BackstageSectionId,
-  type SettingControl,
-  type SettingDescriptor,
-  type SettingsGroup,
 } from "./backstage";
+import { EDITOR_BUTTONS } from "./ui/editorButtons";
 
-const SECTION_IDS: BackstageSectionId[] = ["welcome", "open", "models", "settings", "about"];
+const SECTION_IDS: BackstageSectionId[] = ["welcome", "open", "models", "about"];
 
-const SECTION_LABELS = ["Welcome", "Open", "Models", "Settings", "About"];
+const SECTION_LABELS = ["Welcome", "Open", "Models", "About"];
 
-/** Real Ketcher 3.18 keys the backstage must expose (docs/architecture.md §5.11.1). */
-const REQUIRED_SETTING_KEYS = [
-  "atomColoring",
-  "showHydrogenLabels",
-  "stereoLabelStyle",
-  "aromaticCircle",
-  "bondLength",
-  "bondThickness",
-  "bondSpacing",
-  "imageResolution",
-  "valence-mode",
-  "smart-layout",
-];
-
-/** Keys Ketcher pairs with a companion `<key>Unit` setting. */
-const UNIT_BEARING_KEYS = [
-  "bondLength",
-  "bondThickness",
-  "stereoBondWidth",
-  "hashSpacing",
-  "reactionComponentMarginSize",
-  "fontsz",
-];
-
-/** Keys with a real value but no companion unit key in Ketcher. */
-const UNITLESS_NUMBER_KEYS = ["bondSpacing", "imageResolution"];
-
-const INVENTED_SETTING = /theme|grid|model|threshold|wasm|iupac/i;
-
-const ALL_DESCRIPTORS: SettingDescriptor[] = SETTINGS_GROUPS.flatMap((group: SettingsGroup) =>
-  group.items.flatMap((item: SettingDescriptor) => item),
-);
-
-function descriptorFor(key: string): SettingDescriptor | undefined {
-  return ALL_DESCRIPTORS.find((item) => item.key === key);
-}
-
+/** The rail must expose exactly these four sections, in this order. */
 describe("backstage section list", () => {
-  it("exports the sections in rail order", () => {
+  it("exports the four sections in rail order", () => {
     const sections: BackstageSection[] = BACKSTAGE_SECTIONS;
 
     expect(sections.map((section) => section.id)).toEqual(SECTION_IDS);
+    expect(sections).toHaveLength(4);
   });
 
   it("labels every section exactly", () => {
     expect(BACKSTAGE_SECTIONS.map((section) => section.label)).toEqual(SECTION_LABELS);
+  });
+
+  it("has no settings section any more", () => {
+    expect(BACKSTAGE_SECTIONS.map((section) => section.id)).not.toContain("settings");
+    expect(BACKSTAGE_SECTIONS.map((section) => section.label)).not.toContain("Settings");
   });
 
   it("defaults to the Welcome section", () => {
@@ -83,7 +51,7 @@ describe("backstage section list", () => {
 });
 
 /**
- * `normalizeSection` is the unknown-id guard: every value outside the five
+ * `normalizeSection` is the unknown-id guard: every value outside the four
  * section ids falls back to Welcome so no id can render an empty pane
  * (`docs/architecture.md` §5.11, `docs/conventions.md` §6.8).
  */
@@ -98,7 +66,11 @@ describe("normalizeSection", () => {
     expect(normalizeSection("models")).toBe("models");
   });
 
-  it("returns welcome for a removed or unknown section id", () => {
+  it("returns welcome for the removed settings section", () => {
+    expect(normalizeSection("settings")).toBe("welcome");
+  });
+
+  it("returns welcome for another removed or unknown section id", () => {
     expect(normalizeSection("save-export")).toBe("welcome");
     expect(normalizeSection("new")).toBe("welcome");
     expect(normalizeSection("templates")).toBe("welcome");
@@ -113,136 +85,28 @@ describe("normalizeSection", () => {
   });
 });
 
-describe("settings groups", () => {
-  it("gives every group a unique non-empty id, a label and items", () => {
-    const ids = SETTINGS_GROUPS.map((group) => group.id);
+/**
+ * `settings` leaves the union with the Settings section. Vitest does not
+ * typecheck, so the source is asserted too; `tsc --noEmit` enforces the
+ * `@ts-expect-error` below.
+ */
+// @ts-expect-error settings is no longer a backstage section id
+const STALE_SECTION: BackstageSectionId = "settings";
 
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const group of SETTINGS_GROUPS) {
-      expect(group.id).not.toBe("");
-      expect(group.label).not.toBe("");
-      expect(group.items.length).toBeGreaterThan(0);
-    }
+const BACKSTAGE_MODEL_SOURCE = readFileSync(new URL("./backstage.ts", import.meta.url), "utf8");
+
+describe("BackstageSectionId drops settings", () => {
+  it("declares no settings member in the section id union", () => {
+    const union = /export\s+type\s+BackstageSectionId\s*=[^;]*;/.exec(BACKSTAGE_MODEL_SOURCE)?.[0];
+
+    expect(union).toBeDefined();
+    expect(union).not.toContain("settings");
   });
 
-  it("carries each real key exactly once", () => {
-    for (const key of REQUIRED_SETTING_KEYS) {
-      expect(ALL_DESCRIPTORS.filter((item) => item.key === key)).toHaveLength(1);
-    }
-  });
+  it("still falls a stale settings id back to welcome", () => {
+    void STALE_SECTION;
 
-  it("never repeats a setting key across groups", () => {
-    const keys = ALL_DESCRIPTORS.map((item) => item.key);
-
-    expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  it("labels every descriptor", () => {
-    for (const item of ALL_DESCRIPTORS) {
-      expect(item.label.trim()).not.toBe("");
-      expect(item.label).not.toBe(item.key);
-    }
-  });
-
-  it("uses only the supported control kinds", () => {
-    const controls: SettingControl[] = ["toggle", "select", "number"];
-
-    for (const item of ALL_DESCRIPTORS) {
-      expect(controls).toContain(item.control);
-    }
-  });
-});
-
-describe("settings unit pairing", () => {
-  it("declares the companion unit key for every unit-bearing number", () => {
-    for (const key of UNIT_BEARING_KEYS) {
-      const item = descriptorFor(key);
-
-      expect(item).toBeDefined();
-      expect(item?.control).toBe("number");
-      expect(item?.unitKey).toBe(`${key}Unit`);
-    }
-  });
-
-  it("leaves bond spacing and image resolution without a unit key", () => {
-    for (const key of UNITLESS_NUMBER_KEYS) {
-      expect(descriptorFor(key)?.unitKey).toBeUndefined();
-    }
-  });
-});
-
-describe("settings number bounds", () => {
-  it("declares a min for every number control and a max only when bounded", () => {
-    const numbers = ALL_DESCRIPTORS.filter((item) => item.control === "number");
-
-    expect(numbers.length).toBeGreaterThan(0);
-    for (const item of numbers) {
-      expect(typeof item.min).toBe("number");
-      if (item.max !== undefined) {
-        expect(typeof item.max).toBe("number");
-        expect(item.min as number).toBeLessThan(item.max);
-      }
-    }
-  });
-
-  it("keeps the documented bounds for the bond metrics", () => {
-    expect(descriptorFor("bondLength")?.min).toBe(0.1);
-    expect(descriptorFor("bondLength")?.max).toBe(1000);
-    expect(descriptorFor("bondThickness")?.min).toBe(0.1);
-    expect(descriptorFor("bondThickness")?.max).toBe(96);
-  });
-
-  it("leaves image resolution unbounded like Ketcher's schema", () => {
-    const item = descriptorFor("imageResolution");
-
-    expect(item?.control).toBe("number");
-    expect(item?.min).toBe(1);
-    expect(item?.max).toBeUndefined();
-  });
-});
-
-describe("settings select options", () => {
-  it("declares non-empty options for every select control", () => {
-    const selects = ALL_DESCRIPTORS.filter((item) => item.control === "select");
-
-    expect(selects.length).toBeGreaterThan(0);
-    for (const item of selects) {
-      expect(Array.isArray(item.options)).toBe(true);
-      expect(item.options?.length).toBeGreaterThan(0);
-      for (const option of item.options ?? []) {
-        expect(option.trim()).not.toBe("");
-      }
-    }
-  });
-
-  it("matches Ketcher's hydrogen label and stereo label enums", () => {
-    expect(descriptorFor("showHydrogenLabels")?.options).toEqual([
-      "off",
-      "Hetero",
-      "Terminal",
-      "Terminal and Hetero",
-      "On",
-    ]);
-    expect(descriptorFor("stereoLabelStyle")?.options).toEqual([
-      "IUPAC",
-      "classic",
-      "On-Atoms",
-      "off",
-    ]);
-    expect(descriptorFor("valence-mode")?.options).toEqual([
-      "default",
-      "biovia-2009",
-      "biovia-2017",
-    ]);
-  });
-});
-
-describe("settings realism", () => {
-  it("exposes no invented setting key or label", () => {
-    for (const item of ALL_DESCRIPTORS) {
-      expect(item.key).not.toMatch(INVENTED_SETTING);
-      expect(item.label).not.toMatch(INVENTED_SETTING);
-    }
+    expect(normalizeSection(STALE_SECTION)).toBe("welcome");
   });
 });
 
@@ -263,36 +127,128 @@ describe("declaredVersion", () => {
   });
 });
 
-describe("formatSettingValue", () => {
-  it("appends the unit to a number", () => {
-    expect(formatSettingValue(14.4, "pt")).toBe("14.4 pt");
+/** `src/`, its non-test modules and the two paths the Settings section occupied. */
+const SRC_ROOT = fileURLToPath(new URL("./", import.meta.url));
+
+const SETTINGS_SECTION_URL = new URL("./ui/backstage/SettingsSection.tsx", import.meta.url);
+
+const SETTINGS_MODEL_URL = new URL("./settingsModel.ts", import.meta.url);
+
+/** Every non-test `.ts`/`.tsx` module under `src/`. */
+function sourceFiles(): string[] {
+  const files: string[] = [];
+
+  function walk(directory: string): void {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+      } else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+        files.push(path);
+      }
+    }
+  }
+
+  walk(SRC_ROOT);
+  return files;
+}
+
+/** The `src/`-relative names of every module that names one of the settings modules. */
+function modulesReferencing(name: string): string[] {
+  return sourceFiles()
+    .filter((file) => readFileSync(file, "utf8").includes(name))
+    .map((file) => relative(SRC_ROOT, file));
+}
+
+describe("settings module removal", () => {
+  it("ships no SettingsSection module", () => {
+    expect(existsSync(SETTINGS_SECTION_URL)).toBe(false);
   });
 
-  it("renders a toggle as On", () => {
-    expect(formatSettingValue(true)).toBe("On");
+  it("ships no settings model module", () => {
+    expect(existsSync(SETTINGS_MODEL_URL)).toBe(false);
   });
 
-  it("passes a select value through unchanged", () => {
-    expect(formatSettingValue("Hetero")).toBe("Hetero");
+  it("no longer re-exports the settings descriptors from the backstage model", () => {
+    expect(BACKSTAGE_MODEL_SOURCE).not.toMatch(/SETTINGS_GROUPS|formatSettingValue/);
   });
 
-  it("never invents a unit for a unitless number", () => {
-    expect(formatSettingValue(0.000089)).toBe("0.000089");
+  it("has no source module importing SettingsSection", () => {
+    expect(modulesReferencing("SettingsSection")).toEqual([]);
   });
 
-  it("keeps the plain number when no unit is given", () => {
-    expect(formatSettingValue(40)).toBe("40");
+  it("has no source module importing settingsModel", () => {
+    expect(modulesReferencing("settingsModel")).toEqual([]);
   });
 });
 
 /**
- * `Backstage.tsx` and `backstage.ts` have no DOM test runner, so the removed
- * status strip and Save & Export section are checked against the source
+ * `App.tsx` no longer feeds Ketcher's live settings into the backstage; the
+ * toolbar's own settings dialog stays the only settings surface
+ * (`docs/architecture.md` §5.11).
+ */
+const APP_SOURCE = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+
+describe("App settings wiring removal", () => {
+  it.each([
+    "settingsService",
+    "ketcherSettings",
+    "handleChangeSetting",
+    "loadPreset(",
+    "resetToDefaults(",
+  ])("contains no %s", (token) => {
+    expect(APP_SOURCE).not.toContain(token);
+  });
+});
+
+/**
+ * `Backstage.tsx` has no DOM test runner, so the brand line, the rail exit
+ * label and the removed Settings pane are checked against the source
  * (`docs/conventions.md` §6.8).
  */
 const BACKSTAGE_UI_SOURCE = readFileSync(new URL("./ui/Backstage.tsx", import.meta.url), "utf8");
 
-const BACKSTAGE_MODEL_SOURCE = readFileSync(new URL("./backstage.ts", import.meta.url), "utf8");
+/** The `<header>` element that carries the brand, opening tag to closing tag. */
+function headerSource(): string {
+  const start = BACKSTAGE_UI_SOURCE.indexOf("<header");
+  const end = BACKSTAGE_UI_SOURCE.indexOf("</header>", start);
+
+  return start >= 0 && end > start
+    ? BACKSTAGE_UI_SOURCE.slice(start, end + "</header>".length)
+    : "";
+}
+
+/** The rail footer, where the single top-level exit control lives. */
+function railFooterSource(): string {
+  const start = BACKSTAGE_UI_SOURCE.indexOf("<div style={RAIL_FOOTER}>");
+  const end = BACKSTAGE_UI_SOURCE.indexOf("</div>", start);
+
+  return start >= 0 && end > start ? BACKSTAGE_UI_SOURCE.slice(start, end) : "";
+}
+
+describe("backstage brand line", () => {
+  it("renders the Chemistry Draw title", () => {
+    expect(headerSource()).toContain("Chemistry Draw");
+  });
+
+  it("keeps no separate Backstage muted span", () => {
+    expect(headerSource()).not.toMatch(/>Backstage</);
+  });
+
+  it("keeps no pipe separator next to the title", () => {
+    expect(headerSource()).not.toMatch(/>\s*\|\s*</);
+  });
+});
+
+describe("backstage exit control", () => {
+  it("labels the rail close button Back to editor", () => {
+    expect(railFooterSource()).toContain("Back to editor");
+  });
+
+  it("keeps the old Exit Backstage label out of the source", () => {
+    expect(BACKSTAGE_UI_SOURCE).not.toContain("Exit Backstage");
+  });
+});
 
 /** The `renderSection` body, from its declaration to the component's own `return (`. */
 function renderSectionSource(): string {
@@ -330,6 +286,42 @@ describe("backstage unknown section fallback", () => {
     expect(source).not.toBe("");
     expect(source).not.toMatch(/default:\s*(?:\{\s*)?return\s+(?:null|undefined)\b/);
     expect(source).not.toMatch(/default:\s*break;/);
+  });
+});
+
+describe("backstage Settings pane removal", () => {
+  it("renders no SettingsSection", () => {
+    expect(BACKSTAGE_UI_SOURCE).not.toContain("SettingsSection");
+  });
+
+  it("has no settings branch in the section switch", () => {
+    expect(renderSectionSource()).not.toMatch(/case\s+"settings"/);
+    expect(BACKSTAGE_UI_SOURCE).not.toContain("ketcherSettings");
+  });
+});
+
+/**
+ * Ketcher's own settings button stays visible: the toolbar dialog is still the
+ * settings surface (`docs/conventions.md` §6.5). Only Recognize and Save are
+ * hidden.
+ */
+type ButtonEntry = { hidden?: boolean };
+
+const EDITOR_BUTTONS_CONFIG = EDITOR_BUTTONS as unknown as Record<string, ButtonEntry | undefined>;
+
+const EDITOR_BUTTONS_SOURCE = readFileSync(
+  new URL("./ui/editorButtons.ts", import.meta.url),
+  "utf8",
+);
+
+describe("Ketcher settings button stays reachable", () => {
+  it("hides only recognize and save", () => {
+    expect(Object.keys(EDITOR_BUTTONS).sort()).toEqual(["recognize", "save"]);
+  });
+
+  it("declares no settings entry", () => {
+    expect(EDITOR_BUTTONS_CONFIG.settings).toBeUndefined();
+    expect(EDITOR_BUTTONS_SOURCE).not.toMatch(/\bsettings\s*:/);
   });
 });
 
