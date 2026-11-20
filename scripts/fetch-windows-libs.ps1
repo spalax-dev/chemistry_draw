@@ -9,10 +9,13 @@
     extracts only the runtime DLLs into src-tauri/lib/windows-x86_64/ and
     builds indigo.lib / indigo-renderer.lib from the DLL exports.
 
-    It also downloads the pinned ONNX Runtime 1.31.0 Windows x86_64 zip,
-    verifies its SHA-256 and extracts onnxruntime.dll next to the Indigo DLLs.
-    The sidecar loads the runtime dynamically through ORT_DYLIB_PATH, so the
-    DLL is shipped but never linked at build time.
+    It also downloads the pinned ONNX Runtime 1.31.0 from the official
+    Microsoft.ML.OnnxRuntime NuGet package (the GitHub release asset is gone),
+    verifies the package SHA-256 and the DLL SHA-256/size, and extracts
+    onnxruntime.dll next to the Indigo DLLs. A .nupkg is a zip archive; the PyPI
+    wheel carries a different library and must not be used. The sidecar loads
+    the runtime dynamically through ORT_DYLIB_PATH, so the DLL is shipped but
+    never linked at build time.
 
     Requires dumpbin.exe and lib.exe from a Visual Studio x64 developer
     environment. In CI, ilammy/msvc-dev-cmd sets that up.
@@ -41,9 +44,11 @@ $DownloadUrl = "https://lifescience.opensource.epam.com/downloads/indigo-$Indigo
 $ExpectedSha256 = "c6fac67a2bd79ed0c39930fa4c031a856055883fec97921e13fef831820ed598"
 
 $OnnxRuntimeVersion = "1.31.0"
-$OnnxRuntimeUrl = "https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-win-x64-1.31.0.zip"
-$OnnxRuntimeSha256 = "3958d8a44984160692c1b4ffd0de3cb48f8c39f9d34bb31e433db06e30b82195"
+$OnnxRuntimePackage = "microsoft.ml.onnxruntime.$OnnxRuntimeVersion.nupkg"
+$OnnxRuntimeUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$OnnxRuntimeVersion/microsoft.ml.onnxruntime.$OnnxRuntimeVersion.nupkg"
+$OnnxRuntimeSha256 = "7e35fdb4f5adb62f01e60798e2e5ed05108f5fbbe1cca03fbcc37903cf7c5e3b"
 $OnnxRuntimeDll = "onnxruntime.dll"
+$OnnxRuntimeDllSha256 = "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c"
 $OnnxRuntimeDllSize = 17253176
 
 # Runtime DLLs the sidecar needs next to the executable.
@@ -184,35 +189,37 @@ Refusing to use an unverified archive.
     }
 
     # ONNX Runtime: the sidecar loads it dynamically through ORT_DYLIB_PATH,
-    # so the DLL ships next to the Indigo runtimes but is never linked.
-    $ortZipName = "onnxruntime-win-x64-$OnnxRuntimeVersion.zip"
-    $ortZipPath = Join-Path $workDir $ortZipName
+    # so the DLL ships next to the Indigo runtimes but is never linked. The
+    # pinned source is the official NuGet package; a .nupkg is a zip archive.
+    $ortPackagePath = Join-Path $workDir $OnnxRuntimePackage
 
-    Write-Host "Downloading ONNX Runtime $OnnxRuntimeVersion Windows runtime..."
-    Invoke-WebRequest -Uri $OnnxRuntimeUrl -OutFile $ortZipPath -UseBasicParsing
+    Write-Host "Downloading ONNX Runtime $OnnxRuntimeVersion from NuGet..."
+    Invoke-WebRequest -Uri $OnnxRuntimeUrl -OutFile $ortPackagePath -UseBasicParsing
 
-    $actualOrtSha256 = (Get-FileHash -Path $ortZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actualOrtSha256 = (Get-FileHash -Path $ortPackagePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualOrtSha256 -ne $OnnxRuntimeSha256) {
         throw @"
-SHA-256 mismatch for $ortZipName.
+SHA-256 mismatch for $OnnxRuntimePackage.
   expected: $OnnxRuntimeSha256
   actual:   $actualOrtSha256
-Refusing to use an unverified archive.
+Refusing to use an unverified package.
+If the pin changed, move OnnxRuntimeUrl, ortEntryPath, OnnxRuntimeSha256
+and OnnxRuntimeDllSha256 together.
 "@
     }
-    Write-Host "ONNX Runtime SHA-256 verified."
+    Write-Host "ONNX Runtime package SHA-256 verified."
 
-    # Entry-level extraction: expanding the whole archive writes the PDB and
-    # headers to a 400+ MB temp tree, so read just the DLL entry, like the
-    # Indigo extraction above.
-    $ortEntryPath = "onnxruntime-win-x64-$OnnxRuntimeVersion/lib/onnxruntime.dll"
+    # Entry-level extraction: the package carries every platform, headers and
+    # metadata, so read just the Windows DLL entry, like the Indigo extraction
+    # above. Never expand the whole archive.
+    $ortEntryPath = "runtimes/win-x64/native/onnxruntime.dll"
     $ortDestination = Join-Path $resolvedOutDir $OnnxRuntimeDll
 
-    $ortArchive = [System.IO.Compression.ZipFile]::OpenRead($ortZipPath)
+    $ortArchive = [System.IO.Compression.ZipFile]::OpenRead($ortPackagePath)
     try {
         $ortEntry = $ortArchive.GetEntry($ortEntryPath)
         if (-not $ortEntry) {
-            throw "Archive $ortZipName does not contain $ortEntryPath."
+            throw "Package $OnnxRuntimePackage does not contain $ortEntryPath."
         }
         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($ortEntry, $ortDestination, $true)
     }
@@ -220,9 +227,21 @@ Refusing to use an unverified archive.
         $ortArchive.Dispose()
     }
 
+    $ortDllSha256 = (Get-FileHash -Path $ortDestination -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($ortDllSha256 -ne $OnnxRuntimeDllSha256) {
+        throw @"
+SHA-256 mismatch for $OnnxRuntimeDll.
+  expected: $OnnxRuntimeDllSha256
+  actual:   $ortDllSha256
+Refusing to use an unverified ONNX Runtime DLL.
+If the pin changed, move OnnxRuntimeUrl, ortEntryPath, OnnxRuntimeDllSha256
+and OnnxRuntimeDllSize together.
+"@
+    }
+
     $ortDllSize = (Get-Item -Path $ortDestination).Length
     if ($ortDllSize -ne $OnnxRuntimeDllSize) {
-        throw "Unexpected $OnnxRuntimeDll size: $ortDllSize bytes (expected $OnnxRuntimeDllSize)."
+        throw "Unexpected $OnnxRuntimeDll size: $ortDllSize bytes (expected $OnnxRuntimeDllSize). Move OnnxRuntimeUrl, ortEntryPath, OnnxRuntimeDllSha256 and OnnxRuntimeDllSize together if the pin changed."
     }
 
     Write-Host "Generating MSVC import libraries..."

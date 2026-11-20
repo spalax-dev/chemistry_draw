@@ -146,18 +146,39 @@ The sidecar loads ONNX Runtime **dynamically** (`ort` `load-dynamic`); it is
 never linked at build time. Activity 7 (`ship-onnx-runtime`) also **ships** the
 pinned 1.31.0 library:
 
-- Linux: `scripts/build-libs.sh` downloads and SHA-256-verifies
-  `onnxruntime-linux-x64-1.31.0.tgz`, extracts `lib/libonnxruntime.so*` into the
-  builder output, and `task libs` copies the chain into
-  `src-tauri/lib/linux-x86_64/`. Packaging ships it. Rebuild the image with
-  `task builder-image -- --no-cache` when the pin changes.
-- Windows: `pwsh scripts/fetch-windows-libs.ps1` downloads and verifies
-  `onnxruntime-win-x64-1.31.0.zip` and extracts `onnxruntime.dll` into
+The upstream GitHub **1.31.0 release assets are no longer reachable** (they
+return 404), so the pinned source is now the official
+`Microsoft.ML.OnnxRuntime` **1.31.0** NuGet package:
+
+- Package: `microsoft.ml.onnxruntime.1.31.0.nupkg` from
+  `https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.31.0/`
+- nupkg SHA-256: `7e35fdb4f5adb62f01e60798e2e5ed05108f5fbbe1cca03fbcc37903cf7c5e3b`
+- Linux member: `runtimes/linux-x64/native/libonnxruntime.so`, SHA-256
+  `469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e`,
+  29,345,384 B — byte-identical to the previously shipped
+  `libonnxruntime.so.1.31.0`.
+- Windows member: `runtimes/win-x64/native/onnxruntime.dll`, SHA-256
+  `0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c`,
+  17,253,176 B.
+
+A `.nupkg` is a zip archive. Do **not** substitute the PyPI wheel: its
+`onnxruntime` shared library is a different build.
+
+- Linux: `scripts/build-libs.sh` downloads and SHA-256-verifies the nupkg,
+  extracts `runtimes/linux-x64/native/libonnxruntime.so` with Python's
+  `zipfile` into the builder output as `libonnxruntime.so.1.31.0`, verifies the
+  library SHA-256 and recreates the `.so.1`/`.so` symlinks. `task libs` copies
+  the chain into `src-tauri/lib/linux-x86_64/`. Packaging ships it. Rebuild the
+  image with `task builder-image -- --no-cache` when the pin changes.
+- Windows: `pwsh scripts/fetch-windows-libs.ps1` downloads and verifies the
+  same nupkg and extracts `runtimes/win-x64/native/onnxruntime.dll` into
   `src-tauri/lib/windows-x86_64/`.
 
 Developer override: `scripts/fetch-onnxruntime.sh` fetches the same pinned
 Linux build into the gitignored `.ort/linux-x86_64/` (idempotent, checksummed,
-never models); on Windows put `onnxruntime.dll` in `.ort/windows-x86_64/`. The
+never models) and requires both `curl` and `python3` (the latter extracts the
+nupkg member with `zipfile`); on Windows put `onnxruntime.dll` in
+`.ort/windows-x86_64/`. The
 debug Tauri host prefers `.ort/<platform>/` and falls back to the bundled
 `lib/<platform>/`, while release uses the bundled copy only. The harness still
 sets `ORT_DYLIB_PATH` from `.ort/` when present. Without a loadable runtime,
@@ -260,7 +281,8 @@ pnpm tauri build --bundles nsis
 ```
 
 `scripts/fetch-windows-libs.ps1` downloads the pinned Indigo archive and the
-pinned ONNX Runtime 1.31.0 zip, verifies both SHA-256 values, extracts the six
+pinned ONNX Runtime 1.31.0 NuGet package, verifies the archive and DLL SHA-256
+values, extracts the six
 runtime DLLs (five Indigo/MSVC plus `onnxruntime.dll`) into
 `src-tauri/lib/windows-x86_64/` (gitignored) and generates
 `indigo.lib` / `indigo-renderer.lib` from the exported `indigo*` C symbols.

@@ -30,63 +30,168 @@ function read(relativePath) {
 }
 
 const ORT_VERSION = "1.31.0";
-const ORT_LINUX_URL =
-  "https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-linux-x64-1.31.0.tgz";
-const ORT_LINUX_SHA256 = "cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57";
-const ORT_WINDOWS_URL =
-  "https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-win-x64-1.31.0.zip";
-const ORT_WINDOWS_SHA256 = "3958d8a44984160692c1b4ffd0de3cb48f8c39f9d34bb31e433db06e30b82195";
+// The GitHub release assets for 1.31.0 now return 404. The official NuGet
+// package carries the same Linux library and Windows DLL; the PyPI wheel does
+// not, so it must never be used as a fallback.
+const ORT_NUPKG_SHA256 = "7e35fdb4f5adb62f01e60798e2e5ed05108f5fbbe1cca03fbcc37903cf7c5e3b";
+const ORT_LINUX_MEMBER = "runtimes/linux-x64/native/libonnxruntime.so";
+const ORT_LINUX_LIB_SHA256 = "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e";
+const ORT_WINDOWS_MEMBER = "runtimes/win-x64/native/onnxruntime.dll";
+const ORT_WINDOWS_DLL_SHA256 = "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c";
+const ORT_WINDOWS_DLL_SIZE = 17253176;
 
-test("build-libs.sh pins the Linux ONNX Runtime artifact", () => {
+// The scripts interpolate the pinned version, so match that same shape instead
+// of a frozen literal URL: bumping the pin in one place must be visible here.
+function nupkgUrlPattern(versionExpression) {
+  return new RegExp(
+    String.raw`https://api\.nuget\.org/v3-flatcontainer/microsoft\.ml\.onnxruntime/` +
+      `${versionExpression}/microsoft\\.ml\\.onnxruntime\\.${versionExpression}\\.nupkg`,
+  );
+}
+
+// A `.nupkg` is a zip. The Linux fetchers extract the single member with
+// Python's zipfile; `tar` cannot read it.
+function assertNugetExtraction(content, script) {
+  assert.match(
+    content,
+    /python3[\s\S]{0,600}?\bzipfile\b/,
+    `${script} must extract the nupkg with Python's zipfile`,
+  );
+  assert.doesNotMatch(
+    content,
+    /^\s*tar\b.*\n?.*nupkg|\btar\b[^\n]*\$\{?ORT_PACKAGE/m,
+    `${script} must not extract the nupkg with tar`,
+  );
+}
+
+// Reading the first entry (or relying on a comment) would ship whatever the
+// package happens to contain. The pinned member must reach the extractor.
+function assertPinnedMemberExtraction(content, script, memberExpression) {
+  assert.match(
+    content,
+    new RegExp(`python3[^\\n]*${memberExpression}`),
+    `${script} must pass the pinned member to the Python zipfile extractor`,
+  );
+  assert.match(
+    content,
+    /zipfile[\s\S]{0,400}?package\.open\(member\)/,
+    `${script} must open the pinned member inside the Python zipfile snippet`,
+  );
+}
+
+test("build-libs.sh pins the Linux ONNX Runtime NuGet package", () => {
   const content = read("scripts/build-libs.sh");
 
   assert.ok(content.includes(ORT_VERSION), `build-libs.sh must pin ONNX Runtime ${ORT_VERSION}`);
-  assert.ok(
-    content.includes(ORT_LINUX_URL),
-    "build-libs.sh must download the pinned Linux ONNX Runtime archive",
+  assert.match(
+    content,
+    nupkgUrlPattern(String.raw`\$\{ORT_VERSION\}`),
+    "build-libs.sh must download the pinned Microsoft.ML.OnnxRuntime nupkg",
   );
-  assert.ok(content.includes(ORT_LINUX_SHA256), "build-libs.sh must pin the Linux archive SHA-256");
+  assert.ok(content.includes(ORT_NUPKG_SHA256), "build-libs.sh must pin the nupkg SHA-256");
   // Match the verification command itself, not just the constant: pinning the
-  // hash without running sha256sum leaves the archive unverified.
+  // hash without running sha256sum leaves the download unverified.
   assert.match(
     content,
     /sha256sum\s+-c\s+-/,
-    "build-libs.sh must verify the downloaded archive checksum with sha256sum -c -",
+    "build-libs.sh must verify the downloaded nupkg checksum with sha256sum -c -",
   );
-  assert.match(content, /\btar\b/, "build-libs.sh must extract the Linux tarball");
+  // Bind the pinned hash to the check: removing the check must fail even though
+  // the constant assignment remains.
+  assert.match(
+    content,
+    /\$ORT_SHA256[^\n]*sha256sum/,
+    "build-libs.sh must verify the downloaded nupkg against $ORT_SHA256 with sha256sum",
+  );
 
-  // Pin the exact archive layout, not just the file name: an upstream archive
-  // that moves the libraries must fail here before a package ships without a
-  // runtime.
+  // Pin the exact member: a package that moves the library must fail here
+  // before a package ships without a runtime.
+  assert.ok(content.includes(ORT_LINUX_MEMBER), `build-libs.sh must extract ${ORT_LINUX_MEMBER}`);
   assert.ok(
-    content.includes('ORT_LIB_DIR="onnxruntime-linux-x64-${ORT_VERSION}/lib"'),
-    "build-libs.sh must extract from onnxruntime-linux-x64-${ORT_VERSION}/lib/",
+    content.includes(ORT_LINUX_LIB_SHA256),
+    "build-libs.sh must pin the extracted libonnxruntime.so SHA-256",
   );
-  for (const member of [
-    '"${ORT_LIB_DIR}/libonnxruntime.so"',
-    '"${ORT_LIB_DIR}/libonnxruntime.so.1"',
-    '"${ORT_LIB_DIR}/libonnxruntime.so.${ORT_VERSION}"',
-  ]) {
-    assert.ok(content.includes(member), `build-libs.sh must extract exactly ${member}`);
-  }
-  assert.ok(
-    content.includes('"${ORT_MEMBERS[@]}"'),
-    "build-libs.sh must extract only the listed runtime members, not the whole archive",
+  assert.match(
+    content,
+    /\$ORT_LIB_SHA256[^\n]*sha256sum/,
+    "build-libs.sh must verify the extracted library against $ORT_LIB_SHA256 with sha256sum",
   );
-  assert.match(content, /\btar\b[^\n]*\n?\s*"\$\{ORT_MEMBERS\[@\]\}"/, "tar must use ORT_MEMBERS");
+  assertNugetExtraction(content, "build-libs.sh");
+  assertPinnedMemberExtraction(content, "build-libs.sh", String.raw`"\$ORT_MEMBER"`);
 
-  const libraryLines = content.split("\n").filter((line) => line.includes("libonnxruntime.so"));
-  assert.ok(
-    libraryLines.length > 0,
-    "build-libs.sh must extract or copy libonnxruntime.so* into the builder output",
+  // One real file plus the .so.1/.so symlinks: extracting must not produce
+  // three copies of the 29 MB library.
+  assert.match(
+    content,
+    /ln -sfn "\$\{?ORT_REAL\}?"/,
+    "build-libs.sh must link libonnxruntime.so.1 to the real file",
   );
-  assert.ok(
-    libraryLines.some((line) => /\b(cp|tar)\b/.test(line)),
-    "the libonnxruntime.so reference must be extracted or copied, not only mentioned",
+  assert.match(
+    content,
+    /ln -sfn "[^"]*libonnxruntime\.so\.1"/,
+    "build-libs.sh must link libonnxruntime.so to libonnxruntime.so.1",
+  );
+  assert.match(
+    content,
+    /did not produce the shared library chain/,
+    "build-libs.sh must keep the chain check",
+  );
+  assert.doesNotMatch(
+    content,
+    /ORT_LIB_DIR|onnxruntime-linux-x64-\$\{ORT_VERSION\}\/lib/,
+    "build-libs.sh must not keep the old tarball layout",
   );
 });
 
-test("fetch-windows-libs.ps1 pins the Windows ONNX Runtime artifact", () => {
+test("fetch-onnxruntime.sh pins the Linux ONNX Runtime NuGet package", () => {
+  const content = read("scripts/fetch-onnxruntime.sh");
+
+  assert.match(
+    content,
+    nupkgUrlPattern(String.raw`\$\{VERSION\}`),
+    "fetch-onnxruntime.sh must download the pinned Microsoft.ML.OnnxRuntime nupkg",
+  );
+  assert.ok(content.includes(ORT_NUPKG_SHA256), "fetch-onnxruntime.sh must pin the nupkg SHA-256");
+  assert.ok(
+    content.includes(ORT_LINUX_MEMBER),
+    `fetch-onnxruntime.sh must extract ${ORT_LINUX_MEMBER}`,
+  );
+  assert.ok(
+    content.includes(ORT_LINUX_LIB_SHA256),
+    "fetch-onnxruntime.sh must verify the extracted library SHA-256",
+  );
+  // The download is only verified when the computed hash is compared to the
+  // pin; deleting the comparison must fail while the constants survive.
+  assert.match(
+    content,
+    /\[\[\s*"\$\{ACTUAL_SHA256\}"\s*!=\s*"\$\{SHA256\}"\s*\]\]/,
+    "fetch-onnxruntime.sh must compare the nupkg hash to the pinned SHA256",
+  );
+  assert.match(
+    content,
+    /\[\[\s*"\$\{ACTUAL_LIB_SHA256\}"\s*!=\s*"\$\{LIB_SHA256\}"\s*\]\]/,
+    "fetch-onnxruntime.sh must compare the extracted library hash to the pinned LIB_SHA256",
+  );
+  assertNugetExtraction(content, "fetch-onnxruntime.sh");
+  assertPinnedMemberExtraction(content, "fetch-onnxruntime.sh", String.raw`"\$\{MEMBER\}"`);
+  assert.match(
+    content,
+    /ln -sfn "[^"]*libonnxruntime\.so\.\$\{?VERSION\}?"/,
+    "fetch-onnxruntime.sh must link libonnxruntime.so.1 to the real file",
+  );
+  assert.match(
+    content,
+    /ln -sfn "[^"]*libonnxruntime\.so\.1"/,
+    "fetch-onnxruntime.sh must link libonnxruntime.so to libonnxruntime.so.1",
+  );
+  assert.match(
+    content,
+    /mktemp[^\n]*\.nupkg/,
+    "fetch-onnxruntime.sh must keep the .nupkg temp suffix",
+  );
+});
+
+test("fetch-windows-libs.ps1 pins the Windows ONNX Runtime NuGet package", () => {
   const content = read("scripts/fetch-windows-libs.ps1");
 
   assert.match(
@@ -94,33 +199,57 @@ test("fetch-windows-libs.ps1 pins the Windows ONNX Runtime artifact", () => {
     /^\$OnnxRuntimeVersion = "1\.31\.0"$/m,
     `fetch-windows-libs.ps1 must pin ONNX Runtime ${ORT_VERSION}`,
   );
-  assert.ok(
-    content.includes(ORT_WINDOWS_URL),
-    "fetch-windows-libs.ps1 must download the pinned Windows ONNX Runtime archive",
+  assert.match(
+    content,
+    nupkgUrlPattern(String.raw`\$OnnxRuntimeVersion`),
+    "fetch-windows-libs.ps1 must download the pinned Microsoft.ML.OnnxRuntime nupkg",
   );
   assert.ok(
-    content.includes(ORT_WINDOWS_SHA256),
-    "fetch-windows-libs.ps1 must pin the Windows archive SHA-256",
+    content.includes(ORT_NUPKG_SHA256),
+    "fetch-windows-libs.ps1 must pin the nupkg SHA-256",
   );
   assert.match(
     content,
     /Get-FileHash[\s\S]*?SHA256|SHA256[\s\S]*?Get-FileHash/i,
-    "fetch-windows-libs.ps1 must verify the downloaded archive hash",
+    "fetch-windows-libs.ps1 must verify the downloaded nupkg hash",
   );
-  assert.match(content, /onnxruntime\.dll/, "fetch-windows-libs.ps1 must extract onnxruntime.dll");
-
-  // Entry-level extraction: expanding the whole 82.9 MB archive writes the
-  // 429 MB temp tree (PDB, headers). The contract is "one entry only".
+  // Each check must compare the computed value to its pin: deleting only the
+  // comparison must fail even though the constant assignment remains.
+  assert.match(
+    content,
+    /\$actualOrtSha256\s+-ne\s+\$OnnxRuntimeSha256/,
+    "fetch-windows-libs.ps1 must compare the nupkg hash to $OnnxRuntimeSha256",
+  );
   assert.ok(
-    content.includes(
-      '$ortEntryPath = "onnxruntime-win-x64-$OnnxRuntimeVersion/lib/onnxruntime.dll"',
-    ),
-    "fetch-windows-libs.ps1 must pin the exact onnxruntime-win-x64-<version>/lib/ entry",
+    content.includes(ORT_WINDOWS_DLL_SHA256),
+    "fetch-windows-libs.ps1 must pin the extracted DLL SHA-256",
   );
   assert.match(
     content,
-    /\[System\.IO\.Compression\.ZipFile\]::OpenRead\(\$ortZipPath\)/,
-    "fetch-windows-libs.ps1 must open the ONNX Runtime zip as an archive",
+    /\$ortDllSha256\s+-ne\s+\$OnnxRuntimeDllSha256/,
+    "fetch-windows-libs.ps1 must compare the DLL hash to $OnnxRuntimeDllSha256",
+  );
+  assert.ok(
+    content.includes(String(ORT_WINDOWS_DLL_SIZE)),
+    "fetch-windows-libs.ps1 must pin the extracted DLL size",
+  );
+  assert.match(
+    content,
+    /\$ortDllSize\s+-ne\s+\$OnnxRuntimeDllSize/,
+    "fetch-windows-libs.ps1 must compare the DLL size to $OnnxRuntimeDllSize",
+  );
+
+  // Entry-level extraction: a nupkg is a zip archive, and expanding it as a
+  // folder would write every runtime and metadata file. The contract is "one
+  // entry only".
+  assert.ok(
+    content.includes(`$ortEntryPath = "${ORT_WINDOWS_MEMBER}"`),
+    `fetch-windows-libs.ps1 must pin the exact ${ORT_WINDOWS_MEMBER} entry`,
+  );
+  assert.match(
+    content,
+    /\[System\.IO\.Compression\.ZipFile\]::OpenRead\(\$ortPackagePath\)/,
+    "fetch-windows-libs.ps1 must open the ONNX Runtime nupkg as a zip",
   );
   assert.match(
     content,
@@ -135,7 +264,12 @@ test("fetch-windows-libs.ps1 pins the Windows ONNX Runtime artifact", () => {
   assert.doesNotMatch(
     content,
     /Expand-Archive/,
-    "fetch-windows-libs.ps1 must not expand the whole ONNX Runtime archive",
+    "fetch-windows-libs.ps1 must not expand the whole ONNX Runtime nupkg",
+  );
+  assert.doesNotMatch(
+    content,
+    /onnxruntime-win-x64-|onnxruntime-win-x64-\$OnnxRuntimeVersion\/lib/,
+    "fetch-windows-libs.ps1 must not keep the old zip layout",
   );
 });
 

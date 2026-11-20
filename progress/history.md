@@ -741,3 +741,23 @@ Bound the OCSR incomplete decode tail found by the Phase D parity pilot.
   or `K=0` is the rollback.
 - Tests: 8 fake-decoder cases; sidecar 246, Vitest 296, Node 143; harness green.
 - Report: `docs/benchmarks/ocsr-tail-fix.md`; C16; Phase D still open.
+
+## 2026-11-19 — Activity 17: onnx-runtime-nuget-source
+
+The pinned ONNX Runtime 1.31.0 GitHub release assets became unavailable (404)
+and the `chemistry-builder` image had been pruned. Repin the fetch to the
+official `Microsoft.ML.OnnxRuntime` 1.31.0 NuGet package.
+
+- The NuGet Linux `runtimes/linux-x64/native/libonnxruntime.so` is byte-identical
+  to the previously shipped runtime (SHA-256 `469849…2e334e`, 29,345,384 B);
+  the Windows DLL is 17,253,176 B (SHA-256 `0c42…51cf4c`); nupkg SHA-256
+  `7e35…c5e3b`.
+- `build-libs.sh`, `fetch-onnxruntime.sh` and `fetch-windows-libs.ps1` now
+  download the nupkg, verify the package and extracted member hashes, and
+  recreate the `.so.1`/`.so` chain. The packaging contract test is hardened so
+  removing any one checksum/member/DLL check fails it (7+ mutations RED).
+- Rebuilt 0.1.7 internal packages: deb 29,677,854; rpm 29,818,736; AppImage
+  28,019,192. No models; Indigo + the ONNX chain; the packaged sidecar answers
+  the pathological OCSR row with 422 in 3.355 s.
+- Harness green: Node 144, Vitest 296, sidecar 246. The Windows PowerShell path
+  is CI-only (no pwsh locally).

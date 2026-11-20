@@ -1933,28 +1933,37 @@ Indigo, Indigo Renderer and ONNX Runtime are **not vendored in git**.
   from the `indigo*` C exports.
 
 Activity 7 (`ship-onnx-runtime`) adds the pinned ONNX Runtime **1.31.0** to
-that shipped set on both platforms; both downloads are SHA-256 verified:
+that shipped set on both platforms. The upstream GitHub 1.31.0 release assets
+are no longer reachable (404), so the pinned source is the official
+`Microsoft.ML.OnnxRuntime` **1.31.0** NuGet package
+(`https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.31.0/microsoft.ml.onnxruntime.1.31.0.nupkg`)
+and every download is SHA-256 verified:
 
-| Platform | Pinned archive                     | SHA-256                                                            | Payload                                           |
-| -------- | ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
-| Linux    | `onnxruntime-linux-x64-1.31.0.tgz` | `cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57` | `lib/libonnxruntime.so*` (real file 29,345,384 B) |
-| Windows  | `onnxruntime-win-x64-1.31.0.zip`   | `3958d8a44984160692c1b4ffd0de3cb48f8c39f9d34bb31e433db06e30b82195` | `onnxruntime.dll` (17,253,176 B)                  |
+| Component   | Pinned member                                 | SHA-256                                                            | Payload                  |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------------ | ------------------------ |
+| nupkg       | `microsoft.ml.onnxruntime.1.31.0.nupkg`       | `7e35fdb4f5adb62f01e60798e2e5ed05108f5fbbe1cca03fbcc37903cf7c5e3b` | `.nupkg` (a zip archive) |
+| Linux lib   | `runtimes/linux-x64/native/libonnxruntime.so` | `469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e` | real file 29,345,384 B   |
+| Windows DLL | `runtimes/win-x64/native/onnxruntime.dll`     | `0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c` | 17,253,176 B             |
 
-Both archives are the official 1.31.0 release assets:
-[Linux x64](https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-linux-x64-1.31.0.tgz)
-and
-[Windows x64](https://github.com/microsoft/onnxruntime/releases/download/v1.31.0/onnxruntime-win-x64-1.31.0.zip).
+The extracted Linux library is **byte-identical** to the previously shipped
+`libonnxruntime.so.1.31.0`, so the runtime behaviour and the pins do not change;
+only the download source does. A `.nupkg` is a zip, so the Linux fetchers
+extract the single member with Python's `zipfile` and the Windows script opens
+it with `System.IO.Compression.ZipFile`. The PyPI wheel is **not** a substitute:
+its `onnxruntime` library is a different build.
 
-- Linux: `scripts/build-libs.sh` downloads, verifies and extracts
-  `libonnxruntime.so*` into the builder output, so `/opt/chemistry/libs` holds
-  the chain `libonnxruntime.so` -> `libonnxruntime.so.1` ->
-  `libonnxruntime.so.1.31.0` (one real file). `task libs` and the packaging
-  scripts copy it with `cp -a`, preserving the symlinks instead of shipping
-  three copies. Tauri's resource copier dereferences symlinks, so
+- Linux: `scripts/build-libs.sh` downloads and verifies the nupkg, extracts
+  `runtimes/linux-x64/native/libonnxruntime.so` as
+  `libonnxruntime.so.1.31.0`, verifies the library SHA-256 and recreates the
+  symlinks, so `/opt/chemistry/libs` holds the chain `libonnxruntime.so` ->
+  `libonnxruntime.so.1` -> `libonnxruntime.so.1.31.0` (one real file). `task libs`
+  and the packaging scripts copy it with `cp -a`, preserving the symlinks instead
+  of shipping three copies. Tauri's resource copier dereferences symlinks, so
   `scripts/repack-native-payload.sh` restores the chain inside the `.deb` and
   `.rpm` payloads; the AppImage AppDir is assembled with `cp -a` directly.
-- Windows: `scripts/fetch-windows-libs.ps1` downloads, verifies and extracts
-  `onnxruntime.dll` next to the Indigo DLLs.
+- Windows: `scripts/fetch-windows-libs.ps1` downloads and verifies the same
+  nupkg, extracts `runtimes/win-x64/native/onnxruntime.dll`, verifies the DLL
+  SHA-256 and size, and places it next to the Indigo DLLs.
 
 The runtime is still **loaded dynamically** through `ORT_DYLIB_PATH`: the
 sidecar has no link-time dependency, `ldd` shows no `libonnxruntime`, and no
