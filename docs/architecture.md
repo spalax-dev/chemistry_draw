@@ -210,16 +210,18 @@ All document commands act on the **active tab**.
 | Save    | `Ctrl+S`       | active tab    | `.ket` to `path` (or Save As) + clean snapshot | on first save                       |
 | Save As | `Ctrl+Shift+S` | active tab    | `.ket` to the chosen path + clean snapshot     | yes                                 |
 | Export  | —              | active tab    | one other format to a file                     | **no**                              |
-| New     | `Ctrl+N`       | a **new** tab | its clean snapshot                             | new tab starts at `null`            |
+| New     | `Ctrl+N`       | reused or new | its clean snapshot                             | `null` on the reused or new tab     |
 | Open    | `Ctrl+O`       | reused or new | the tab's snapshot                             | the `.ket` path, `null` for imports |
 
 Export is the only route to another format. It writes a separate file and never
 changes the active tab's path or any other tab.
 
-**New** always opens a tab: a clean tab with `path === null` and an empty
-structure. It never replaces, saves or discards the active tab, so it needs no
-dirty prompt and never writes a user file; like every tab it gets a clean
-recovery snapshot (§5.5), so the tab set restores.
+**New** reuses the active tab only when it is an untouched empty tab
+(`isUntouchedTab`: `name === null`, `path === null`, not dirty, empty structure);
+otherwise it opens a new tab. The target is a clean tab with `path === null` and
+an empty structure. New never saves or discards a document, so it needs no dirty
+prompt and never writes a user file; like every tab it gets a clean recovery
+snapshot (§5.5), so the tab set restores.
 
 **Open** reuses the active tab only when it is an untouched empty tab
 (`name === null`, `path === null`, not dirty, empty structure); otherwise it
@@ -483,7 +485,7 @@ Ketcher custom buttons.
 
 | Item             | Action                                                                              |
 | ---------------- | ----------------------------------------------------------------------------------- |
-| New              | open a new empty tab (§5.4); never replaces or saves the active tab                 |
+| New              | empty tab (§5.4): reuse it when untouched, else new; never saves the active tab     |
 | Open…            | `.ket` only: `openProject(path)`; reuses an untouched empty tab, else new           |
 | Import…          | `mol`, `smi`, `inchi`, `sdf`, `rxn`: `importStructure(path)`; saved as `.ket` later |
 | Save             | Save the active tab (§5.3); Save As when its `path` is `null`                       |
@@ -603,7 +605,7 @@ never touch the active tab.
 | `Ctrl+S`       | app Save for the active tab; capture-phase listener stops `Mod+S` |
 | `Ctrl+Shift+S` | app Save As for the active tab                                    |
 | `Ctrl+O`       | File → Open… (reuse an untouched empty tab, otherwise a new tab)  |
-| `Ctrl+N`       | File → New (new tab)                                              |
+| `Ctrl+N`       | File → New (reuse an untouched tab, otherwise a new tab)          |
 | `Ctrl+Tab`     | next tab; `Ctrl+Shift+Tab` previous tab                           |
 | `Mod+S`        | intercepted; opens nothing                                        |
 | `Mod+O`        | intercepted; opens nothing                                        |
@@ -672,6 +674,425 @@ primary **OK** action. It is a normal in-app dialog — `role="dialog"`,
 paragraph and no destructive action. The owning tab is activated **before** the
 notice shows, so closing it lands the user on the document that already holds the
 path.
+
+### 5.11 Backstage view
+
+The **backstage** is the app's start surface: one full-window in-app overlay above
+the tab strip and Ketcher, modelled on the Stitch backstage shell but carrying
+**only capabilities the app really has**. It is not a route, a second window or a
+second editor; Ketcher stays mounted underneath and keeps its state.
+
+**Layout.** The overlay fills the viewport and is one `role="dialog"` with
+`aria-modal="true"` (`docs/conventions.md` §6.8):
+
+| Region         | Content                                                                                                                                                             | Tokens                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Top bar        | app logo and `Chemistry Draw` title only; no exit control (the rail's **Back to editor** is the way out)                                                            | `surface`, `border` 1 px bottom edge, 12/14 px text |
+| Left rail      | 260 px column with 10 px uppercase `FILE OPERATIONS`, the four section buttons (16 px `currentColor` line icon before each label) and the bottom **Back to editor** | `surfaceSubtle` (`#eff2f5`)                         |
+| Content pane   | white section panel, 24 px padding, `8px` surface corners                                                                                                           | `surface`, `border`, `radius` (3 px controls)       |
+| Accent/borders | `#167782` accent, `#cad3dd` borders, Roboto 12/14 px, no colour outside the token palette                                                                           | `tokens.color.accent`, `tokens.color.border`, fonts |
+
+The rail sections are, in order: **Welcome**, **Open**, **Models**, **About** (ids
+`welcome`, `open`, `models`, `about`; the default is `welcome`). Each rail button
+renders a 16 px `currentColor` line icon before its label: home for Welcome,
+folder-open for Open, cube for Models and info for About. **Models** is reserved
+for future OCSR model management and ships as an empty placeholder (see the
+sections table below). The rail is a `nav` of real buttons, not a `tablist`:
+the active section carries `aria-current="page"` and roving `tabIndex`, and
+ArrowUp/ArrowDown/Home/End move focus between sections. The top bar title is the
+dialog's `aria-labelledby` target. The panel scrolls inside the content pane, so
+the rail and top bar stay fixed.
+
+**Startup takeover.** The backstage replaces the `Loading chemistry editor...`
+splash: `App.tsx` renders it from the first frame instead of the splash, while
+the provider resolves, Ketcher initializes and `readTabSet()` restores the tab
+set underneath. Readiness does **not** dismiss it — every launch shows the
+backstage until the user leaves it through the rail's **Back to editor** or
+`Escape` (or uses the home button later in the session), or starts a document
+from Welcome. Controls that need the editor (the About versions that come from
+Ketcher or the sidecar) show a muted
+`Unavailable` state until their source answers; the rest of the
+backstage is usable immediately. Dismissing the backstage never waits for the
+restore and never triggers a save, a tab activation or `setMolecule`.
+
+**Home button.** A house icon is the first control of the document tab strip,
+immediately left of the File button and a sibling of the `role="tablist"`
+(`docs/conventions.md` §6.8). It is a real `<button type="button">` with
+`aria-label="Backstage"` and a 16 px `currentColor` line icon, and it opens the
+backstage. `Escape` and the rail's **Back to editor** close it. Opening and
+closing only toggle the overlay: the active tab, the canvas and every dirty flag
+are left untouched, and focus returns to the home button when it was the
+trigger. The top bar carries no exit control.
+
+**Sections and data sources.**
+
+| Section | Rows/actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Real source                                                                                                                                                                                                                                                                                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Welcome | title `Welcome`, subtitle `Start from a blank canvas or a template.`; with an existing document, a primary **Back to editor — `<active tab>`** first and **Blank canvas** second; with no document, **Blank canvas** is the primary action and Back to editor is absent; then **Import structure…**, **Open project…**, a `TEMPLATES` heading with **More templates**, exactly four random cards from the real Structure Library (or the `No templates available` empty state) and the **Recent structures** table (thumbnail + name, Format, Size, Indigo Validation, Last Modified, Open) | `startNewDocument()`, `importStructure(path)`, `openProject(path)` (§5.3, §5.4); `src/templateLibrary.ts` over the Ketcher library providers; `tabTitle` for the active tab and `isUntouchedTab` for the document predicate; `src/ketcherOptions.ts` for **More templates**; `src/recentDetails.ts` + `src/previewCache.ts` for the Recent structures table (see below) |
+| Open    | the same **Recent structures** table as Welcome (thumbnail + name, Format, Size, Indigo Validation, Last Modified, Open) with an added **Remove** action, then the currently open tabs (Switch) below the table                                                                                                                                                                                                                                                                                                                                                                             | the single recent loader shared with Welcome (`src/recentStructures.ts` + `src/previewCache.ts`); `src/recent.ts` for removal; open tabs from `TabSet` (§5.9)                                                                                                                                                                                                           |
+| Models  | reserved for OCSR model management (not implemented): heading plus a muted empty-state note only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | none yet — empty state only                                                                                                                                                                                                                                                                                                                                             |
+| About   | app, Ketcher and React versions, Indigo version and sidecar port, platform, runtime, license links                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `package.json.version` passed as `appVersion`; `ketcher-react`/`react` dependencies; `/v2/info` (`indigo_version`, `api_path`); `navigator.userAgentData?.platform` with `navigator.platform`/UA fallback, and `isTauri()`                                                                                                                                              |
+
+Settings do not appear in the backstage. The app keeps no settings state of its
+own: the only settings UI is Ketcher's native **Settings** dialog, opened from
+the **Settings** button in the editor toolbar (`src/ui/editorButtons.ts` keeps it
+visible; §5.11.1).
+
+**Template source.** Welcome cards are the entries of Ketcher's real **Structure
+Library**, never a hand-maintained ring list. After the editor reports `onInit`,
+`src/templateLibrary.ts` reads the two `Struct[]` lists ketcher-core populates:
+
+- `FunctionalGroupsProvider.getInstance().getFunctionalGroupsList()`
+- `SaltsAndSolventsProvider.getInstance().getSaltsAndSolventsList()`
+
+The lists are read in that order and concatenated, so functional groups come
+before salts and solvents. Each `Struct` maps to one `TemplateEntry`:
+
+| Field          | Rule                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`           | slug of the name: lower-case ASCII letters and digits joined by single `-`; collisions get `-2`, `-3`, …; an empty slug falls back to `template` |
+| `name`         | trimmed `struct.name`; the trimmed `abbreviation` when the name is empty; `Untitled template` when both are empty                                |
+| `abbreviation` | trimmed `struct.abbreviation`, or `""` when the struct has none                                                                                  |
+| `group`        | `functional-group` or `salt-solvent` (UI labels `Functional group` / `Salt or solvent`), from the provider list the struct came from             |
+| `ket`          | `new KetSerializer().serializeMicromolecules(struct)` (ketcher-core), the document inserted when the card is clicked                             |
+
+The mapping is pure — same input, same entries, no DOM access — and dedupes by
+the case-insensitive pair `name` + `abbreviation`: the first occurrence wins, so
+an entry that appears in both providers (or twice in one) renders once. The
+entry list keeps the provider order.
+
+**Library build.** Serializing the whole Structure Library is slow enough to
+blank the pane on first paint, so Welcome never builds it on the render path.
+After the editor reports ready an effect builds the `TemplateEntry[]`, once per
+session, and holds it in a module-level cache: opening the backstage again
+reuses that list instead of serializing the providers again, and serialization
+never blocks the paint that shows the overlay. An **empty read is not cached**,
+because the providers may not be populated yet: when the backstage opens with an
+empty list and no build is in flight, the build is retried, and the grid returns
+to skeletons while that retry runs. The retry is keyed on the open flag and
+readiness, never on the result, so an again-empty read cannot loop. Until the
+list exists the
+`TEMPLATES` area renders **four skeleton cards** — the same grid shape with a
+muted preview block and two short placeholder lines. Skeletons are not
+clickable, carry no accessible name and invent no name, abbreviation or
+structure; their count is `TEMPLATE_CARD_COUNT`, so they match the grid they
+replace. **More templates** stays disabled until the editor is ready.
+
+**Previews.** Each card preview is rendered by Ketcher from a **preview copy** of
+the entry's KET, not drawn by the app:
+`ketcher.generateImage(previewKet, { outputFormat: "svg" })` returns an SVG blob
+through the native Indigo renderer. Library structs store a functional group as
+an SGroup, so an SGroup-carrying KET makes Indigo draw the abbreviation (`CN`,
+`OMe`) or its brackets instead of the atoms. The preview copy therefore removes
+the SGroups entirely: the helper in `src/templateLibrary.ts` parses the KET JSON
+and empties every `sgroups` array on every molecule node, nested molecules
+included, then serializes the copy while touching no other field; invalid JSON
+returns the original text unchanged. Indigo then draws nothing but the atoms and
+bonds of the real structure — no abbreviation label, no brackets. The helper is
+pure and the SGroup-free copy is **preview-only**: the card click still inserts
+`entry.ket` unchanged, so the new tab keeps the library's abbreviation group,
+and no `.ket` file is read, rewritten or stripped of its SGroups. The preview helper (`src/ui/backstage/useTemplatePreview.ts`) renders each
+entry once after the editor is ready, converts the blob to an object URL and
+caches it by KET string for the session, so resizing, reshuffling and reopening
+the backstage never re-render the same structure. While a preview is being
+produced the card shows a muted, fixed-size **loading placeholder with a small
+inline SVG spinner**; a failed render leaves a neutral `Preview unavailable`
+placeholder. Neither placeholder invents chemistry or falls back to a
+hand-drawn preview.
+
+**Empty state.** Once the editor has initialized, a library that yields no
+entries renders a muted, non-interactive `No templates available` line in place
+of the grid: no card, no curated substitute and no invented structure. **More
+templates** stays available beside the `TEMPLATES` heading. Before the providers
+are read, the grid shows the four skeletons above and none is clickable;
+readiness never fabricates cards or an empty library.
+
+**Four-card subset.** The pane always shows exactly **four** random cards from the
+library, independent of the viewport width: there is no width breakpoint table
+and no resize listener. The count is the exported `TEMPLATE_CARD_COUNT` (`4`) in
+`src/templateLibrary.ts`.
+`sampleTemplates(entries, TEMPLATE_CARD_COUNT, random)` samples **distinct**
+entries and returns them in library order (stable left-to-right, top-to-bottom
+layout). It never duplicates an entry, never returns more than
+`entries.length` (a smaller library shows all of it rather than inventing cards)
+and never invents an entry. The RNG is injected so Vitest is deterministic; the
+UI passes `Math.random`. The subset is re-drawn every time the Welcome section
+mounts — because `App` unmounts the backstage when it closes, that means
+**every time the backstage opens**. The grid uses
+`repeat(auto-fit, minmax(150px, 1fr))`, so the four cards fill a wide pane and
+wrap onto more rows when the pane narrows; the count, not CSS alone, decides how
+many cards exist.
+
+**Recent structures table.** Below the four-card template grid the Welcome pane
+renders a compact **Recent structures** table copied from the Stitch layout but
+backed by the real recent list. It is a real `<table>` with a 10 px uppercase header row
+and these columns:
+
+| Column            | Cell                                                                                                                                       | Source                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Structure Name    | 40 × 32 px thumbnail plus the path base name (full path as `title`) under a muted `Ketcher document` line                                  | `src/recent.ts` order; thumbnail from the preview cache (below) |
+| Format            | upper-case extension of the path without the dot (`KET`)                                                                                   | the path                                                        |
+| Size              | `formatFileSize(stat.size)`                                                                                                                | `stat` from `@tauri-apps/plugin-fs`                             |
+| Indigo Validation | badge `Valid` / `Warnings` / `Invalid` / `—`                                                                                               | the struct-service check below                                  |
+| Last Modified     | `formatModified(stat.mtime)` as `Today, HH:MM` (24-hour, local) / `Yesterday` / `Mon D, YYYY` (en-US); `—` when missing, invalid or future | `stat`                                                          |
+| Actions           | one **Open** button, `aria-label` naming the row's document                                                                                | `openProject(path)` through the path-uniqueness guard (§5.10)   |
+
+Rows come from the recent list only (newest first), capped to the five most
+recent entries; an empty list renders a muted, non-interactive
+`No recent structures` line instead of a row. Row building is pure
+(`buildRecentRow` in `src/recentStructures.ts`, over the helpers in
+`src/recentDetails.ts`): name and format always come from the path, while size
+and mtime come from a `stat` result; the loader only supplies the file facts. A missing, unreadable or non-`.ket` file
+keeps its row, shows `—` for size and Last Modified, the unknown badge (`—`) for
+validation and a neutral thumbnail placeholder, and **Open** still calls
+`openProject`, which surfaces the in-app error. A row never invents a size, date
+or status. The table refreshes when the backstage opens and whenever the recent
+list changes while it stays open.
+
+**Shared Open table.** The **Open** section renders the same
+`RecentStructuresTable` component as Welcome, not a second list. `OpenSection`
+passes the rows and loading flag `App` already loaded for Welcome
+(`src/recentStructures.ts`), so both panes show the same thumbnails, formats,
+sizes, Indigo validation badges and Last Modified values from **one** loader,
+with no duplicate stat, check or render request. The table keeps its six columns
+and its own loading (`Loading recent structures…`) and empty
+(`No recent structures`) rows. The **Actions** cell always holds the **Open**
+text button; it holds a second **Remove** text button only when the optional
+`onRemove` prop is supplied, and only Open supplies it, so Welcome keeps Open
+alone. The two actions sit inline in reading order — **Open** first, **Remove**
+second — with no icon-only control and no overflow menu. **Remove** drops that
+path through `removeRecent`, which prunes the row and the stored recent entry,
+and touches no tab and no file. Below the table, Open still renders the
+currently open tabs (Switch); selecting one activates it and closes the
+backstage, and an empty recent list never hides that list.
+
+**Validation path.** A `.ket` row is validated from its own content, never from a
+hand-built structure:
+
+1. read the file text (`readTextFile`) — the same `.ket` that Open would load;
+2. `new KetSerializer().deserializeMicromolecules(text)` → `Struct`;
+3. `new MolSerializer().serialize(struct)` → molfile;
+4. `ketcher.structService.check({ struct: molfile, types: ["valence", "radicals", "pseudoatoms", "stereo", "query", "overlapping_atoms", "overlapping_bonds", "rgroups", "chiral", "3d"] })`.
+
+The check result is normalised by `validationStatus` in `src/recentDetails.ts`:
+an empty array (or the equivalent empty JSON) is **Valid**; a non-empty result is
+**Warnings** when every entry is a warning and **Invalid** when any entry is an
+error; a thrown error, an absent struct service or any value that cannot be read
+is **unknown**, rendered as a muted `—` badge. The mapping never guesses: a KET
+that cannot be parsed is unknown, not **Invalid**. The `.ket` file is opened
+read-only: the table never writes it, adds no preview or validation field to it
+and never rewrites its format.
+
+**Preview cache.** The 40 px thumbnail is an Indigo render of that row's molfile,
+not a copy of the document: `POST <api>/indigo/render` with
+`{ "struct": molfile, "options": { "render-output-format": "svg" } }` returns the
+SVG as a base64 body. `src/previewCache.ts` stores it at
+`<appDataDir>/previews/<sha256(molfile)>.svg`, where the key is the lower-case
+hex SHA-256 of the UTF-8 molfile that was rendered; `previewFileName(hash)`
+appends `.svg` and `previewFilePath(hash)` joins `<appDataDir>/previews/` with
+that name (the joined path is covered manually, `docs/verification.md` §2). The
+directory is created on the first miss. A cache hit reads that SVG and renders it as a
+`data:image/svg+xml;base64,…` URI with no sidecar call, so the second open of the
+same structure is instant. A render or cache failure leaves a neutral thumbnail
+placeholder and writes nothing, and the table never fabricates a preview.
+Because the key is the content hash, editing a document produces a new key and a
+fresh render; the same content always reuses one file.
+
+**Tool reset.** Selecting a Structure Library entry arms Ketcher's template tool,
+so the structure follows the cursor until the next click. That armed state must
+not survive leaving the library context: `openBackstage()` and
+`activateTabById()` call `cancelActiveTool(ketcher)` **first**, before
+serializing or loading anything. The helper dispatches one bubbling, cancelable
+`keydown` Escape event to the Ketcher root
+(`document.querySelector(".Ketcher-root")`) — the same path a user Escape takes
+— and is a no-op when the root is missing. It never clicks a DOM toolbar button,
+dispatches a Redux action or resets the editor, so a switch keeps both canvases'
+content and an open backstage changes no structure. Without it, a template armed
+in the library would keep following the pointer over the backstage or over the
+newly activated tab.
+
+**More templates.** A **More templates** button sits at the right of the
+`TEMPLATES` heading. It is disabled until the editor is ready, like the cards.
+Clicking it closes the backstage **first**, then calls
+`openStructureLibrary(ketcherRef.current)` from `src/ketcherOptions.ts`, which
+finds Ketcher's Redux store through the mounted editor and dispatches
+`MODAL_OPEN` with `{ name: "templates", prop: { tab: null } }` — the same action
+as Ketcher's own `template-lib` toolbar button. Ketcher opens its **Structure
+Library** (the full templates / functional-group / salts library); choosing a
+template activates the template tool and closes the dialog, and the next canvas
+click places it; Escape, cancel or the tool reset above clears it. Escape or
+cancel closes the library without touching the canvas. If the store cannot be
+found, the app shows the in-app error and adds no fake gallery or fallback list.
+
+**Action row.** The Welcome actions are a **horizontal wrapping row**, not a
+vertical column: one `display: flex` row with `flexDirection: "row"`,
+`flexWrap: "wrap"`, an 8 px gap and `alignItems: "center"`, capped at the same
+720 px width as the template grid and the Recent structures table. Each button
+is sized to its own content — a 36 px `minHeight`, no `width: 100%` and no
+`alignSelf: stretch` — so a wide pane shows one row and a narrow pane wraps onto
+further rows. The row never holds more than **four** actions: **Back to editor
+— `<active tab>`** (only when a document exists), **Blank canvas**,
+**Import structure…** and **Open project…**. The primary action (Back to editor
+with a document, otherwise Blank canvas) keeps its accent. The template grid
+below stays a four-card grid, unaffected by the action layout.
+
+**Back to editor and the first-run rule.** The Welcome pane derives its action
+hierarchy from whether the tab set holds a **document**. A tab counts as a
+document only when `isUntouchedTab` in `src/tabs.ts` is false — the same
+predicate Open uses to decide whether an empty tab can be reused: a tab is
+untouched while `name === null`, `path === null`, it is not dirty and its KET is
+the empty structure. `WelcomeSection` computes
+`hasDocument = tabs.tabs.some((tab) => !isUntouchedTab(tab))`, so a freshly
+restored or newly created empty tab is **not** a document.
+
+- **With a document:** the first action is a primary
+  **Back to editor — `<active tab>`** button (for example
+  `Back to editor — Boc*`); **Blank canvas** is secondary. The label uses
+  `tabTitle`, so it carries the active tab's name and the `*` dirty marker. It
+  closes the overlay only: the active tab, canvas, dirty flags and tab order are
+  untouched, because the editor already shows that tab.
+- **Without a document:** the Back to editor action is **absent** and
+  **Blank canvas** is the primary action, so a first run offers a way to start
+  working instead of opening an empty editor. Import structure… and Open
+  project… stay available as secondary actions.
+
+**Blank canvas** runs `startNewDocument`, which follows the New rule: it reuses
+the active tab while `isUntouchedTab` holds and only creates a tab once the
+active one holds a document, so a first run keeps its single empty tab and the
+strip does not grow. The decision (`newDocumentTarget`) is made **before**
+`getKet`, so the reuse branch neither commits nor flushes the outgoing tab; it
+reloads `EMPTY_KET` only when the canvas still holds a structure, behind the
+loading flag. `isUntouchedTab` checks emptiness semantically through
+`isEmptyCanvasKet`, because Ketcher's `getKet()` on an empty canvas returns
+pretty-printed KET with `ket_version` and empty `root.nodes` (plus empty
+`connections`/`templates`), which a byte comparison with `EMPTY_KET` rejects.
+
+The rail's **Back to editor** remains in both cases and is the only top-level
+way back; the top bar has no exit control.
+
+Clicking a card inserts that library entry's KET into a **new** tab and then
+closes the backstage: it always allocates a tab (never reuses an untouched empty
+tab, unlike Open), cancels any armed tool, flushes the outgoing tab, loads
+`entry.ket` through `setMolecule` behind the loading flag (§5.2), and the tab
+keeps `path === null`, `name === entry.name` and `dirty === true`, so it is an
+unsaved new document whose first Save is a Save As. A failed load shows the
+in-app error and leaves the backstage open.
+
+**Default section.** `DEFAULT_BACKSTAGE_SECTION` is `welcome`. `Backstage` holds
+it in `useState(DEFAULT_BACKSTAGE_SECTION)` and `App` renders it only while
+`backstageOpen` is true, so the component unmounts on close and the next open
+starts from Welcome again. There is no persisted section and no reset effect to
+forget. This is the fix for the blank-on-reopen bug: the committed
+activity-21 build defaulted to `new`, a section id that no longer had a body
+after the rail stopped carrying it, so reopening after an
+edit mounted a blank content pane. The default must stay `welcome`; a test pins
+it.
+
+**Unknown section fallback.** `renderSection` switches over the four known ids
+and its `default` branch renders **Welcome**; `normalizeSection` in
+`src/backstage.ts` maps any id that is not in the section list to `welcome`
+before it is stored. A stale persisted id, an id whose section was removed, or
+an id left over from hot reload therefore renders Welcome and never an empty
+content pane. Unknown ids do not get their own pane and never fall through to
+nothing.
+
+Command behaviour:
+
+- **Models** is a reserved section: it renders only a heading and a muted,
+  non-interactive empty-state note. It has no list, no actions and no data — it
+  must not show fake models, versions or download counters, and it is not a
+  disabled copy of a future picker.
+
+- **Welcome** reuses an untouched active tab or creates one, then closes the
+  backstage. **Blank canvas** is the primary action when no document exists and
+  becomes secondary once one does;
+  **Back to editor — `<active tab>`** is primary and present only with a
+  document, and closes the overlay to the tab the editor already shows.
+  **Open project…** and **Import structure…** open the existing picker, and the
+  backstage closes as
+  the picker opens; cancelling the picker leaves the editor as it was.
+  **More templates** closes the overlay and opens
+  Ketcher's Structure Library. A template card inserts its library entry's KET
+  into a new tab and closes the backstage (see the template source above).
+- **Open** renders the shared **Recent structures** table (same six columns and
+  the same rows/loading as Welcome) with an added **Remove** action, then the
+  open-tabs list below it. **Open** routes through `openProject(path)`; a path
+  that belongs to a tab is handled by the path-uniqueness guard (§5.10) — that
+  tab is activated and the `Already open` notice shows, with no re-read and no
+  new tab. **Remove** drops that path through `removeRecent`, pruning both the
+  row and the stored recent entry, and touches no tab or file. Choosing a
+  currently open tab (Switch) activates it and closes the backstage. An empty
+  recent list shows the table's muted `No recent structures` row and the tabs
+  list stays.
+- The backstage never closes a tab, never discards work and never adds a second
+  route to a command: every button calls the function the File menu already uses,
+  and a template card calls the same `setMolecule` load path a document open
+  uses.
+- **File commands live in the File menu only.** New, Open, Import, Save, Save
+  As and Export are not duplicated in the backstage; Save/Save As/Export remain
+  reachable from the File menu (§5.3, §5.4) and from their shortcuts.
+
+**Removed Stitch content.** The backstage reproduces the Stitch templates layout
+with **real** structures only (the library entries above) and the Stitch Recent
+structures table with **real** file data (the table above). It does not reproduce
+the mock's "Open from Indigo sidecar" entry, coordinate-grid note,
+molecular-weight chips or a models counter. The validity badge and the thumbnail
+are no longer mock-only: they are the real Indigo check and the real render
+described above. **More templates** is not the mock's
+"Browse all fragments" link: it opens Ketcher's real Structure Library through
+`MODAL_OPEN`, with no fabricated gallery. None of the removed items map to a real
+app capability, so they are absent rather than disabled or faked
+(`docs/conventions.md` §6.8). The reserved **Models** rail entry is not that
+counter: it is an empty placeholder for OCSR model management with no number or
+status.
+
+**Module map.**
+
+| Module                                       | Responsibility                                                                                                                                                                                                                                                                           |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/ui/Backstage.tsx`                       | overlay shell, top bar, rail navigation (16 px icons + labels), content routing, focus trap and Escape; defaults to `DEFAULT_BACKSTAGE_SECTION` and is unmounted on close                                                                                                                |
+| `src/ui/backstage/WelcomeSection.tsx`        | title, subtitle, document-derived actions (primary Back to editor with a document, otherwise primary Blank canvas), Import structure…, Open project…, More templates and four random library cards, four skeletons while the library builds, or the `No templates available` empty state |
+| `src/ui/backstage/TemplateCard.tsx`          | one card: rendered SVG preview (cached, with a spinner while rendering and an error placeholder), name, abbreviation line and group chip; click inserts the entry's KET into a new tab                                                                                                   |
+| `src/ui/backstage/useTemplatePreview.ts`     | preview cache: one `generateImage` render per entry id, object URLs, loading and error states                                                                                                                                                                                            |
+| `src/ui/backstage/OpenSection.tsx`           | the shared `RecentStructuresTable` (rows/loading from `App`, optional Remove) followed by the open-tab rows                                                                                                                                                                              |
+| `src/ui/backstage/RecentStructuresTable.tsx` | the Welcome and Open table: header and rows (thumbnail, name, format, size, validation badge, modified, Open, optional Remove), its empty line and its degraded placeholders                                                                                                             |
+| `src/recentDetails.ts`                       | pure recent-table helpers: `formatFileSize`, `formatModified`, `validationStatus` mapping, `previewFileName` and `contentHash`                                                                                                                                                           |
+| `src/recentStructures.ts`                    | recent-table loader plus the pure `buildRecentRow` over path, `stat`, text, check result and preview (+ missing-file placeholders)                                                                                                                                                       |
+| `src/previewCache.ts`                        | on-disk preview cache under `<appDataDir>/previews`: sha-256 molfile key, read, write and the sidecar SVG render fallback                                                                                                                                                                |
+| `src/ui/backstage/AboutSection.tsx`          | version rows, platform and license links                                                                                                                                                                                                                                                 |
+| `src/backstage.ts`                           | pure model: ordered section list and default, `normalizeSection` (unknown id → Welcome), declared-version helper                                                                                                                                                                         |
+| `src/templateLibrary.ts`                     | pure real-library model: provider lists → `TemplateEntry[]` with slug ids and name/abbreviation dedupe, KET per entry, the `TEMPLATE_CARD_COUNT` (4), `sampleTemplates`, the preview-only SGroup-free preview-copy helper and `cancelActiveTool` dispatching Escape to the Ketcher root  |
+| `src/templates.ts`                           | legacy curated ring descriptors, retained only as a documented fallback; never rendered as cards and never used when the library is empty                                                                                                                                                |
+| `src/ketcherOptions.ts`                      | narrow Ketcher store adapter: `findKetcherRoot` and `openStructureLibrary`, dispatching `MODAL_OPEN` (`templates`, `tab: null`)                                                                                                                                                          |
+| `src/ui/HomeButton.tsx`                      | house button in the tab strip that opens the backstage                                                                                                                                                                                                                                   |
+
+#### 5.11.1 Settings
+
+The backstage does not duplicate Ketcher's settings and the app keeps no settings
+state of its own: it does not subscribe to `settingsService`, call
+`updateSettings`, load the ACS preset or reset to defaults. The only settings UI
+is Ketcher's native **Settings** dialog, opened from the **Settings** button in
+the editor toolbar, which stays visible in `src/ui/editorButtons.ts`. Ketcher
+owns the values, validates them, persists them in its own `ketcher-opts`
+storage and redraws the canvas; the app never stores a copy in `.ket`, in a tab
+or in a snapshot.
+
+#### 5.11.2 About sources
+
+| Row            | Source                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chemistry Draw | `package.json.version`, passed to the section as the `appVersion` prop                                                                                 |
+| Ketcher        | the `ketcher-react` dependency declared in `package.json`, read at build time and shown without its range prefix                                       |
+| React          | the `react` dependency declared in `package.json`, read at build time                                                                                  |
+| Indigo         | `indigo_version` (mirrored as `Indigo.version`) from `GET /v2/info`; `Unavailable` while the sidecar has not answered                                  |
+| Sidecar port   | the port parsed from `api_path` in the same `/v2/info` response — the actually bound port, not the preferred 9321                                      |
+| Platform       | the webview-reported platform string (`navigator.userAgentData.platform`, `navigator.platform` then `navigator.userAgent` fallbacks), labelled as such |
+| Runtime        | `isTauri()`: `Desktop (Tauri)` in the app shell, `Browser` in a plain web build                                                                        |
+| License links  | Ketcher (Apache-2.0), Indigo (Apache-2.0), ONNX Runtime (MIT), opened in the system browser through `@tauri-apps/plugin-opener`                        |
+
+There is no build SHA, commit id, build date, IUPAC version or model count: the
+project has no real value for them, so About shows no row rather than a
+placeholder.
 
 ---
 

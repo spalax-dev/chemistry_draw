@@ -33,7 +33,9 @@ export interface DialogProps {
 const OVERLAY: CSSProperties = {
   position: "fixed",
   inset: 0,
-  zIndex: tokens.zIndex.overlay,
+  // Above the editor and the backstage: Save As / Export opened from the
+  // backstage must render over it.
+  zIndex: tokens.zIndex.dialog,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

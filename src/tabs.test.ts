@@ -13,8 +13,10 @@ import {
   EMPTY_KET,
   emptyTabSet,
   importedTab,
+  isEmptyCanvasKet,
   isKetDocument,
   isUntouchedTab,
+  newDocumentTarget,
   pathBaseName,
   tabTitle,
   updateTab,
@@ -24,6 +26,19 @@ import {
 const BENZENE = "/home/jorge/Documents/benzene.ket";
 const WINDOWS_BENZENE = "C:\\Users\\jorge\\Documents\\benzene.ket";
 const BENZENE_MOL = "/home/jorge/Documents/benzene.mol";
+
+/**
+ * What Ketcher's `getKet()` really returns on an empty canvas: pretty-printed
+ * KET with `ket_version`, an empty `root.nodes` and empty collection siblings.
+ */
+const SERIALIZED_EMPTY_KET = `{
+  "ket_version": "2.0.0",
+  "root": {
+    "nodes": [],
+    "connections": [],
+    "templates": []
+  }
+}`;
 
 function threeTabs(): TabSet {
   let set = emptyTabSet("a");
@@ -244,11 +259,38 @@ describe("isKetDocument", () => {
   });
 });
 
+describe("isEmptyCanvasKet", () => {
+  it("accepts an empty or blank string and the empty constant", () => {
+    expect(isEmptyCanvasKet("")).toBe(true);
+    expect(isEmptyCanvasKet("   \n\t")).toBe(true);
+    expect(isEmptyCanvasKet(EMPTY_KET)).toBe(true);
+  });
+
+  it("accepts Ketcher's serialized empty KET, including extra collections", () => {
+    expect(isEmptyCanvasKet(SERIALIZED_EMPTY_KET)).toBe(true);
+    expect(isEmptyCanvasKet('{"ket_version":"2.0.0","root":{"nodes":[]}}')).toBe(true);
+  });
+
+  it("rejects a canvas that carries a node", () => {
+    expect(isEmptyCanvasKet('{"root":{"nodes":[{"type":"molecule"}]}}')).toBe(false);
+  });
+
+  it("rejects malformed JSON and JSON without an empty root.nodes", () => {
+    expect(isEmptyCanvasKet('{"root":')).toBe(false);
+    expect(isEmptyCanvasKet("not json")).toBe(false);
+    expect(isEmptyCanvasKet("{}")).toBe(false);
+    expect(isEmptyCanvasKet('{"root":{}}')).toBe(false);
+    expect(isEmptyCanvasKet("null")).toBe(false);
+    expect(isEmptyCanvasKet("[]")).toBe(false);
+  });
+});
+
 describe("isUntouchedTab", () => {
   it("accepts a path-less clean tab with an empty structure", () => {
     expect(isUntouchedTab(createTab("a"))).toBe(true);
     expect(isUntouchedTab(createTab("a", { ket: EMPTY_KET }))).toBe(true);
     expect(isUntouchedTab(createTab("a", { ket: `  ${EMPTY_KET}\n` }))).toBe(true);
+    expect(isUntouchedTab(createTab("a", { ket: SERIALIZED_EMPTY_KET }))).toBe(true);
   });
 
   it("rejects a saved, dirty or non-empty tab", () => {
@@ -260,6 +302,78 @@ describe("isUntouchedTab", () => {
   it("rejects a clean path-less tab that carries an imported name", () => {
     expect(isUntouchedTab(createTab("a", { name: "benzene" }))).toBe(false);
     expect(isUntouchedTab(createTab("a", { name: "benzene", ket: EMPTY_KET }))).toBe(false);
+  });
+});
+
+describe("newDocumentTarget", () => {
+  it("reuses the active tab when its structure is empty", () => {
+    const set = emptyTabSet("a");
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "reuse", tabId: "a" });
+  });
+
+  it("reuses the active tab when its structure is the empty canvas", () => {
+    const set: TabSet = { tabs: [createTab("a", { ket: EMPTY_KET })], activeId: "a" };
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "reuse", tabId: "a" });
+  });
+
+  it("reuses the active tab after a committed serialized empty KET", () => {
+    const set: TabSet = { tabs: [createTab("a", { ket: SERIALIZED_EMPTY_KET })], activeId: "a" };
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "reuse", tabId: "a" });
+  });
+
+  it("creates a tab when the active tab has a path", () => {
+    const set: TabSet = { tabs: [createTab("a", { path: BENZENE })], activeId: "a" };
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "create" });
+  });
+
+  it("creates a tab when the active tab is dirty", () => {
+    const set = dirty(emptyTabSet("a"), "a");
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "create" });
+  });
+
+  it("does not reuse an untouched inactive tab", () => {
+    const set = activateTab(addTab(emptyTabSet("a"), createTab("b", { path: BENZENE })), "b");
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "create" });
+  });
+
+  it("creates a tab when the active id is missing", () => {
+    const set: TabSet = { tabs: [createTab("a")], activeId: "missing" };
+
+    expect(newDocumentTarget(set)).toEqual({ kind: "create" });
+  });
+});
+
+describe("hasDocument predicate", () => {
+  const hasDocument = (set: TabSet): boolean => set.tabs.some((tab) => !isUntouchedTab(tab));
+
+  it("is false for untouched tabs, including the serialized empty KET", () => {
+    expect(hasDocument(emptyTabSet("a"))).toBe(false);
+    expect(
+      hasDocument({ tabs: [createTab("a", { ket: SERIALIZED_EMPTY_KET })], activeId: "a" }),
+    ).toBe(false);
+    expect(
+      hasDocument({
+        tabs: [createTab("a", { ket: SERIALIZED_EMPTY_KET }), createTab("b")],
+        activeId: "a",
+      }),
+    ).toBe(false);
+  });
+
+  it("is true once a tab holds a structure, a name or a path", () => {
+    expect(
+      hasDocument({
+        tabs: [createTab("a", { ket: '{"root":{"nodes":[{"type":"molecule"}]}}' })],
+        activeId: "a",
+      }),
+    ).toBe(true);
+    expect(hasDocument({ tabs: [createTab("a", { name: "benzene" })], activeId: "a" })).toBe(true);
+    expect(hasDocument({ tabs: [createTab("a", { path: BENZENE })], activeId: "a" })).toBe(true);
   });
 });
 

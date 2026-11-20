@@ -10,10 +10,13 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { tabTitle, type TabSet, type TabState } from "../tabs";
+import { HomeButton } from "./HomeButton";
 import { tokens } from "./tokens";
 
 export interface TabStripProps {
-  /** Rendered first inside the strip, before the tabs (the File button). */
+  /** Opens the backstage; the home button is the first control of the strip. */
+  onOpenBackstage: () => void;
+  /** Rendered after the home button, before the tabs (the File button). */
   leading?: ReactNode;
   tabSet: TabSet;
   onActivate: (id: string) => void;
@@ -45,6 +48,15 @@ const LEADING: CSSProperties = {
   flex: "0 0 auto",
   height: "100%",
   marginRight: 4,
+};
+
+/** The home button sits before the File menu and is not part of a tablist. */
+const HOME: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  flex: "0 0 auto",
+  height: "100%",
+  marginRight: 2,
 };
 
 /**
@@ -221,7 +233,14 @@ function NewTabButton({ onNew }: { onNew: () => void }) {
 }
 
 /** Top-of-window tab strip; the editor keeps the remaining height. */
-export function TabStrip({ leading, tabSet, onActivate, onClose, onNew }: TabStripProps) {
+export function TabStrip({
+  onOpenBackstage,
+  leading,
+  tabSet,
+  onActivate,
+  onClose,
+  onNew,
+}: TabStripProps) {
   const nodes = useRef(new Map<string, HTMLDivElement>());
 
   /** Roving tabindex: focus and activate the neighbour, wrapping at the ends. */
@@ -236,6 +255,9 @@ export function TabStrip({ leading, tabSet, onActivate, onClose, onNew }: TabStr
 
   return (
     <div style={STRIP}>
+      <div style={HOME}>
+        <HomeButton onClick={onOpenBackstage} />
+      </div>
       {leading !== undefined ? <div style={LEADING}>{leading}</div> : null}
       <div role="tablist" aria-label="Documents" style={TABLIST}>
         {tabSet.tabs.map((tab) => (
