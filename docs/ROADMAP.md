@@ -4,16 +4,17 @@
 
 ## Overview
 
-| Phase  | Goal                                                   | Depends on               | Outcome                                                                                             |
-| ------ | ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------- |
-| **A**  | Remove Imago dependency entirely                       | —                        | Smaller, simpler packages; Imago-free release on all platforms                                      |
-| **B1** | Filter model: molecule present vs. not                 | A (recommended)          | ONNX foundation + classifier endpoint (in progress)                                                 |
-| **B2** | OCSR model: image → structure                          | B1                       | Local end-to-end image→molfile (replaces Imago recognition)                                         |
-| **B3** | Remote model delivery from Hugging Face + first-run UX | B2                       | Lightweight installers; on-demand download + progress/setup UI                                      |
-| **C**  | Update Ketcher + enable language selector              | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config                                     |
-| **D**  | Live local functional review                           | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next (in progress: live functional review) |
+| Phase  | Goal                                                                          | Depends on               | Outcome                                                                                             |
+| ------ | ----------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| **A**  | Remove Imago dependency entirely                                              | —                        | Smaller, simpler packages; Imago-free release on all platforms                                      |
+| **B1** | Filter model: molecule present vs. not                                        | A (recommended)          | ONNX foundation + classifier endpoint (in progress)                                                 |
+| **B2** | OCSR model: image → structure                                                 | B1                       | Local end-to-end image→molfile (replaces Imago recognition)                                         |
+| **B3** | Remote model delivery from Hugging Face + first-run UX                        | B2                       | Lightweight installers; on-demand download + progress/setup UI                                      |
+| **C**  | Update Ketcher + enable language selector                                     | Upstream Ketcher release | Drop local patch; ship Ketcher with i18n/language picker config                                     |
+| **D**  | Live local functional review                                                  | B2/B3 + C as available   | Real-use validation and a prioritized backlog for what’s next (in progress: live functional review) |
+| **E**  | Complete release integration (Ketcher/Indigo, main sync, validation, rebrand) | C + main sync            | One validated, rebranded release; gates the next release                                            |
 
-> Recommended sequencing: **A → B1 → B2 → B3**, with **C** tracked in parallel and merged whenever the upstream fix ships; **D** runs after the filter + OCSR path is usable locally (and again after B3/C).
+> Recommended sequencing: **A → B1 → B2 → B3**, with **C** folded into **E1** and merged when the upstream stable ships; **D** runs after the filter + OCSR path is usable locally; **E** starts after C and the `main` sync and gates the next release.
 
 ---
 
@@ -239,8 +240,8 @@ decimer-onnx-toolchain's frozen predictions (toolchain commit `c2265a6d`).
 Both gates passed — classifier 0.7281 (166/228, 300/300 same-ID agreement) and
 OCSR canonical 0.7276 (211/290) — so `0.000089` and `0.901` are retained; the
 nine OCSR per-image differences and latency are recorded. The follow-up
-activity `ocsr-incomplete-tail` (activity 16) is **implemented and measured;
-review passed; commit pending user approval**: the repetition guard bounds the
+activity `ocsr-incomplete-tail` (activity 16) is **implemented, measured,
+reviewed and committed (`b8d306d`)**: the repetition guard bounds the
 one 37.3 s OCSR incomplete decode
 (`hdm::CDK_Depict_5_82`, a `C=` loop to `max_len = 302`) at **2.19 s** with the
 same `422`/incomplete semantics and **0** per-image differences on the pilot300
@@ -258,16 +259,106 @@ still runs.
 
 ---
 
+## E — Complete release integration (no release until this lands)
+
+**Status: planned (2026-11-19).** Phase E collects the work that must land
+before the next release. The current `0.1.7` builds are **internal verification
+artifacts, not a release**: do not bump the version, tag, or publish until
+every E item and the Phase D live review are complete.
+
+**Ordering.** E1 first (the new Ketcher/Indigo line), then the `main` sync
+(E2/E4), then validation/performance (E3/E5), then the product finish
+(E6/E7). As of 2026-11-19, `main` carries the backstage/file-workflow line
+(16 commits not on `develop`) and `develop` carries the ML/B3/parity line
+(24 commits not on `main`). `develop` is the integration branch; the `main`
+changes are dragged in at E2/E4, not merged ad hoc.
+
+### E1 — Ketcher and Indigo to the latest stable release
+
+Upgrade `ketcher-core`/`ketcher-react` to the latest **stable** release
+(3.21.x when it ships; 3.21.0-rc.3 is beta today), remove the local
+`parametrizeUrl` patch, enable the language selector, and pin the native
+Indigo build to a stable tag instead of the current `master` clone. Re-run the
+full harness, the Recognize/Indigo flows and the packaged smoke. This
+consolidates and closes Phase C. **Breaking:** library/API/UI behaviour and the
+removal of the local patch; users of the patched build may see changed
+behaviour.
+
+### E2 — `main`: backstage interface
+
+Port the `main` backstage view (welcome, real templates, recent structures,
+project opens, File menu, tabs, close/discard flow) onto the ML/B3 toolbar and
+Models dialog. Resolve conflicts with the custom Save/New/Export/Models
+entries. **Breaking if the current workflow is removed:** evaluate at merge and
+mark the commit accordingly.
+
+### E3 — Performance tests
+
+Add repeatable measurements for startup, drawing/Indigo operations, filter and
+OCSR latency (p50/p95), memory/CPU, and install/download size. Reuse the
+`scripts/model-parity.mjs` harness and the Phase D pilot where possible; record
+a baseline and regression thresholds. This turns the ad-hoc latency findings
+(classifier 124.4/425.9 ms, OCSR 1681.7/3557.0 ms) into a gate.
+
+### E4 — `main`: folder/code refactor, performance and small UI fixes
+
+Port the `main` restructure (folder/code layout), its performance work and the
+small UI fixes, keeping the ML sidecar contracts, the B3 model flow and the
+Phase D evidence intact. Prefer `refactor`/`perf`/`fix` commits per
+`docs/commit-policy.md`; a user-visible fix is `fix`, internal restructuring is
+`refactor`.
+
+### E5 — Windows and Linux (VM) validation + new Playwright integration tests
+
+Run the packaged app on Windows and on a Linux VM: install, first run, model
+download/verify/repair, drawing, Indigo operations, recognition success and
+failure, offline/errors, and uninstall. Add Playwright integration tests for
+the file workflow, backstage, Models dialog and recognition states; keep the
+heavier packaged checks manual/gated.
+
+### E6 — Rebranding
+
+Replace the provisional name and icon with the final product identity: name,
+icon set, bundle identifiers, installer metadata, app-data paths (if they
+change), docs/site and the About sources. **Breaking:** changing the
+name/identifier/paths invalidates installed app-data and user expectations;
+migrate or document the move.
+
+### E7 — Logs and feedback
+
+Improve structured app/sidecar logs, support diagnostics (version, model state,
+runtime, recent errors) and user-facing error/feedback copy. No secrets or
+image/document content in logs. Keep the Model setup dialog and recognition
+errors consistent with the new copy.
+
+### Breaking changes and release gate
+
+- **Historical:** the Phase A Imago removal was a **breaking change** (it
+  removed the old recognition capability until B2 replaced it). Record it in the
+  next release notes; `CHANGELOG.md` is release-please-owned, so do not
+  hand-edit it.
+- **Upcoming:** E1 (Ketcher/Indigo + patch removal), E2 if the current workflow
+  is removed, and E6 (identity/app-data) are breaking. Use `feat!`/`fix!` or a
+  `BREAKING CHANGE:` footer per `docs/commit-policy.md`; release-please bumps
+  the minor while pre-1.0 (`bump-minor-pre-major`).
+- **Gate:** no version bump, tag or release until D and E1-E7 are complete. The
+  rebuilt 0.1.7 packages are internal verification artifacts only.
+
+---
+
 ## Suggested immediate next step
 
 Phase A is complete (Imago removed, lighter artifacts published), **B1** is
 delivered (ONNX Runtime foundation and the classifier endpoint), and **B2** is
-delivered (hand-drawn OCSR, the filter and `imago/uploads` compatibility job and the
-_Recognize Molecule_ UI, with `0.901` as a provisional confidence gate). **B3 is
-complete** (2026-11-15): the model catalog/downloader, the first-run setup UI
-and the clean-install validation are in place. The remaining follow-ups are the
-rest of the Phase D live review (the model-parity pilot is complete, both gates
-passed and the thresholds are retained), the OCSR incomplete-tail fix
-(implemented and measured; review passed; commit pending user approval;
-`docs/benchmarks/ocsr-tail-fix.md`), Phase C (upstream Ketcher fix) and any
-optional preprocessing-parity follow-up.
+delivered (hand-drawn OCSR, the filter and `imago/uploads` compatibility job and
+the _Recognize Molecule_ UI, with `0.901` as a provisional confidence gate).
+**B3 is complete** (2026-11-15): the model catalog/downloader, the first-run
+setup UI and the clean-install validation are in place. **Phase D is in
+progress**: the model-parity pilot and the OCSR incomplete-tail fix are complete
+and committed (`docs/benchmarks/model-parity.md`,
+`docs/benchmarks/ocsr-tail-fix.md`); the live functional review remains.
+**Phase E is the complete-release backlog** (Ketcher/Indigo stable, `main`
+backstage/refactor sync, performance tests, Windows/Linux VM validation,
+Playwright integration tests, rebranding, logs/feedback), with Phase C folded
+into E1. **No release until D and E1-E7 are complete**; the rebuilt 0.1.7
+packages are internal verification builds only.

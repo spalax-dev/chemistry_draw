@@ -761,3 +761,18 @@ official `Microsoft.ML.OnnxRuntime` 1.31.0 NuGet package.
   the pathological OCSR row with 422 in 3.355 s.
 - Harness green: Node 144, Vitest 296, sidecar 246. The Windows PowerShell path
   is CI-only (no pwsh locally).
+
+## 2026-11-19 — Roadmap: complete-release backlog (Phase E)
+
+- Added Phase E: E1 Ketcher/Indigo latest stable (breaking), E2 `main`
+  backstage, E3 performance tests, E4 `main` folder/code refactor + UI fixes,
+  E5 Windows/Linux VM validation + Playwright integration tests, E6 rebranding
+  (breaking), E7 logs/feedback.
+- Release gate: no version bump, tag or release until Phase D and E1-E7 are
+  complete; the rebuilt 0.1.7 packages are internal verification artifacts.
+- Breaking-change notes: the historical Imago removal is recorded as breaking;
+  E1, E2 (if the workflow changes) and E6 use `feat!`/`fix!`/`BREAKING CHANGE:`
+  per `docs/commit-policy.md`; `CHANGELOG.md` stays release-please-owned.
+- Branch note: `main` carries the backstage/file-workflow line (16 commits) and
+  `develop` the ML/B3/parity line (24); `develop` is the integration branch and
+  the `main` changes are dragged in at E2/E4.
