@@ -343,6 +343,11 @@ disk glyph.
 
 ## 7. Commits and releases
 
+### Semantic versioning
+
+- Breaking changes bump MAJOR, features bump MINOR, fixes/security bump PATCH;
+  the pre-1.0 shortcuts are disabled. See `docs/RELEASING.md`.
+
 ### Branch model
 
 - `main` is the 0.x maintenance/support line; `develop` is the 1.x
