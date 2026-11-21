@@ -14,6 +14,24 @@
   Indigo API URL contains an explicit port. Works around an upstream `ketcher-core`
   bug in `parametrizeUrl`; see `docs/KETCHER-BUG-parametrizeUrl.md`.
 
+## [0.1.8](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.7...chemistry-draw-v0.1.8) (2026-11-20)
+
+
+### Features
+
+* **app:** backstage view with real settings and About ([0e12b72](https://github.com/spalax-dev/chemistry_draw/commit/0e12b72ccf2f7ad5126e07c43c641be80e47fd6b))
+* **app:** backstage welcome, real templates and recent structures ([5570a20](https://github.com/spalax-dev/chemistry_draw/commit/5570a20d827fe2b49963de44735313ef080faebc))
+* **app:** document tabs with per-tab autosave ([b2ec8e1](https://github.com/spalax-dev/chemistry_draw/commit/b2ec8e19f18e09864a8fd959b19dc351db361685))
+* **app:** four-section backstage rail and structure-only template previews ([8e5099a](https://github.com/spalax-dev/chemistry_draw/commit/8e5099a8d4730757bc998fe54da1c6c7432e5bd4))
+* **app:** named project opens, File menu and one-tab-per-path ([1b117fe](https://github.com/spalax-dev/chemistry_draw/commit/1b117feb8db5a1f33c2006e3e6ca8a601d6b842e))
+* **app:** rich Open section and expanded template previews ([a482b3f](https://github.com/spalax-dev/chemistry_draw/commit/a482b3fc1dda713ca8b76d2058da05ffc5f06992))
+
+
+### Bug Fixes
+
+* **app:** simplify the close prompt into a discard confirmation ([11a0da0](https://github.com/spalax-dev/chemistry_draw/commit/11a0da0c915aa5f17652f8299945f1e350b9b4b5))
+* **app:** single 1px tab separator with a white active tab ([f25ac94](https://github.com/spalax-dev/chemistry_draw/commit/f25ac945f8d23fc5adb612006973203e09e20f5b))
+
 ## [0.1.7](https://github.com/spalax-dev/chemistry_draw/compare/chemistry-draw-v0.1.6...chemistry-draw-v0.1.7) (2026-11-13)
 
 
