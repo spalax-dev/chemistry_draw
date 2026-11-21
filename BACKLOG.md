@@ -81,11 +81,12 @@
   - which runners are available for a Windows/Linux VM test, and at what cost?
   - which recognition states are stable enough for automated tests (real model vs. fixture)?
 
-## US-05 — Rebrand the product (deferred)
+## US-05 — Rebrand the product before launch
 
 - status: pending
-- deferred: **Not part of the 1.x launch; revisit later. It is independent of
-  model delivery: no model change is involved.**
+- timing: **Part of 1.x.** Finish the functional product first; rebranding is the
+  final step before the official launch. It is independent of model delivery: no
+  model change is involved.
 - value: The app ships with its final name, icon and identity instead of the provisional Chemistry Draw packaging.
 - acceptance:
   - name, icon set, bundle identifiers, installer metadata, app-data path, docs/site and About sources use the final identity
@@ -97,7 +98,7 @@
 - open questions:
   - what is the final name and bundle identifier?
   - does the app-data path change? If so, how are autosave snapshots handled?
-  - rebranding is deferred; do not bundle it with the 1.x launch without a new decision.
+  - start only after the functional product is complete; this is the final pre-launch step.
 
 ## US-06 — Improve logs and user feedback
 

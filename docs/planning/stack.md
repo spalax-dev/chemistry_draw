@@ -137,8 +137,9 @@ produces artifacts; a release publishes the same installers CI validated.
   49/206 ms, OCSR 1115/2156 ms) but no regression thresholds gate a release.
   This is US-02.
 - **Final identity** — name, icon, bundle identifier and app-data path are
-  provisional. Rebranding is US-05 and **deferred**; it is independent of model
-  delivery, and any app-data/path move is a separate packaging decision.
+  provisional. Rebranding is **US-05, part of 1.x**, sequenced after the
+  functional product and before launch. It is independent of model delivery, and
+  any app-data/path move is a separate packaging decision.
 - **Line unification** — at the official launch the 1.x line updates from
   `main` (0.1.8 baseline, backstage, layout and release policy) and cuts 1.0.0.
   The detailed migration and user/app-data consequences need a launch ADR, not a

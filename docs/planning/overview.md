@@ -116,11 +116,12 @@ boundary is explicit, not so its architecture is documented here.
 ## 8. Open questions
 
 - The final product identity (name, icon, bundle identifier, app-data path) is
-  provisional and is **US-05, deferred**; it is independent of model delivery
-  and no model change is involved. If the identity/app-data path changes, that is
-  a separate packaging decision.
+  **US-05, part of 1.x**. It is sequenced after the functional product is
+  complete and before the official launch, and is independent of model delivery
+  (no model change). If the identity/app-data path changes, that is a separate
+  packaging decision.
 - macOS is **out of scope** (no package or CI); Android is a possible future
   target, not planned.
 - At the official launch the 1.x line **updates from `main`** (0.1.8 baseline,
-  backstage, layout and release policy) and cuts 1.0.0; the detailed unification
-  ADR belongs to that launch.
+  backstage, layout and release policy), **US-05 rebrands the completed product**,
+  and then cuts 1.0.0; the detailed unification ADR belongs to that launch.
