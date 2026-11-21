@@ -12,10 +12,8 @@ dist
 dist-ssr
 *.local
 .pnpm-store/
-# locally built .deb/.rpm/.AppImage
-dist-packages/
-# AppImage payload extraction (docs/verification.md)
-squashfs-root/
+# Consolidated generated-artifact root: packages, appimage, verify, libs
+build/
 
 # Editor directories and files
 .vscode/*
@@ -32,8 +30,6 @@ test_*.png
 *_result.mol
 
 *.AppImage
-build-library/
-build-libs/
 
 # Native Indigo libs are built, not vendored: `task libs` (or the Docker
 # builder) generates them. Packages ship them; they are never committed.

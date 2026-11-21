@@ -62,10 +62,10 @@ docker run --rm \
     bash scripts/repack-native-payload.sh rpm "$pkg"
   done
 
-  mkdir -p /app/dist-packages
-  cp -v target/release/bundle/rpm/*.rpm /app/dist-packages/ 2>/dev/null || true
+  mkdir -p /app/build/packages
+  cp -v target/release/bundle/rpm/*.rpm /app/build/packages/ 2>/dev/null || true
 '
 
 echo "==> Done."
-mkdir -p dist-packages
-ls -lh dist-packages/*.rpm 2>/dev/null || true
+mkdir -p build/packages
+ls -lh build/packages/*.rpm 2>/dev/null || true

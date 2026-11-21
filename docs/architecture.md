@@ -1291,7 +1291,7 @@ the contract, not an afterthought of the dev checkout:
   disappears once this ready state is observed: there is no update and no last
   verify repair.
 - **The packaged sidecar is self-sufficient.** Running
-  `squashfs-root/usr/bin/indigo-server` from the AppImage payload with an empty
+  `build/appimage/squashfs-root/usr/bin/indigo-server` from the AppImage payload with an empty
   `CHEMISTRY_MODELS_DIR`, the packaged `LD_LIBRARY_PATH` and no dev checkout is
   the packaged proof: it serves the empty status, downloads and verifies the
   real models, then answers `POST /v2/filter/classify` and
@@ -1988,7 +1988,7 @@ Platform settings live in `src-tauri/tauri.linux.conf.json` and
 common (Tauri merges the platform file at build time).
 
 Linux: `task packages` runs everything inside `chemistry-builder` and writes to
-`dist-packages/`:
+`build/packages/`:
 
 - `.deb` / `.rpm`: Tauri bundler (`tauri build --bundles deb,rpm`).
 - AppImage: **custom AppDir** assembled by `scripts/make-appimage.sh` and packed

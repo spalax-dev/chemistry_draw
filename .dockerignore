@@ -1,6 +1,7 @@
 .git/
 .gitignore
 target/
+build/
 node_modules/
 dist/
 .pnpm-store/

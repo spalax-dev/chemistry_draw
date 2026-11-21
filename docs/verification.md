@@ -41,7 +41,7 @@ the Rust commands above; `node scripts/harness.mjs` runs everything. `pnpm test`
 Packaging or dependency changes additionally require:
 
 11. `task packages` — builds `.deb`, `.rpm` and the AppImage.
-12. `dpkg-deb -I dist-packages/*.deb` and `rpm -qpR dist-packages/*.rpm` —
+12. `dpkg-deb -I build/packages/*.deb` and `rpm -qpR build/packages/*.rpm` —
     dependency metadata sane.
 13. `ldd` on the sidecar inside the package — no `not found`, no `libstdc++`,
     and no `DT_NEEDED libonnxruntime` (the shipped runtime is loaded dynamically
@@ -340,28 +340,29 @@ gated/manual smoke.
 
    ```bash
    V=0.1.7
-   DEB=dist-packages/chemistry-draw_${V}_amd64.deb
-   RPM=dist-packages/chemistry-draw-${V}-1.x86_64.rpm
-   APPIMAGE=dist-packages/chemistry-draw_${V}_amd64.AppImage
+   DEB=build/packages/chemistry-draw_${V}_amd64.deb
+   RPM=build/packages/chemistry-draw-${V}-1.x86_64.rpm
+   APPIMAGE=build/packages/chemistry-draw_${V}_amd64.AppImage
 
-   rm -rf squashfs-root
-   "$APPIMAGE" --appimage-extract >/dev/null
+   mkdir -p build/appimage
+   APPIMAGE=$(realpath "$APPIMAGE")
+   (cd build/appimage && rm -rf squashfs-root && "$APPIMAGE" --appimage-extract >/dev/null)
 
    # Non-vacuity: the sidecar, Indigo and the runtime are present.
    ar p "$DEB" data.tar.gz | tar -tz | grep usr/bin/indigo-server
    rpm -qlp "$RPM" | grep usr/bin/indigo-server
-   test -x squashfs-root/usr/bin/indigo-server
+   test -x build/appimage/squashfs-root/usr/bin/indigo-server
    ar p "$DEB" data.tar.gz | tar -tz | grep 'libindigo\.so'
    rpm -qlp "$RPM" | grep 'libindigo\.so'
-   find squashfs-root -name 'libindigo*.so*' | grep .
+   find build/appimage/squashfs-root -name 'libindigo*.so*' | grep .
    ar p "$DEB" data.tar.gz | tar -tvz | grep 'libonnxruntime\.so'
    rpm2cpio "$RPM" | cpio -tv 2>/dev/null | grep 'libonnxruntime\.so'
-   find squashfs-root -name 'libonnxruntime.so*' -printf '%y %p -> %l\n'
+   find build/appimage/squashfs-root -name 'libonnxruntime.so*' -printf '%y %p -> %l\n'
 
    # Absence: each command must print nothing.
    ar p "$DEB" data.tar.gz | tar -tz | grep -Ei '\.onnx$|/models/|manifest\.json'
    rpm -qlp "$RPM" | grep -Ei '\.onnx$|/models/|manifest\.json'
-   find squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' -o -name 'manifest.json' \)
+   find build/appimage/squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' -o -name 'manifest.json' \)
 
    # Recorded sizes.
    stat -c '%s %n' "$DEB" "$RPM" "$APPIMAGE"
@@ -378,10 +379,10 @@ gated/manual smoke.
 
    ```bash
    CLEAN=$(mktemp -d)
-   export LD_LIBRARY_PATH=$PWD/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
+   export LD_LIBRARY_PATH=$PWD/build/appimage/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
    INDIGO_PORT=19321 INDIGO_NO_PARENT_WATCHDOG=1 \
      CHEMISTRY_MODELS_DIR=$CLEAN \
-     ./squashfs-root/usr/bin/indigo-server &
+     ./build/appimage/squashfs-root/usr/bin/indigo-server &
    BASE=http://127.0.0.1:19321
 
    curl -s -o /tmp/clean-models.json -w '%{http_code}\n' "$BASE/v2/models" # 200
@@ -440,9 +441,9 @@ gated/manual smoke.
 
    ```bash
    CLEAN_DATA=$(mktemp -d)
-   XDG_DATA_HOME=$CLEAN_DATA ./squashfs-root/AppRun
+   XDG_DATA_HOME=$CLEAN_DATA ./build/appimage/squashfs-root/AppRun
    # or: XDG_DATA_HOME=$CLEAN_DATA \
-   #   ./dist-packages/chemistry-draw_0.1.7_amd64.AppImage
+   #   ./build/packages/chemistry-draw_0.1.7_amd64.AppImage
    ```
 
    1. **First launch.** The **Models** dialog opens automatically after the
@@ -1103,27 +1104,29 @@ Run against the desktop build (`task run`) unless a step says browser.
 - No bundled `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or
   `libbrotli*` inside any artifact: the distribution provides them.
 - Artifact payload inspection shows no `imago-worker`, `libimago.so` or
-  `libopencv*`. `dist-packages/` may hold older generations, so target the
+  `libopencv*`. `build/packages/` may hold older generations, so target the
   version under test with explicit paths (never a glob over two generations).
   Each absence command must print nothing, and each non-vacuity check must
   succeed — otherwise the inspection proves nothing:
 
   ```bash
   V=0.1.6
-  DEB=dist-packages/chemistry-draw_${V}_amd64.deb
-  RPM=dist-packages/chemistry-draw-${V}-1.x86_64.rpm
-  APPIMAGE=dist-packages/chemistry-draw_${V}_amd64.AppImage
+  DEB=build/packages/chemistry-draw_${V}_amd64.deb
+  RPM=build/packages/chemistry-draw-${V}-1.x86_64.rpm
+  APPIMAGE=build/packages/chemistry-draw_${V}_amd64.AppImage
 
   # Non-vacuity: the payload really contains the sidecar.
   ar p "$DEB" data.tar.gz | tar -tz | grep usr/bin/indigo-server >/dev/null
   rpm -qlp "$RPM" | grep usr/bin/indigo-server >/dev/null
-  "$APPIMAGE" --appimage-extract >/dev/null
-  test -x squashfs-root/usr/bin/indigo-server
+  mkdir -p build/appimage
+  APPIMAGE=$(realpath "$APPIMAGE")
+  (cd build/appimage && rm -rf squashfs-root && "$APPIMAGE" --appimage-extract >/dev/null)
+  test -x build/appimage/squashfs-root/usr/bin/indigo-server
 
   # Absence: each command must print nothing.
   ar p "$DEB" data.tar.gz | tar -tz | grep -Ei 'imago|opencv'
   rpm -qlp "$RPM" | grep -Ei 'imago|opencv'
-  find squashfs-root \( -iname '*imago*' -o -iname '*opencv*' \)
+  find build/appimage/squashfs-root \( -iname '*imago*' -o -iname '*opencv*' \)
   ```
 
 - The packaged sidecar answers `GET /v2/info` with `imago_versions: []` because
@@ -1146,12 +1149,12 @@ regression.
 # Three entries per payload, one regular file and two symlinks.
 ar p "$DEB" data.tar.gz | tar -tvz | grep 'libonnxruntime\.so'
 rpm2cpio "$RPM" | cpio -tv 2>/dev/null | grep 'libonnxruntime\.so'
-find squashfs-root -name 'libonnxruntime.so*' -printf '%y %p -> %l\n'
+find build/appimage/squashfs-root -name 'libonnxruntime.so*' -printf '%y %p -> %l\n'
 
 # No model weights: each command must print nothing.
 ar p "$DEB" data.tar.gz | tar -tz | grep -Ei '\.onnx$|/models/'
 rpm -qlp "$RPM" | grep -Ei '\.onnx$|/models/'
-find squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' \)
+find build/appimage/squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' \)
 ```
 
 `scripts/check-native-libs.sh --allowlist /opt/chemistry/libs
@@ -1160,9 +1163,9 @@ output, exit 0); a stale builder image fails there before bundling. `ldd` and
 `readelf -d` on the packaged sidecar show no ONNX Runtime:
 
 ```bash
-export LD_LIBRARY_PATH=$PWD/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
-ldd squashfs-root/usr/bin/indigo-server | grep -c libonnxruntime      # 0
-readelf -d squashfs-root/usr/bin/indigo-server | grep -i onnxruntime  # nothing
+export LD_LIBRARY_PATH=$PWD/build/appimage/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
+ldd build/appimage/squashfs-root/usr/bin/indigo-server | grep -c libonnxruntime      # 0
+readelf -d build/appimage/squashfs-root/usr/bin/indigo-server | grep -i onnxruntime  # nothing
 ```
 
 Packaged-sidecar smoke, run from the repository root so the fixture and models
@@ -1171,9 +1174,9 @@ the packaged directory through `LD_LIBRARY_PATH` (the release host points
 `ORT_DYLIB_PATH` at the same directory).
 
 ```bash
-LD_LIBRARY_PATH=$PWD/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64 \
+LD_LIBRARY_PATH=$PWD/build/appimage/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64 \
   CHEMISTRY_MODELS_DIR=$PWD/models \
-  ./squashfs-root/usr/bin/indigo-server &
+  ./build/appimage/squashfs-root/usr/bin/indigo-server &
 curl -s -o /tmp/classify.json -w '%{http_code}\n' \
   -X POST http://127.0.0.1:9321/v2/filter/classify \
   -H "Content-Type: image/png" \

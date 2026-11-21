@@ -67,7 +67,7 @@ ShellCheck as configured by the project.
   `chore(ci)`, `build`, `docs`, etc.
 - Keep commits focused; explain _why_ in the message.
 - Do not commit generated/binary artifacts such as `src-tauri/lib/`, `target/`,
-  `dist/`, or `dist-packages/`.
+  `dist/`, or `build/`.
 
 ## Pull requests
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ $# -ne 2 ]; then
   echo "Usage: $0 <new_dir> <old_dir>"
-  echo "Ex:   $0 build-libs/out build-libs/backup"
+  echo "Ex:   $0 build/libs/out build/libs/backup"
   exit 1
 fi
 

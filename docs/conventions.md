@@ -128,7 +128,7 @@ Rules:
 - New inference code → `service/ml/`; handlers only validate input and map
   errors.
 - New packaging behaviour → a script under `scripts/`, never inline in CI YAML.
-- Do not commit `src-tauri/lib/`, `target/`, `dist/`, `dist-packages/`.
+- Do not commit `src-tauri/lib/`, `target/`, `dist/`, `build/`.
 
 ---
 

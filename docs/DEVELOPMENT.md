@@ -199,28 +199,28 @@ run. Build them first (Debian 12+ container):
 
 ```bash
 task packages
-ls -l dist-packages/
+ls -l build/packages/
 ```
 
 The `.deb`, `.rpm` and AppImage ship the sidecar, Indigo and the dynamically
 loaded ONNX Runtime 1.31.0, and no model weights. Inspect the version under
-test explicitly (older generations may stay in `dist-packages/`):
+test explicitly (older generations may stay in `build/packages/`):
 
 ```bash
 V=0.1.7
-DEB=dist-packages/chemistry-draw_${V}_amd64.deb
-RPM=dist-packages/chemistry-draw-${V}-1.x86_64.rpm
-APPIMAGE=dist-packages/chemistry-draw_${V}_amd64.AppImage
+DEB=build/packages/chemistry-draw_${V}_amd64.deb
+RPM=build/packages/chemistry-draw-${V}-1.x86_64.rpm
+APPIMAGE=build/packages/chemistry-draw_${V}_amd64.AppImage
 
 ar p "$DEB" data.tar.gz | tar -tz | grep usr/bin/indigo-server
 rpm -qlp "$RPM" | grep usr/bin/indigo-server
-rm -rf squashfs-root && "$APPIMAGE" --appimage-extract >/dev/null
-test -x squashfs-root/usr/bin/indigo-server
+mkdir -p build/appimage && APPIMAGE=$(realpath "$APPIMAGE") && (cd build/appimage && rm -rf squashfs-root && "$APPIMAGE" --appimage-extract >/dev/null)
+test -x build/appimage/squashfs-root/usr/bin/indigo-server
 
 # Each absence command must print nothing.
 ar p "$DEB" data.tar.gz | tar -tz | grep -Ei '\.onnx$|/models/'
 rpm -qlp "$RPM" | grep -Ei '\.onnx$|/models/'
-find squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' \)
+find build/appimage/squashfs-root \( -iname '*.onnx' -o -ipath '*/models/*' \)
 ```
 
 Run the packaged sidecar against an empty model root. The `LD_LIBRARY_PATH`
@@ -229,9 +229,9 @@ bundled runtime chain must load on its own:
 
 ```bash
 CLEAN=$(mktemp -d)
-export LD_LIBRARY_PATH=$PWD/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
+export LD_LIBRARY_PATH=$PWD/build/appimage/squashfs-root/usr/lib/chemistry-draw/lib/linux-x86_64
 INDIGO_PORT=19321 INDIGO_NO_PARENT_WATCHDOG=1 \
-  CHEMISTRY_MODELS_DIR=$CLEAN ./squashfs-root/usr/bin/indigo-server &
+  CHEMISTRY_MODELS_DIR=$CLEAN ./build/appimage/squashfs-root/usr/bin/indigo-server &
 
 curl -s http://127.0.0.1:19321/v2/models | jq '.ready, .total_bytes' # false, 323987190
 curl -s http://127.0.0.1:19321/v2/info | jq -c .imago_versions        # []
@@ -244,7 +244,7 @@ smoke, never CI. For the UI, launch the packaged app with a fresh app-data root:
 
 ```bash
 CLEAN_DATA=$(mktemp -d)
-XDG_DATA_HOME=$CLEAN_DATA ./squashfs-root/AppRun
+XDG_DATA_HOME=$CLEAN_DATA ./build/appimage/squashfs-root/AppRun
 ```
 
 The host creates `$CLEAN_DATA/dev.spalax.ChemistryDraw/models`; the **Models**
@@ -252,6 +252,30 @@ dialog auto-opens, Download fills that root, and Recognize enables without a
 restart. On Windows the path is
 `%APPDATA%\dev.spalax.ChemistryDraw\models`, and the CI job covers the empty
 `/v2/models` and `/v2/info` `[]` smoke (it never downloads the models).
+
+## Build outputs
+
+Phase 1 consolidates build artifacts under `build/`:
+
+| Path             | Contents                                                |
+| ---------------- | ------------------------------------------------------- |
+| `build/packages` | `.deb`, `.rpm` and AppImage produced by `task packages` |
+| `build/appimage` | AppImage extraction scratch space                       |
+| `build/verify`   | `.deb`/`.rpm` extraction used for payload checks        |
+| `build/libs`     | Native Indigo build workspace used by `task libs` |
+
+`target/` (Cargo) and `dist/` (Vite/frontend) stay tool-owned and keep their
+current locations; consolidating them under `build/` is Phase 2 (E4). `models/`
+and `.ort/` are runtime/dev data, not build outputs.
+
+To inspect an AppImage, extract it under `build/appimage` instead of the
+repository root:
+
+```bash
+mkdir -p build/appimage
+(cd build/appimage && /path/to/chemistry-draw_*.AppImage --appimage-extract)
+# or: unsquashfs -d build/appimage/squashfs-root /path/to/chemistry-draw_*.AppImage
+```
 
 ## Windows 10/11 (x86_64)
 

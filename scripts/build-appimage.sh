@@ -58,9 +58,9 @@ docker run --rm \
   # --no-bundle: we assemble the AppImage ourselves (see make-appimage.sh).
   NO_STRIP=1 pnpm tauri build --no-bundle
 
-  bash scripts/make-appimage.sh /app/dist-packages
+  bash scripts/make-appimage.sh /app/build/packages
 '
 
 echo "==> Done."
-mkdir -p dist-packages
-ls -lh dist-packages/*.AppImage 2>/dev/null || true
+mkdir -p build/packages
+ls -lh build/packages/*.AppImage 2>/dev/null || true

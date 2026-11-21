@@ -3,15 +3,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PROJECT_DIR="$(pwd)"
-OUT_DIR="$PROJECT_DIR/build-libs/out"
+OUT_DIR="$PROJECT_DIR/build/libs/out"
 
 echo "==> Clearing previous builds..."
-rm -rf build-libs/out build-libs/backup
-mkdir -p "$OUT_DIR" build-libs/backup
+rm -rf build/libs/out build/libs/backup
+mkdir -p "$OUT_DIR" build/libs/backup
 
 if ls src-tauri/lib/linux-x86_64/*.so* &>/dev/null; then
-  cp -a src-tauri/lib/linux-x86_64/lib*.so* build-libs/backup/
-  echo "   Backup saved to build-libs/backup/"
+  cp -a src-tauri/lib/linux-x86_64/lib*.so* build/libs/backup/
+  echo "   Backup saved to build/libs/backup/"
 fi
 
 # ----- Repo 1: Build Indigo -----
@@ -142,7 +142,7 @@ fi
 
 cd "$PROJECT_DIR"
 
-echo "==> Done. .so in build-libs/out/"
+echo "==> Done. .so in build/libs/out/"
 ls -lh "$OUT_DIR/" 2>/dev/null || true
 
 echo "==> Removing broken symlinks..."
