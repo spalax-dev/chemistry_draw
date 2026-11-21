@@ -1,0 +1,73 @@
+@startuml
+title Recognize Molecule — image → filter → OCSR → Indigo → molfile
+
+actor "User" as user
+participant "Ketcher editor\n(Recognize dialog)" as ketcher
+participant "App.tsx\n(StaleSafe provider)" as app
+participant "indigo-server\ntransport/imago" as sidecar
+participant "service/jobs\n(in-memory store)" as jobs
+participant "service/ml\n(filter + OCSR)" as ml
+participant "Indigo\n(service/indigo_ops)" as indigo
+
+user -> ketcher: choose an image and confirm Recognize
+ketcher -> app: recognize(blob) through the struct service
+app -> app: take a monotonic token; only the latest may settle
+app -> sidecar: POST /v2/imago/uploads[?version] with raw image bytes
+sidecar -> sidecar: validate media type and the 10 MiB cap
+
+alt unsupported media type or over the cap
+  sidecar --> app: 400 JSON, or 413 plain text from DefaultBodyLimit
+  app --> ketcher: reject with the mapped error
+  app --> user: in-app ErrorDialog, title "Structure problem"
+else accepted
+  sidecar -> jobs: create job, store bytes and timestamps
+  sidecar --> app: 200 { upload_id }
+  app -> sidecar: GET /v2/imago/uploads/{id} after 300 ms
+  sidecar --> app: { state: "PENDING" }
+  note right of app
+    Poll every 500 ms.
+    No fixed client-side limit;
+    the sidecar owns the bound.
+  end note
+
+  sidecar -> jobs: run the pipeline in spawn_blocking
+  jobs -> ml: classify the image (filter)
+  alt filter says no-structure
+    ml --> jobs: contains_molecule = false
+    jobs -> jobs: resolve FAILURE "No molecule was detected in this image."
+  else structure
+    jobs -> ml: OCSR encode and greedy decode
+    alt incomplete decode or confidence below 0.901
+      ml --> jobs: incomplete or low confidence
+      jobs -> jobs: resolve FAILURE "The structure could not be read confidently."
+    else complete and confident
+      jobs -> indigo: convert SMILES to V2000 molfile
+      alt conversion fails
+        indigo --> jobs: Indigo error
+        jobs -> jobs: resolve FAILURE "The recognized structure could not be prepared."
+      else molfile
+        indigo --> jobs: V2000 molfile with 2D coordinates
+        jobs -> jobs: resolve SUCCESS with metadata.mol_str
+      end
+    end
+  end
+
+  app -> sidecar: next poll
+  sidecar --> app: SUCCESS or FAILURE
+  note right of sidecar
+    SUCCESS and FAILURE are HTTP 200.
+    Unknown, expired or restarted
+    job ids are 404.
+    Worker bound 120 s; store TTL 600 s.
+  end note
+  app -> app: settle only if the token is still the latest
+  alt SUCCESS
+    app --> ketcher: mol_str with a unique title
+    ketcher --> user: structure added to the canvas
+  else FAILURE or 404
+    app --> ketcher: reject with the mapped error
+    app --> user: in-app ErrorDialog, title "Structure problem"
+  end
+end
+
+@enduml

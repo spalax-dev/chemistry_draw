@@ -1,0 +1,23 @@
+@startuml
+!include <C4/C4_Context>
+
+title Chemistry Draw (1.x line) — System Context
+
+Person(user, "Chemist, teacher or student", "Draws structures, saves .ket documents, exports formats and recognizes structures from images")
+
+System(chemistry_draw, "Chemistry Draw", "Offline desktop chemical structure editor: Tauri v2 shell, embedded Ketcher 3.18 editor, native Indigo sidecar and local ONNX inference")
+
+System_Ext(os_runtime, "Desktop OS runtime", "Window, WebView (WebView2 on Windows, WebKitGTK on Linux), file dialogs, app-data and log directories, process control")
+
+System_Ext(host_libs, "Host font and image libraries", "fontconfig, freetype, expat, libpng and libbrotli resolved from the distribution for PNG/SVG rendering")
+
+System_Ext(huggingface, "Hugging Face model repository", "spalax-dev/chemistry-draw-ocsr: classifier, OCSR encoder and decoder, vocabulary")
+
+Rel(user, chemistry_draw, "Draws, saves, exports, recognizes")
+Rel(chemistry_draw, os_runtime, "Uses window, WebView, dialogs, files and logs")
+Rel(chemistry_draw, host_libs, "Renders images with", "dynamic linking")
+Rel(chemistry_draw, huggingface, "Downloads pinned model artifacts on request", "HTTPS")
+
+LAYOUT_WITH_LEGEND()
+
+@enduml

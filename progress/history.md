@@ -796,3 +796,23 @@ Consolidate the project's generated artifacts under one ignored root.
   wrote `build/packages` with no models and the Indigo + ONNX chain.
 - No version bump/tag/release from develop; the 0.1.8 release was kept per the
   user's instruction and the complete release remains gated on Phase E.
+
+## 2026-11-21 — Harness migration: two-stage model
+
+- from: v1 (task phases docs → test → implement → review + reviewer agent)
+- contract: `AGENTS.md`, the agent roles and `docs/harness/**` replaced by the
+  two-stage contract; `.opencode/agent/implementation-reviewer.md` deleted
+  because review is the user's.
+- engine: `scripts/harness.mjs`, `harness-lib.mjs`, `harness-lib.spec.mjs` and
+  `build_harness.mjs` replaced; `.opencode/plugins/harness-guard.js` added in
+  the same migration branch.
+- foundation: reconstructed from the real code on 2026-11-21 in
+  `docs/planning/**` (product), while `docs/harness/**` now covers only the
+  harness.
+- ADR: `docs/planning/adr/0001-adopt-two-stage-harness.md`.
+- tracking: `BACKLOG.md`, `.harness/state.json`, `docs/planning/**`,
+  `docs/harness/**`, agents and plugin are tracked; `activities.json`, the
+  schedule, claims, approvals, `current.md` and generated docs are ignored.
+- status: stage `planning`; `--start-dev` has not been run.
+- approved by: pending user approval of the reconstructed foundation and the
+  planning → development transition.

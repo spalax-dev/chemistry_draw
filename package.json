@@ -14,7 +14,17 @@
     "format:check": "prettier --check .",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check",
     "test": "vitest run",
-    "test:policy": "node --test scripts/lib/activity-policy.test.mjs"
+    "harness": "node scripts/harness.mjs",
+    "harness:stage": "node scripts/harness.mjs --stage",
+    "harness:planning": "node scripts/harness.mjs --planning",
+    "harness:start-dev": "node scripts/harness.mjs --start-dev",
+    "harness:schedule": "node scripts/harness.mjs --schedule",
+    "harness:fast": "node scripts/harness.mjs --fast",
+    "harness:changed": "node scripts/harness.mjs --changed",
+    "harness:explain": "node scripts/harness.mjs --explain",
+    "build:harness": "node scripts/build_harness.mjs",
+    "test:harness": "node --test scripts/harness-lib.spec.mjs",
+    "docs:gen": "bash scripts/docsgen.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

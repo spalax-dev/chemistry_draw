@@ -1,0 +1,20 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "Chemistry Draw",
+  "entryPoints": ["src/*.ts", "src/*.tsx", "src/ui/*.ts", "src/ui/*.tsx"],
+  "entryPointStrategy": "expand",
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts"],
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "tsconfig": "tsconfig.json",
+  "out": "docs/generated/api",
+  "readme": "none",
+  "includeVersion": true,
+  "categorizeByGroup": true,
+  "validation": {
+    "notDocumented": false,
+    "notExported": false,
+    "invalidLink": true
+  }
+}

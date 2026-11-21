@@ -6,14 +6,31 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-target/
+
+# Dependencies
 node_modules
+.pnpm-store/
+
+# vendor/ is deliberately NOT ignored: if the project ever vendors
+# dependencies, they are tracked (see docs/harness/git-tracking.md).
+
+# Build output and the consolidated generated-artifact root
+target/
 dist
 dist-ssr
-*.local
-.pnpm-store/
-# Consolidated generated-artifact root: packages, appimage, verify, libs
 build/
+sidecar/target/
+*.local
+
+# Generated documentation (build output; never hand-edited)
+docs/generated/
+target/doc/
+
+# Harness session state (local only)
+/activities.json
+/progress/current.md
+/.harness/*
+!/.harness/state.json
 
 # Editor directories and files
 .vscode/*
@@ -25,10 +42,10 @@ build/
 *.njsproj
 *.sln
 *.sw?
-sidecar/target/
+
+# Local packaging and chemistry output
 test_*.png
 *_result.mol
-
 *.AppImage
 
 # Native Indigo libs are built, not vendored: `task libs` (or the Docker
@@ -40,16 +57,12 @@ src-tauri/lib/linux-x86_64/
 src-tauri/lib/windows-x86_64/
 
 # ONNX models are downloaded, not vendored. Developers and tests place them
-# under models/ (see docs/architecture.md); the directory is never committed.
+# under models/ (see docs/planning/architecture.md); the directory is never
+# committed.
 models/
 
 # ONNX Runtime shared library for local inference (dev/test only). Fetched by
 # scripts/fetch-onnxruntime.sh into .ort/<platform>/ and selected through
-# ORT_DYLIB_PATH. Packages ship the builder's copy (see docs/DEVELOPMENT.md),
-# never this directory.
+# ORT_DYLIB_PATH. Packages ship the builder's copy (see
+# docs/planning/architecture.md), never this directory.
 .ort/
-
-# Local session state (kept on disk, not tracked)
-activities.json
-progress/current.md
-

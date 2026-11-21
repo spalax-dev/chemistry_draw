@@ -60,7 +60,7 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
-        node --test scripts/lib/activity-policy.test.mjs scripts/lib/release-workflow.test.mjs scripts/lib/windows-bundle.test.mjs
+        node --test scripts/harness-lib.spec.mjs scripts/lib/release-workflow.test.mjs scripts/lib/windows-bundle.test.mjs
         if ($LASTEXITCODE -ne 0) { throw "Node tests failed" }
         cargo test -p indigo-server
         if ($LASTEXITCODE -ne 0) { throw "Sidecar tests failed" }

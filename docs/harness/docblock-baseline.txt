@@ -1,0 +1,65 @@
+# Docblock baseline — legacy debt, do not grow.
+# Owner: Chemistry Draw maintainers (see docs/harness/docstring-debt.md).
+# Regenerate after documenting symbols: node scripts/check-docblocks.mjs --write-baseline
+# Format: one undocumented exported symbol or undocumented file per line.
+rust-file:src-tauri/src/lib.rs
+rust-file:src-tauri/src/main.rs
+rust:src-tauri/sidecar/src/error.rs:fn bad_request
+rust:src-tauri/sidecar/src/error.rs:fn conflict
+rust:src-tauri/sidecar/src/error.rs:fn internal
+rust:src-tauri/sidecar/src/error.rs:fn service_unavailable
+rust:src-tauri/sidecar/src/error.rs:fn unprocessable
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn aromatize
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn automap
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn calculate
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn calculate_cip
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn check
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn clean
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn convert
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn dearomatize
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn layout
+rust:src-tauri/sidecar/src/service/indigo_ops.rs:fn render
+rust:src-tauri/sidecar/src/transport/health.rs:fn get_health
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn get_indigo_info
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_aromatize
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_automap
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_calculate
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_calculate_cip
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_check
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_clean
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_convert
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_dearomatize
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_layout
+rust:src-tauri/sidecar/src/transport/indigo.rs:fn post_render
+rust:src-tauri/src/lib.rs:fn run
+ts-file:src/App.tsx
+ts-file:src/fileSaver.ts
+ts-file:src/main.tsx
+ts-file:src/ui/Button.tsx
+ts-file:src/ui/Dialog.tsx
+ts-file:src/ui/editorButtons.ts
+ts:src/App.tsx:default App
+ts:src/autosave.ts:interface AutosaveMeta
+ts:src/autosave.ts:interface AutosaveScheduler
+ts:src/autosave.ts:interface AutosaveSchedulerOptions
+ts:src/document.ts:interface CloseGuardDecision
+ts:src/document.ts:interface DocumentState
+ts:src/document.ts:interface ExportRequest
+ts:src/document.ts:interface SaveRequest
+ts:src/document.ts:type CloseChoice
+ts:src/document.ts:type CloseGuardAction
+ts:src/document.ts:type ExportFormat
+ts:src/document.ts:type ExportSource
+ts:src/document.ts:type SaveOutcome
+ts:src/fileSaver.ts:interface FileSaverRegistration
+ts:src/logging.ts:function initLogging
+ts:src/modelSetup.ts:interface SetupView
+ts:src/ui/Button.tsx:interface ButtonProps
+ts:src/ui/Button.tsx:type ButtonVariant
+ts:src/ui/Dialog.tsx:interface DialogProps
+ts:src/ui/DocumentDialogs.tsx:interface CloseGuardDialogProps
+ts:src/ui/DocumentDialogs.tsx:interface ErrorDialogProps
+ts:src/ui/DocumentDialogs.tsx:interface ExportDialogProps
+ts:src/ui/DocumentDialogs.tsx:interface RecoveryDialogProps
+ts:src/ui/ModelSetupDialog.tsx:interface ModelSetupDialogProps
+ts:src/ui/tokens.ts:type Tokens

@@ -19,9 +19,9 @@ tasks:
       - node scripts/harness.mjs
 
   harness:init:
-    desc: Create the harness tracking files (activities.json, progress/)
+    desc: Create the harness tracking files (.harness/, activities.json, progress/)
     cmds:
-      - node scripts/build-harness.mjs
+      - node scripts/build_harness.mjs
 
   lint:
     desc: Lint and format check (ESLint, Prettier, rustfmt, Clippy, ShellCheck)

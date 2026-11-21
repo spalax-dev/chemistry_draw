@@ -1,0 +1,53 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*gcloud*": "deny",
+      "*gsutil*": "deny",
+      "*bq *": "deny",
+      "*terraform *": "deny",
+      "*aws *": "deny",
+      "*az *": "deny",
+      "*firebase *": "deny",
+      "*kubectl*": "deny",
+      "*helm *": "deny",
+      "*docker system prune*": "deny",
+      "*docker volume rm*": "deny",
+      "*rm -rf*": "deny",
+      "*rm -fr*": "deny",
+      "*rm --recursive --force*": "deny",
+      "*dd if=*": "deny",
+      "*mkfs*": "deny",
+      "*shutdown*": "deny",
+      "*reboot*": "deny",
+      "*sudo *": "deny",
+      "*git push --force*": "deny",
+      "*git push -f*": "deny",
+      "*git reset --hard*": "deny",
+      "*npm publish*": "deny",
+      "*pnpm publish*": "deny",
+      "*yarn publish*": "deny",
+      "*curl * | sh*": "deny",
+      "*curl * | bash*": "deny",
+      "*wget * | sh*": "deny",
+      "*wget * | bash*": "deny",
+      "*chmod -R 777*": "deny"
+    }
+  },
+  "agent": {
+    "main-orchestrator": {
+      "permission": {
+        "edit": "allow",
+        "task": "allow",
+        "webfetch": "deny"
+      }
+    },
+    "task-executor": {
+      "permission": {
+        "edit": "allow",
+        "task": "deny",
+        "webfetch": "deny"
+      }
+    }
+  }
+}

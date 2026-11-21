@@ -1,0 +1,38 @@
+@startuml
+!include <C4/C4_Container>
+
+title Chemistry Draw (1.x line) — Containers
+
+Person(user, "Chemist, teacher or student", "Uses the editor, documents and recognition")
+
+System_Boundary(app, "Chemistry Draw desktop application") {
+  Container(webview, "Ketcher webview", "React 18, TypeScript, Vite 6, ketcher-react / ketcher-core 3.18", "Editor, document workflow, in-app dialogs, toolbar commands, model setup UI, error mapping")
+
+  Container(host, "Tauri host", "Rust, Tauri v2", "Window lifecycle, free-port selection, sidecar spawn/supervision, environment, log forwarding, indigo_port and log_dir commands")
+
+  Container(sidecar, "indigo-server sidecar", "Rust, axum 0.7, tokio 1", "HTTP /v2 API: Indigo operations, ONNX filter, OCSR, model delivery, Ketcher job shim, health")
+
+  ContainerDb(documents, "User documents", "Filesystem", ".ket documents, exported Molfile/SMILES/InChI/SVG/PNG, autosave snapshots under <app_data>/recovery")
+
+  ContainerDb(models, "Model store", "Filesystem under <app_data>/models", "manifest.json plus classifier, encoder, decoder and vocabulary artifacts")
+}
+
+Container_Ext(indigo, "libindigo and libindigo-renderer", "C++ native libraries, platform-pinned", "Cheminformatics conversion, layout, checks and rendering through a C ABI")
+
+Container_Ext(onnx_runtime, "ONNX Runtime 1.31.0", "Native shared library, loaded dynamically", "CPU inference for the classifier and the OCSR encoder/decoder")
+
+Container_Ext(huggingface, "Hugging Face model repository", "HTTPS object host", "Pinned model artifacts downloaded on demand")
+
+Rel(user, webview, "Draws, saves, exports and recognizes")
+Rel(webview, host, "Invokes commands and uses plugins", "Tauri IPC")
+Rel(webview, sidecar, "Calls the Indigo, filter, OCSR and model routes", "HTTP 127.0.0.1:<port>/v2")
+Rel(webview, documents, "Reads and writes documents and autosave", "Tauri fs plugin")
+Rel(host, sidecar, "Spawns, configures, logs and stops", "Process, environment, stdio")
+Rel(sidecar, indigo, "Calls", "C FFI")
+Rel(sidecar, onnx_runtime, "Loads at runtime", "dlopen / LoadLibrary")
+Rel(sidecar, models, "Reads and writes artifacts and manifest")
+Rel(sidecar, huggingface, "Fetches artifacts with resume", "HTTPS GET Range")
+
+LAYOUT_WITH_LEGEND()
+
+@enduml

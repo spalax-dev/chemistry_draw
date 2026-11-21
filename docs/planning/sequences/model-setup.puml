@@ -1,0 +1,79 @@
+@startuml
+title Model setup — clean install → opt-in download → recognition enabled
+
+actor "User" as user
+participant "App.tsx\n(model setup loop)" as app
+participant "Models dialog\n(ModelSetupDialog)" as dialog
+participant "indigo-server\ntransport/models" as api
+participant "service/ml\ndownloader + catalog" as downloader
+participant "Hugging Face" as hf
+participant "Ketcher option store" as store
+
+== First launch ==
+app -> api: GET /v2/models
+api --> app: 200 { ready: false, installed_bytes: 0, ... }
+app -> api: GET /v2/info
+api --> app: imago_versions: [] (capability not advertised)
+app -> dialog: auto-open once because the install is not ready
+app -> app: show the Models toolbar entry (setup needs attention)
+user -> dialog: read the intro and the two model families
+user -> dialog: Later
+
+== Opt-in download ==
+user -> dialog: reopen from Models, choose Download
+dialog -> api: POST /v2/models/download
+api --> dialog: 202 status body, download.state = downloading
+api -> downloader: spawn the background run
+downloader -> downloader: preflight free disk space for remaining bytes
+alt not enough space
+  downloader -> downloader: fail the run with required and available bytes
+  dialog -> api: next GET /v2/models poll
+  api --> dialog: status with download.state = failed
+  dialog --> user: actionable error, Retry
+else space available
+  loop each artifact in catalog order
+    downloader -> downloader: skip a final file with matching size and SHA-256
+    downloader -> hf: GET <url> with Range: bytes=<part length>-
+    hf --> downloader: 206 partial body (or 200/416, which restarts)
+    downloader -> downloader: append to <path>.part
+    downloader -> downloader: verify size and SHA-256
+    alt mismatch
+      downloader -> downloader: delete the .part, keep the previous final file, fail
+    else match
+      downloader -> downloader: atomic rename .part to the final path
+    end
+  end
+  downloader -> downloader: verify the installed set, write manifest.json last
+end
+
+== Progress and cancellation ==
+loop while download.state is downloading or verifying
+  dialog -> api: GET /v2/models every 500 ms
+  api --> dialog: state, bytes, percent, current_file
+  note right of dialog
+    ready, failed and cancelled
+    end the poll and update
+    the action row.
+  end note
+end
+opt user cancels while downloading
+  dialog -> api: POST /v2/models/download/cancel
+  api --> dialog: 202 with download.state = cancelled
+  note right of downloader
+    The .part files are kept.
+    The next Download/Resume
+    continues from them.
+  end note
+end
+
+== Recognition enabled without a remount ==
+app -> api: GET /v2/models
+api --> app: ready: true, installed_bytes == total_bytes
+app -> api: GET /v2/info
+api --> app: imago_versions: ["local-ocsr"]
+app -> store: APP_OPTIONS, UPDATE, no-op ACTION
+store --> app: Recognize control recomputed and enabled
+app -> dialog: hide the Models control once the install is healthy
+dialog --> user: Later closes the dialog; the canvas and undo history survive
+
+@enduml

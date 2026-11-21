@@ -1,0 +1,52 @@
+@startuml
+!include <C4/C4_Component>
+
+title Chemistry Draw (1.x line) — Components of indigo-server
+
+Container_Boundary(sidecar, "indigo-server (Rust, axum 0.7)") {
+  Component(info_health, "transport/info and transport/health", "axum handlers", "Versions, api_path, synthetic capability list; uptime, PID, port, runtime generation and model ids present")
+
+  Component(indigo_api, "transport/indigo", "axum handlers", "convert, aromatize, dearomatize, layout, clean, render, calculate, check, calculate_cip, automap")
+
+  Component(filter_api, "transport/filter", "axum handler + DefaultBodyLimit", "POST /v2/filter/classify; media type and 10 MiB cap")
+
+  Component(ocsr_api, "transport/ocsr", "axum handler + DefaultBodyLimit", "POST /v2/ocsr/recognize; media type, cap, 422 on incomplete decode")
+
+  Component(imago_api, "transport/imago", "axum handlers", "Ketcher-compatible upload and poll shim")
+
+  Component(models_api, "transport/models", "axum handlers", "GET /v2/models and the download, cancel and verify routes")
+
+  Component(indigo_ops, "service/indigo_ops", "Rust service", "Orchestrates Indigo sessions, formats and rendering")
+
+  Component(recognition, "service/recognition", "Rust service", "Filter gate, OCSR gate, SMILES to V2000 molfile, failure mapping")
+
+  Component(jobs, "service/jobs", "In-memory job store", "PENDING, SUCCESS, FAILURE; 120 s worker bound; 600 s TTL")
+
+  Component(ml, "service/ml", "ONNX sessions, registry, catalog, downloader, preprocessing", "Classifier, OCSR encoder/decoder, tensor contracts, manifest, resumable download")
+
+  Component(ffi, "ffi", "extern C bindings", "Indigo and Indigo Renderer; the only unsafe boundary")
+}
+
+Component_Ext(indigo, "libindigo and libindigo-renderer", "C++ native libraries", "Cheminformatics and rendering")
+Component_Ext(onnx_runtime, "ONNX Runtime 1.31.0", "Native shared library", "CPU inference, loaded through ort")
+Component_Ext(huggingface, "Hugging Face model repository", "HTTPS", "Pinned artifacts")
+ComponentDb(models, "Model store", "Filesystem", "manifest.json and artifacts")
+
+Rel(info_health, ml, "Reads capability and model presence")
+Rel(indigo_api, indigo_ops, "Calls")
+Rel(filter_api, ml, "Classifies an image")
+Rel(ocsr_api, ml, "Recognizes an image")
+Rel(models_api, ml, "Reads status, starts download, verifies")
+Rel(imago_api, jobs, "Creates and reads jobs")
+Rel(jobs, recognition, "Runs the pipeline on a blocking worker")
+Rel(recognition, ml, "Filter and OCSR")
+Rel(recognition, indigo_ops, "SMILES to molfile")
+Rel(indigo_ops, ffi, "Calls")
+Rel(ml, onnx_runtime, "Loads and runs", "ort load-dynamic")
+Rel(ml, models, "Reads manifest and artifacts; writes downloads")
+Rel(ml, huggingface, "Fetches artifacts", "HTTPS GET Range")
+Rel(ffi, indigo, "Calls", "C ABI")
+
+LAYOUT_WITH_LEGEND()
+
+@enduml

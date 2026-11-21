@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/harness-builder/activities.schema.json",
+  "$comment": "STACK: generic. activities.json is execution state: it holds the activities of the story currently being worked on. User stories live in BACKLOG.md.",
+  "title": "activities.json",
+  "description": "Technical decomposition of the selected user story. Activities are derived just-in-time, never for the whole backlog.",
+  "type": "object",
+  "required": ["activities"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "Project name (optional, informational)."
+    },
+    "description": {
+      "type": "string",
+      "description": "Project description (optional, informational)."
+    },
+    "activities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/activity" }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["pending", "in_progress", "done", "blocked"]
+    },
+    "task": {
+      "type": "object",
+      "required": ["id", "description", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short id inside the activity, e.g. T-01."
+        },
+        "description": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" }
+      },
+      "additionalProperties": true
+    },
+    "activity": {
+      "type": "object",
+      "required": ["id", "storyId", "name", "status", "touches", "tasks"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable id, e.g. ACT-01."
+        },
+        "storyId": {
+          "type": "string",
+          "pattern": "^US-\\d+$",
+          "description": "The BACKLOG.md story this activity belongs to."
+        },
+        "name": {
+          "type": "string",
+          "description": "kebab-case technical name, e.g. user-data-model."
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Activity ids that must be done before this one. Empty means it can run in parallel with other independent activities."
+        },
+        "touches": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Path prefixes this activity may write. Two activities in the same batch must have disjoint touches."
+        },
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/task" }
+        }
+      },
+      "additionalProperties": true,
+      "examples": [
+        {
+          "id": "ACT-01",
+          "storyId": "US-003",
+          "name": "user-data-model",
+          "status": "pending",
+          "dependsOn": [],
+          "touches": ["src/auth/model/", "db/migrations/"],
+          "tasks": [
+            {
+              "id": "T-01",
+              "description": "Write the model docblock and the table shape",
+              "status": "pending"
+            },
+            {
+              "id": "T-02",
+              "description": "users table + migration",
+              "status": "pending"
+            }
+          ]
+        },
+        {
+          "id": "ACT-02",
+          "storyId": "US-003",
+          "name": "auth-contract",
+          "status": "pending",
+          "dependsOn": ["ACT-01"],
+          "touches": ["src/auth/http/", "docs/openapi/"],
+          "tasks": [
+            {
+              "id": "T-01",
+              "description": "Endpoints and error shapes in OpenAPI",
+              "status": "pending"
+            },
+            {
+              "id": "T-02",
+              "description": "Controller signatures with docstrings",
+              "status": "pending"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
