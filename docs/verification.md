@@ -845,10 +845,10 @@ benchmark. The protocol and acceptance are in
    `--sidecar target/debug/indigo-server` for a functional-only run).
    `--split pilot` is the only accepted split (the pinned aggregate and the
    300-row gates are pilot-only), and `--out` must stay under
-   `target/benchmarks/` so raw outputs cannot bypass the tracking policy.
+   `build/benchmarks/` so raw outputs cannot bypass the tracking policy.
 
    Raw predictions, converted images, the sidecar log and `summary.json` stay
-   under `target/benchmarks/model-parity/<run-id>/`. A gate failure exits
+   under `build/benchmarks/model-parity/<run-id>/`. A gate failure exits
    non-zero after writing the files; a setup/hash/status failure stops the run.
 
 6. Read the aggregate and fill `docs/benchmarks/model-parity.md` §4:
@@ -884,7 +884,7 @@ canonical 0.7276 (211/290), exact 122/300, valid 299/1 — identical to the
 accepted debug run on all 600 rows, including every classifier score and OCSR
 answer. Release p50/p95: classifier **124.4 / 425.9 ms**, OCSR
 **1681.7 / 3557.0 ms** (full HTTP round trip, §3.4). The raw run is
-`target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/`; §4 of
+`build/benchmarks/model-parity/2026-11-18T02-27-34-439Z/`; §4 of
 `docs/benchmarks/model-parity.md` has the identity, the classifier latency split
 and the nine OCSR per-image differences. A debug-build latency is not
 representative and must not be quoted as the app result.
@@ -900,7 +900,7 @@ Use the same prerequisites as the model-parity pilot above (toolchain checkout,
 datasets, installed models, loadable ONNX Runtime, **release** sidecar).
 
 1. The accepted pre-guard run is
-   `target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/`. Its
+   `build/benchmarks/model-parity/2026-11-18T02-27-34-439Z/`. Its
    `details.jsonl` has `hdm::CDK_Depict_5_82` at status `422` with
    `latencyMs` **37,270.662** (37.3 s). Keep it as the comparison baseline; do
    not overwrite it.

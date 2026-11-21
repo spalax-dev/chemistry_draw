@@ -22,15 +22,15 @@
  *   --ort <file>             ONNX Runtime library (default
  *                            $PWD/.ort/linux-x86_64/libonnxruntime.so)
  *   --out <dir>              Run directory (default
- *                            target/benchmarks/model-parity/<timestamp>; must
- *                            stay under target/benchmarks/)
+ *                            build/benchmarks/model-parity/<timestamp>; must
+ *                            stay under build/benchmarks/)
  *   --timeout <ms>           Per-request timeout (default 120000)
  *   --help                   Show this help
  *
  * The runner is pilot-only: the pinned aggregate and the 300-row gates apply
  * to the frozen `pilot` split, so any other `--split` is rejected.
  *
- * Raw outputs stay under `target/benchmarks/` (gitignored); the committed
+ * Raw outputs stay under `build/benchmarks/` (gitignored); the committed
  * report is `docs/benchmarks/model-parity.md` §4. The default sidecar is
  * `target/release/indigo-server` (the shipped build); a debug binary can be
  * passed with `--sidecar` for a functional-only run, but its latency is not
@@ -217,8 +217,8 @@ function printHelp() {
   --sidecar <file>         indigo-server binary (default target/release/indigo-server)
   --models <dir>           Model root (default $PWD/models)
   --ort <file>             ONNX Runtime library (default .ort/linux-x86_64/libonnxruntime.so)
-  --out <dir>              Run directory (default target/benchmarks/model-parity/<timestamp>;
-                           must stay under target/benchmarks/)
+  --out <dir>              Run directory (default build/benchmarks/model-parity/<timestamp>;
+                           must stay under build/benchmarks/)
   --timeout <ms>           Per-request timeout (default 120000)
   --help                   Show this help`);
 }
@@ -247,7 +247,7 @@ function resolveConfig(options) {
   );
   if (!out.startsWith(`${benchmarkRoot}${path.sep}`)) {
     throw new Error(
-      `--out must be a run directory inside target/benchmarks/ (gitignored), got ${out}`,
+      `--out must be a run directory inside build/benchmarks/ (gitignored), got ${out}`,
     );
   }
 

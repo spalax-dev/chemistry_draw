@@ -42,7 +42,7 @@ the parity pilot; `$TOOLCHAIN` is the external checkout, §2 of
 | Sidecar response        | HTTP `422`, no `smiles` field                                                                                                                                                        |
 | Sidecar latency         | **37,270.662 ms** HTTP round trip; the sidecar log records `OCSR inference 37239.7 ms: 303 tokens, confidence 0.7944, incomplete`                                                    |
 | Decode                  | `max_len = 302` steps consumed: 303 ids including `start_id`; the reference output is the 2-token cycle `C`, `=` repeated 151 times. §9.1 records the exact sidecar ids and pattern. |
-| Raw run                 | `target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/details.jsonl`                                                                                                              |
+| Raw run                 | `build/benchmarks/model-parity/2026-11-18T02-27-34-439Z/details.jsonl`                                                                                                               |
 | Reference row           | `$TOOLCHAIN/data/benchmark/pilot/handdrawn.fp32.pilot300.json`, `details[id == "hdm::CDK_Depict_5_82"]`                                                                              |
 
 The image is a long polysulfur drawing. The model never emits `end_id` for it
@@ -226,14 +226,14 @@ with the pilot prerequisites from `docs/verification.md` §2.
    run, the margin and the rationale in §7/§9. Tune only these constants; never
    `max_len`.
 4. **Rerun the pilot300 with the guard** (same split, same sidecar, release
-   build, raw output under `target/benchmarks/`):
+   build, raw output under `build/benchmarks/`):
 
    ```bash
    node scripts/model-parity.mjs --suite handdrawn --split pilot
    ```
 
 5. **Compare per image.** Diff the new `details.jsonl` against the accepted run
-   `target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/details.jsonl` (or
+   `build/benchmarks/model-parity/2026-11-18T02-27-34-439Z/details.jsonl` (or
    the pre-guard rerun): status, `got`, exact, canonical and comparable must be
    identical for all 300 rows. Expected difference count: **0**. A different
    `got` on any answered row is a failure, not a tolerance.

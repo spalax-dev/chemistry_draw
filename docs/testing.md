@@ -979,7 +979,7 @@ duplicate/missing pilot ID. A metric change that no unit test catches is a
 review finding.
 
 The benchmark run itself is not CI: it is the gated manual procedure in
-`docs/verification.md` §2, and its raw output stays under `target/benchmarks/`.
+`docs/verification.md` §2, and its raw output stays under `build/benchmarks/`.
 The committed report is `docs/benchmarks/model-parity.md` §4; unit tests never
 read the external datasets. The reference-shaped fixtures (166/228, 210/292,
 121/300, 299/300) pin the metric function, not the benchmark result.

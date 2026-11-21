@@ -486,7 +486,7 @@
 - [x] p50/p95 are recorded on the same machine and the shipped **release**
       binary (nearest-rank, after one warm-up) for both models, and per-image
       agreement plus every disagreement against the toolchain is recorded (raw
-      rows stay under `target/benchmarks/`); debug-build latency is not
+      rows stay under `build/benchmarks/`); debug-build latency is not
       reported as the app result.
 - [x] The classifier artifact (`d5f5506…af505a9`), encoder
       (`996727a2…c78193f52`), decoder (`cfff9788…c6bb6d68197`) and vocab

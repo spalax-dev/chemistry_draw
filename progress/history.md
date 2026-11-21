@@ -776,3 +776,23 @@ official `Microsoft.ML.OnnxRuntime` 1.31.0 NuGet package.
 - Branch note: `main` carries the backstage/file-workflow line (16 commits) and
   `develop` the ML/B3/parity line (24); `develop` is the integration branch and
   the `main` changes are dragged in at E2/E4.
+
+## 2026-11-21 — Build layout: generated artifacts under build/
+
+Consolidate the project's generated artifacts under one ignored root.
+
+- `build/packages` (deb/rpm/AppImage), `build/appimage` (AppImage extraction),
+  `build/verify` (deb/rpm payload checks), `build/libs` (native workspace) and
+  `build/benchmarks` (model-parity raw output) replace `dist-packages`,
+  root `squashfs-root`, `build-libs` and `target/benchmarks`.
+- `.gitignore`, `.prettierignore`, ESLint and the docs now ignore/document
+  `build/`; `target/` and `dist/` stay tool-owned (full move is E4).
+- Developed on a branch from `main` and merged there (`a73a57c`, on top of the
+  kept 0.1.8 release), then ported to `develop` preserving the NuGet/ONNX and
+  OCSR work (`838bdef` + the benchmark path follow-up).
+- Added `docs/assets/backstage.png` and `docs/assets/editor-tabs.png` to the
+  **main-only** README (the backstage/two-tab UI exists on main, not develop).
+- Verified: harness green (144 Node, 296 Vitest, 246 sidecar); `task packages`
+  wrote `build/packages` with no models and the Indigo + ONNX chain.
+- No version bump/tag/release from develop; the 0.1.8 release was kept per the
+  user's instruction and the complete release remains gated on Phase E.

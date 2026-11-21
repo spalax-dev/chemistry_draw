@@ -257,12 +257,13 @@ restart. On Windows the path is
 
 Phase 1 consolidates build artifacts under `build/`:
 
-| Path             | Contents                                                |
-| ---------------- | ------------------------------------------------------- |
-| `build/packages` | `.deb`, `.rpm` and AppImage produced by `task packages` |
-| `build/appimage` | AppImage extraction scratch space                       |
-| `build/verify`   | `.deb`/`.rpm` extraction used for payload checks        |
-| `build/libs`     | Native Indigo build workspace used by `task libs` |
+| Path               | Contents                                                |
+| ------------------ | ------------------------------------------------------- |
+| `build/packages`   | `.deb`, `.rpm` and AppImage produced by `task packages` |
+| `build/appimage`   | AppImage extraction scratch space                       |
+| `build/verify`     | `.deb`/`.rpm` extraction used for payload checks        |
+| `build/libs`       | Native Indigo build workspace used by `task libs`       |
+| `build/benchmarks` | Model-parity raw output (`scripts/model-parity.mjs`)    |
 
 `target/` (Cargo) and `dist/` (Vite/frontend) stay tool-owned and keep their
 current locations; consolidating them under `build/` is Phase 2 (E4). `models/`

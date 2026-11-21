@@ -238,12 +238,12 @@ test("docs/verification.md documents the model-free payload inspection", () => {
   );
   assert.match(
     section,
-    /find squashfs-root[\s\S]{0,160}-iname '\*\.onnx'/,
+    /find [^\n]*squashfs-root[\s\S]{0,160}-iname '\*\.onnx'/,
     "the AppImage inspection must look for .onnx files",
   );
   assert.match(
     section,
-    /find squashfs-root[\s\S]{0,160}-ipath '\*\/models\/\*'/,
+    /find [^\n]*squashfs-root[\s\S]{0,160}-ipath '\*\/models\/\*'/,
     "the AppImage inspection must look for models/ paths",
   );
 

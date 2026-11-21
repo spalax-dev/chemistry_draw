@@ -135,7 +135,7 @@ The hand-drawn reference **is** paired: its 300 IDs match
 - Convert TIFF inputs as described in §3.6 before the run; keep the ID →
   converted-file map in the run manifest.
 - Raw per-image outputs (predicted label or SMILES, score, latency, errors) go
-  to `target/benchmarks/model-parity/<run-id>/`; the committed document carries
+  to `build/benchmarks/model-parity/<run-id>/`; the committed document carries
   only aggregates and counts.
 
 ### 3.2 Classifier
@@ -255,7 +255,7 @@ sidecar cannot read those bytes, so the pilot converts them before the run.
 - Operation: open the first frame, `convert("RGB")`, save as PNG. No resize, no
   filter, no normalization, no inversion, no histogram equalization; the PNG
   carries the same RGB samples the toolchain benchmark reads from the TIFF.
-- Location: `target/benchmarks/model-parity/<run-id>/converted/` (gitignored).
+- Location: `build/benchmarks/model-parity/<run-id>/converted/` (gitignored).
   Temporary files only; no converted image is committed.
 - The run manifest records the original ID, the TIFF path and the converted
   PNG path. The classifier requests use the converted PNG.
@@ -284,17 +284,17 @@ All commands are finalized in tasks `c`/`e`; the intended sequence is:
 3. Convert the 197 TIFF pilot images with the toolchain Pillow (§3.6).
 4. Run the classifier pilot and the hand-drawn pilot through
    `scripts/model-parity.mjs` (added by task `c`; flags frozen with the script).
-5. Write the raw outputs under `target/benchmarks/model-parity/<run-id>/`,
+5. Write the raw outputs under `build/benchmarks/model-parity/<run-id>/`,
    fill §4, and re-run the parity unit tests.
 6. `node scripts/harness.mjs` stays green.
 
 The committed report is **this file**. Raw predictions, converted images and
-logs stay under `target/benchmarks/` and are never committed.
+logs stay under `build/benchmarks/` and are never committed.
 
 ## 4. Results
 
 > Both gates pass. The raw per-image rows, converted images, sidecar log and
-> `summary.json` stay under `target/benchmarks/model-parity/` and are not
+> `summary.json` stay under `build/benchmarks/model-parity/` and are not
 > committed.
 
 ### 4.1 Run identity
@@ -309,7 +309,7 @@ logs stay under `target/benchmarks/` and are never committed.
 | RDKit version        | `2026.09.1`; Pillow `13.0.0` (toolchain virtualenv)                                                                                                                                   |
 | Toolchain commit     | `c2265a6d83f3eb5a7ef0fd5df4741335627c5f20`                                                                                                                                            |
 | Reference derivation | eval1000 FP16 `details[]` filtered to `splits.pilot`; reference file `c19cd03d…fcdc53`; per-ID predictions SHA-256 `d99c6f2069cb5c535aae2f7b1a3ca4dd15f3541e18640c18373c5b24121cabd3` |
-| Run id / raw output  | `target/benchmarks/model-parity/2026-11-18T02-27-34-439Z/` (gitignored)                                                                                                               |
+| Run id / raw output  | `build/benchmarks/model-parity/2026-11-18T02-27-34-439Z/` (gitignored)                                                                                                                |
 | Runner command       | `node scripts/model-parity.mjs --suite both --split pilot --sidecar target/release/indigo-server`                                                                                     |
 
 The classifier reference was derived, not copied, with:
@@ -547,7 +547,7 @@ Commit only:
 
 Do **not** commit the 166 MB classifier dataset, the 25 MB hand-drawn dataset,
 the toolchain checkout, any `.onnx` weight, converted PNGs or raw per-image
-predictions. Raw outputs live under `target/benchmarks/` (gitignored). The
+predictions. Raw outputs live under `build/benchmarks/` (gitignored). The
 report pins the toolchain commit, the frozen-manifest and label SHA-256 values,
 the model SHA-256 values and the run identity, so the external inputs can be
 re-fetched and checked without being stored here.
