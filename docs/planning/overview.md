@@ -22,21 +22,12 @@ The foundation describes the **1.x integration line** (`develop`). The separate
 The technical shape is in [`architecture.md`](architecture.md); the promises
 between the parts are in [`contracts.md`](contracts.md).
 
-## 2. Intended users (working assumptions)
+## 2. Audience
 
-The evidence is the product itself: the installer category is `Education`, the
-README targets people drawing structures, and the document model is a
-word-processor-like one-document-per-window editor. The four groups below are
-**working assumptions**, not researched personas; “personas” here simply means
-the target user profiles. Confirm or replace them before UX stories rely on
-them.
-
-| Actor                          | Needs                                                                                                       |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Chemistry student or teacher   | Draw and label structures quickly, keep a `.ket` document, export a picture or molfile for an assignment    |
-| Bench or computational chemist | Draw or correct a structure offline, convert between formats, get a starting structure from a photo or scan |
-| Occasional user                | Open a `.ket` file from a colleague, edit it, save it back without installing a chemistry platform          |
-| Contributor or packager        | Build the sidecar and native libraries, run the harness, produce `.deb`/`.rpm`/AppImage/NSIS artifacts      |
+Chemistry Draw is a local desktop tool for people who draw or correct chemical
+structures. It has **no accounts, user profiles, login, telemetry or server-side
+identity**; there is nothing to sign in to. The installer category and README are
+the only audience evidence, and no further user segmentation is assumed.
 
 ## 3. Goals
 
@@ -58,7 +49,7 @@ them.
 
 ## 4. Non-goals
 
-- Online accounts, telemetry, cloud sync or a hosted recognition service.
+- Online accounts, user profiles, login, telemetry, cloud sync or a hosted recognition service.
 - Reimplementing Ketcher's editor UI or editing its published bundles outside the
   documented patches.
 - Shipping prebuilt native binaries or model weights in git.
@@ -130,8 +121,6 @@ boundary is explicit, not so its architecture is documented here.
   a separate packaging decision.
 - macOS is **out of scope** (no package or CI); Android is a possible future
   target, not planned.
-- The intended-user groups in §2 are working assumptions; confirm them before UX
-  stories.
 - At the official launch the 1.x line **updates from `main`** (0.1.8 baseline,
   backstage, layout and release policy) and cuts 1.0.0; the detailed unification
   ADR belongs to that launch.
