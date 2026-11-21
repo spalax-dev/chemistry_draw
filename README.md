@@ -46,6 +46,14 @@
   tab keeps its own unsaved content and the set is restored on relaunch.
 - **Offline-first** — runs entirely on your machine.
 
+## Screenshots
+
+![Backstage](docs/assets/backstage.png)
+_Backstage: welcome, templates and recent structures._
+
+![Editor with two project tabs](docs/assets/editor-tabs.png)
+_The editor with two project tabs._
+
 ## Download
 
 Get the latest version from the
