@@ -119,15 +119,17 @@ produces artifacts; a release publishes the same installers CI validated.
 - **A database** — there is no multi-user data; files and a manifest are enough.
 - **Cloud accounts, telemetry and a hosted recognition API** — privacy and
   offline-first are product decisions, not missing features.
-- **A macOS package** — the model-root table names a macOS path, but no bundle or
-  CI job exists. Treat macOS support as undecided.
+- **A macOS package** — out of scope for now (no bundle or CI). Android is a
+  possible future target, not planned.
 - **OpenSSL** — the downloader uses rustls, so the sidecar does not link OpenSSL.
 
 ## 8. Pending decisions
 
-- **Ketcher 3.21 and Indigo 1.49.0 on 1.x** — parked prototypes exist on
-  `wip/e1-develop-based` and `phase-e1-ketcher-indigo`, but neither is adopted.
-  This is US-07 and needs the stable-release check plus a new patch decision.
+- **Ketcher 3.21 and Indigo 1.49.0 on 1.x** — US-07. Stable 3.21.0 does **not**
+  contain the upstream `parametrizeUrl` fix, so a narrowed patch remains; the
+  ReBond fix is upstream. The source-built multi-language `ketcher-react`
+  tarball needs its own ADR. Redo on `develop`; the parked
+  `wip/e1-develop-based`/`phase-e1-ketcher-indigo` prototypes are reference only.
 - **Documentation generator pinning** — the generator is wired through
   `scripts/docsgen.sh`, which prefers a local TypeDoc and falls back to a pinned
   `npx` version. Whether TypeDoc becomes a `devDependency` is a harness decision.
@@ -135,10 +137,12 @@ produces artifacts; a release publishes the same installers CI validated.
   49/206 ms, OCSR 1115/2156 ms) but no regression thresholds gate a release.
   This is US-02.
 - **Final identity** — name, icon, bundle identifier and app-data path are
-  provisional. Rebranding is US-05 and is breaking for installed app-data.
-- **Line unification** — the official launch will merge the 0.x and 1.x lines.
-  The base, the migration of users and the app-data consequence are undecided;
-  they need an ADR, not a silent merge.
+  provisional. Rebranding is US-05 and **deferred**; it is independent of model
+  delivery, and any app-data/path move is a separate packaging decision.
+- **Line unification** — at the official launch the 1.x line updates from
+  `main` (0.1.8 baseline, backstage, layout and release policy) and cuts 1.0.0.
+  The detailed migration and user/app-data consequences need a launch ADR, not a
+  silent merge.
 
 ## 9. Reverse ADRs for baked-in choices
 

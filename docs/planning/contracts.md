@@ -55,11 +55,11 @@ A contract without a consumer is not a contract; delete it.
 
 ### 3.1 Informational routes
 
-| Method | Path              | Response                                                                                                                                                                                                                               |
-| ------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/v2/info`        | `{ "Indigo": { "version": "1.46.0" }, "indigo_version": "1.46.0", "api_path": "http://127.0.0.1:9321/v2", "imago_versions": [] }`                                                                                                      |
-| GET    | `/v2/indigo/info` | Alias of `/v2/info`                                                                                                                                                                                                                    |
-| GET    | `/v2/health`      | `{ "status": "ok", "version": "0.1.7", "pid": 1234, "port": 9321, "uptime_seconds": 42, "indigo_version": "1.46.0", "onnxruntime_version": "onnxruntime api 1.31.x (ort 2.0.0-rc.15)", "models": ["image-classifier@Iagea/d21f4cb"] }` |
+| Method | Path              | Response                                                                                                                                                                                                                                                |
+| ------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/v2/info`        | `{ "Indigo": { "version": "<linked Indigo version>" }, "indigo_version": "<linked Indigo version>", "api_path": "http://127.0.0.1:9321/v2", "imago_versions": [] }`                                                                                     |
+| GET    | `/v2/indigo/info` | Alias of `/v2/info`                                                                                                                                                                                                                                     |
+| GET    | `/v2/health`      | `{ "status": "ok", "version": "0.1.7", "pid": 1234, "port": 9321, "uptime_seconds": 42, "indigo_version": "<linked Indigo version>", "onnxruntime_version": "onnxruntime api 1.31.x (ort 2.0.0-rc.15)", "models": ["image-classifier@Iagea/d21f4cb"] }` |
 
 `imago_versions` is a **synthetic capability list**, not an Imago build. It is
 `["local-ocsr"]` only when the manifest is usable and both models' required

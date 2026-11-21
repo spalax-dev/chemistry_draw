@@ -27,10 +27,14 @@
   - `.ket` save, Save As, Export, autosave and recovery contracts are unchanged
   - conflicts between `main`'s workflow and the 1.x recognition/model setup state are resolved deliberately, not by dropping either side
   - the affected planning docs and C4/sequence diagrams are updated
+  - the 0.1.8 baseline from `main` (version files, backstage/file workflow,
+    build layout, screenshots and release policy) is reconciled into 1.x
+    without importing Imago product code; the launch version remains 1.0.0
 - open questions:
   - is the backstage workflow required for the official launch, or can 1.x ship without it?
   - does this land before or after US-07 (Ketcher 3.21/Indigo 1.49), and should the backstage be ported onto 3.18 first?
   - which parts of the `main` work are UI-only and which depend on the E1 build?
+  - this is the 1.x update from `main`; no 0.x release is re-cut by it.
 
 ## US-02 — Make performance measurable and gated
 
@@ -77,20 +81,23 @@
   - which runners are available for a Windows/Linux VM test, and at what cost?
   - which recognition states are stable enough for automated tests (real model vs. fixture)?
 
-## US-05 — Rebrand the product
+## US-05 — Rebrand the product (deferred)
 
 - status: pending
+- deferred: **Not part of the 1.x launch; revisit later. It is independent of
+  model delivery: no model change is involved.**
 - value: The app ships with its final name, icon and identity instead of the provisional Chemistry Draw packaging.
 - acceptance:
   - name, icon set, bundle identifiers, installer metadata, app-data path, docs/site and About sources use the final identity
-  - the move of app-data is migrated or documented, including what happens to downloaded models and autosave snapshots
+  - if the app-data path changes, the autosave/packaging consequence is handled as a
+    separate decision; there is no model-delivery change
   - the change is marked breaking in the commit and release notes
   - packaging for every target is rebuilt and smoke-tested
   - attribution for Ketcher and the models remains correct
 - open questions:
   - what is the final name and bundle identifier?
-  - does the app-data path change? If so, do users keep their models or re-download 324 MB?
-  - is the rebranding bundled with the launch or shipped before it?
+  - does the app-data path change? If so, how are autosave snapshots handled?
+  - rebranding is deferred; do not bundle it with the 1.x launch without a new decision.
 
 ## US-06 — Improve logs and user feedback
 
@@ -110,18 +117,57 @@
 ## US-07 — Adopt Ketcher 3.21 and Indigo 1.49 on 1.x
 
 - status: pending
-- value: The 1.x line drops the `parametrizeUrl` patch, gains the upstream fixes and the language selector, and runs the same Indigo version on Linux and Windows. Prototypes exist on `wip/e1-develop-based` (do not merge) and `phase-e1-ketcher-indigo` (main-based E1); neither is adopted.
+- value: The 1.x line adopts stable Ketcher 3.21.0 and Indigo 1.49.0 with the narrowed `parametrizeUrl` patch (3.21.0 does **not** contain the upstream fix; the ReBond fix is upstream), plus the source-built multi-language `ketcher-react` tarball (committed) and its own ADR. Redo on `develop`; do not merge the parked main E1.
 - acceptance:
-  - `ketcher-core` and `ketcher-react` are on the stable 3.21 release, and the `parametrizeUrl` hunk is gone or reduced to the still-needed `ReBond` guard
-  - Indigo is pinned to 1.49.0 on Linux and Windows, and `/v2/info` reports 1.49.0 consistently
+  - `ketcher-core`/`ketcher-react` are exactly 3.21.0; `ketcher-react` comes from the committed vendor multi-language tarball; the 3.18 patch is replaced by a narrowed 3.21.0 `parametrizeUrl`-only patch (no ReBond hunk); the explicit Indigo port survives
+  - Indigo is pinned to `indigo-1.49.0` on Linux and Windows and `/v2/info` reports 1.49.0 consistently
   - the language selector works in the packaged app and does not regress the sidecar API base wiring
-  - the toolbar, dialog, option-store and recognition contracts still work on the new Ketcher, or the adaptations are documented
-  - the full harness, the Recognize/Indigo flows and the packaged smoke are green
+  - the toolbar, dialog, option-store and recognition contracts still work on 3.21, or the adaptations are documented
+  - the full harness, Recognize/Indigo flows and packaged smoke are green
 - open questions:
-  - is Ketcher 3.21 stable published, and does it include the `parametrizeUrl` fix?
-  - does 1.x adopt E1 by cherry-pick from `main`, or redo the upgrade on `develop`?
-  - does the parked `ketcher-react` tarball (a custom build) remain necessary, and would it need its own ADR?
-  - is the language selector persistence a product decision or a Ketcher default?
+  - the 3.21 stable release does not contain the `parametrizeUrl` fix; keep the narrowed patch until a stable 3.22 (ADR)
+  - the vendor `ketcher-react` tarball becomes a sanctioned source build with an ADR
+  - the parked `wip/e1-develop-based` prototype is reference only; redo the upgrade on `develop`
+
+## US-08 — Calibrate the filter/OCSR thresholds with real inputs
+
+- status: pending
+- value: The classifier threshold (`0.000089`) and the OCSR confidence gate (`0.901`) are provisional; a measured calibration on real inputs replaces guesswork with evidence.
+- acceptance:
+  - a labelled dataset with provenance/licensing is recorded; positives and negatives are both represented
+  - the classifier score distribution is measured and the threshold is chosen against a documented metric (not per-image tuning)
+  - the OCSR confidence gate is measured against real outputs and either retained or changed with evidence
+  - the chosen values are recorded in the manifest/catalog and docs; the frozen benchmark set stays separate from the calibration set
+  - a repeatable script/command and the before/after table are recorded
+- open questions:
+  - where does the labelled set come from, and what licence allows it?
+  - which metric decides the threshold (balanced accuracy, F1, false-negative cost)?
+  - is the OCSR gate informational only, or should it reject low-confidence results?
+
+## US-09 — Align the product docs and harness references
+
+- status: pending
+- value: Remove the v1 workflow references and stale statuses so the docs match the two-stage harness and the shipped product.
+- acceptance:
+  - `docs/DEVELOPMENT.md`, `docs/verification.md`, `docs/CHECKPOINTS.md` and `docs/conventions.md` stop referencing the deleted activity policy/reviewer and point to `docs/harness/`
+  - the README `CONTRIBUTING` link points to `docs/CONTRIBUTING.md`
+  - the ROADMAP B1/B2/B3 and architecture B3 status blocks match the completed work and clearly label the provisional/live numbers
+  - no dead commands or old workflow names remain in the product docs
+- open questions:
+  - which product docs stay as product references and which move to `docs/harness/`?
+  - should this land before US-01 so the 1.x docs are coherent?
+
+## US-10 — Fix packaging and tooling drift
+
+- status: pending
+- value: The packaged frontend and the tested frontend use the same Node/toolchain, and the Tauri capability set matches the in-app dialog policy.
+- acceptance:
+  - the packaging Dockerfile uses the same supported Node major as CI/docs (22), or the difference is justified and tested
+  - the unused `dialog:allow-message` capability is removed or its need is documented against the in-app dialog rule
+  - the package/clean-install gates are green after the change
+- open questions:
+  - does the builder image need a Node pin bump, or only the Dockerfile install step?
+  - is `dialog:allow-message` ever needed for a native flow?
 
 ---
 

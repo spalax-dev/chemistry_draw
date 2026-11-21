@@ -22,12 +22,14 @@ The foundation describes the **1.x integration line** (`develop`). The separate
 The technical shape is in [`architecture.md`](architecture.md); the promises
 between the parts are in [`contracts.md`](contracts.md).
 
-## 2. Who uses it
+## 2. Intended users (working assumptions)
 
 The evidence is the product itself: the installer category is `Education`, the
 README targets people drawing structures, and the document model is a
-word-processor-like one-document-per-window editor. The user groups are therefore
-stated as intended users, not as researched personas.
+word-processor-like one-document-per-window editor. The four groups below are
+**working assumptions**, not researched personas; “personas” here simply means
+the target user profiles. Confirm or replace them before UX stories rely on
+them.
 
 | Actor                          | Needs                                                                                                       |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -61,8 +63,8 @@ stated as intended users, not as researched personas.
   documented patches.
 - Shipping prebuilt native binaries or model weights in git.
 - Shipping Imago, OpenCV, Python, TensorFlow or a GPU inference path.
-- Supporting glibc below 2.36 or webkit2gtk below 4.1; no macOS package is built
-  today.
+- Supporting glibc below 2.36 or webkit2gtk below 4.1. **macOS is out of scope
+  for now** (no package or CI); Android is a possible future target, not planned.
 - Multi-molecule counting and reaction detection in the recognition UX. The
   filter cannot do either, and the copy must not promise it.
 
@@ -95,9 +97,10 @@ Rules:
 
 - Base a branch on its target line and merge it back to that line. E1 is
   `main`-only. A fix that both lines need is cherry-picked, not cross-merged.
-- The official launch will eventually **unify the lines** into one product. That
-  is a future decision with its own ADR; it is not decided here and no story
-  implements it yet.
+- At the official launch the **1.x line updates from `main`** — the 0.1.8
+  baseline, backstage/file workflow, build layout and release policy — and cuts
+  1.0.0. The detailed unification ADR is written at launch, not by a background
+  merge before it.
 
 This foundation models the 1.x line only. The 0.x line is recorded so the
 boundary is explicit, not so its architecture is documented here.
@@ -122,13 +125,13 @@ boundary is explicit, not so its architecture is documented here.
 ## 8. Open questions
 
 - The final product identity (name, icon, bundle identifier, app-data path) is
-  provisional and is US-05. A rename moves the model root and can force a
-  re-download; that consequence needs a decision before the story starts.
-- macOS is mentioned in the model-root table but no macOS package or CI job
-  exists. Whether the 1.x line supports macOS is undecided.
-- The profile of the intended user (student vs. professional chemist) is inferred
-  from the product, not from research. If it changes the UX priorities, record it
-  as a decision rather than let it drift.
-- The line unification at launch has no design yet: which line is the base, how
-  the backstage/file workflow meets the ML toolbar, and what happens to 0.x
-  users. It is a future ADR, not a hidden merge.
+  provisional and is **US-05, deferred**; it is independent of model delivery
+  and no model change is involved. If the identity/app-data path changes, that is
+  a separate packaging decision.
+- macOS is **out of scope** (no package or CI); Android is a possible future
+  target, not planned.
+- The intended-user groups in §2 are working assumptions; confirm them before UX
+  stories.
+- At the official launch the 1.x line **updates from `main`** (0.1.8 baseline,
+  backstage, layout and release policy) and cuts 1.0.0; the detailed unification
+  ADR belongs to that launch.
