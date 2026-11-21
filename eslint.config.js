@@ -9,10 +9,9 @@ export default tseslint.config(
     // Generated or non-JS/TS trees.
     ignores: [
       "dist",
-      "dist-packages",
+      "build",
       "node_modules",
       "target",
-      "build-libs",
       ".pnpm-store",
       "public",
       "src-tauri/gen",

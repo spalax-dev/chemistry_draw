@@ -1158,7 +1158,7 @@ Platform settings live in `src-tauri/tauri.linux.conf.json` and
 common (Tauri merges the platform file at build time).
 
 Linux: `task packages` runs everything inside `chemistry-builder` and writes to
-`dist-packages/`:
+`build/packages/`:
 
 - `.deb` / `.rpm`: Tauri bundler (`tauri build --bundles deb,rpm`).
 - AppImage: **custom AppDir** assembled by `scripts/make-appimage.sh` and packed

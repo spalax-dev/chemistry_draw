@@ -65,7 +65,7 @@ not contain `test` or `implement` tasks.
   task breakdown.
 - If unsure, check `docs/` before inventing. If a tool misbehaves, log it in
   `progress/current.md` and stop — no workarounds.
-- Never commit `src-tauri/lib/`, `target/`, `dist/`, `dist-packages/` or any
+- Never commit `src-tauri/lib/`, `target/`, `dist/`, `build/` or any
   `.so` file.
 - **Documents are `.ket`**: Save/Save As write `.ket` only; Export is the sole
   route to Molfile, SMILES, InChI, SVG and PNG and never changes the document

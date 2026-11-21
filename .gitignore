@@ -12,8 +12,8 @@ dist
 dist-ssr
 *.local
 .pnpm-store/
-# locally built .deb/.rpm/.AppImage
-dist-packages/
+# Consolidated generated-artifact root: packages, appimage, verify, libs
+build/
 
 # Editor directories and files
 .vscode/*
@@ -31,8 +31,6 @@ test_*.png
 *_result.mol
 
 *.AppImage
-build-library/
-build-libs/
 
 # Native Indigo/Imago libs are built, not vendored: `task libs` (or the Docker
 # builder) generates them. Packages ship them; they are never committed.
@@ -41,6 +39,10 @@ src-tauri/lib/linux-x86_64/
 # Windows runtime comes from scripts/fetch-windows-libs.ps1 (pinned Indigo
 # 1.46.0). DLLs and generated MSVC import libraries are never vendored.
 src-tauri/lib/windows-x86_64/
+
+# Runtime/dev data (models, ONNX runtime) — not build outputs
+models/
+.ort/
 
 # Local session state (kept on disk, not tracked)
 activities.json

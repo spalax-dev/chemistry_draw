@@ -134,7 +134,7 @@ Rules:
   `service/`.
 - New native call → `ffi/` only.
 - New packaging behaviour → a script under `scripts/`, never inline in CI YAML.
-- Do not commit `src-tauri/lib/`, `target/`, `dist/`, `dist-packages/`.
+- Do not commit `src-tauri/lib/`, `target/`, `dist/`, `build/`.
 
 ---
 

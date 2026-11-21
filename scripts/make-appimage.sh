@@ -16,7 +16,7 @@
 # Usage: bash scripts/make-appimage.sh [out-dir]
 set -euo pipefail
 
-OUT_DIR="${1:-dist-packages}"
+OUT_DIR="${1:-build/packages}"
 VERSION="${VERSION:-$(node -p "require('./src-tauri/tauri.conf.json').version")}"
 APPDIR="${APPDIR:-/tmp/ChemistryDraw.AppDir}"
 APPIMAGETOOL="${APPIMAGETOOL:-appimagetool}"

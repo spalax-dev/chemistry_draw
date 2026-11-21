@@ -33,7 +33,7 @@ runs it must also be green.
 Packaging or dependency changes additionally require:
 
 10. `task packages` — builds `.deb`, `.rpm` and the AppImage.
-11. `dpkg-deb -I dist-packages/*.deb` and `rpm -qpR dist-packages/*.rpm` —
+11. `dpkg-deb -I build/packages/*.deb` and `rpm -qpR build/packages/*.rpm` —
     dependency metadata sane.
 12. `ldd` on the sidecar inside the package — no `not found`, no `libstdc++`.
 

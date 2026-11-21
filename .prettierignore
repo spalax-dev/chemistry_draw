@@ -1,9 +1,8 @@
 # Generated or vendored content
 node_modules/
 dist/
-dist-packages/
+build/
 target/
-build-libs/
 src-tauri/gen/
 src-tauri/target/
 src-tauri/lib/

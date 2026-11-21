@@ -107,6 +107,30 @@ it works. The host libraries produce identical output without the warnings.
 - `libstdc++` and `libgcc_s` are deliberately **not** shipped: the target
   distro's runtime is used.
 
+## Build outputs
+
+Phase 1 consolidates build artifacts under `build/`:
+
+| Path             | Contents                                                |
+| ---------------- | ------------------------------------------------------- |
+| `build/packages` | `.deb`, `.rpm` and AppImage produced by `task packages` |
+| `build/appimage` | AppImage extraction scratch space                       |
+| `build/verify`   | `.deb`/`.rpm` extraction used for payload checks        |
+| `build/libs`     | Native Indigo/Imago build workspace used by `task libs` |
+
+`target/` (Cargo) and `dist/` (Vite/frontend) stay tool-owned and keep their
+current locations; consolidating them under `build/` is Phase 2 (E4). `models/`
+and `.ort/` are runtime/dev data, not build outputs.
+
+To inspect an AppImage, extract it under `build/appimage` instead of the
+repository root:
+
+```bash
+mkdir -p build/appimage
+(cd build/appimage && /path/to/chemistry-draw_*.AppImage --appimage-extract)
+# or: unsquashfs -d build/appimage/squashfs-root /path/to/chemistry-draw_*.AppImage
+```
+
 ## Windows 10/11 (x86_64)
 
 Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker

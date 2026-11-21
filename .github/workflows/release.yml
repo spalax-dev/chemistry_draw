@@ -81,13 +81,13 @@ jobs:
         run: bash scripts/build-appimage.sh
 
       - name: List artifacts
-        run: ls -lh dist-packages/
+        run: ls -lh build/packages/
 
       - name: Verify package metadata
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq rpm
-          deb=$(ls dist-packages/*.deb | head -1)
-          rpmf=$(ls dist-packages/*.rpm | head -1)
+          deb=$(ls build/packages/*.deb | head -1)
+          rpmf=$(ls build/packages/*.rpm | head -1)
           echo "== $deb =="
           dpkg-deb -I "$deb"
           echo "== $rpmf =="
@@ -103,16 +103,16 @@ jobs:
           tag_name: ${{ github.event.release.tag_name || needs.release-please.outputs.tag }}
           fail_on_unmatched_files: false
           files: |
-            dist-packages/*.deb
-            dist-packages/*.rpm
-            dist-packages/*.AppImage
+            build/packages/*.deb
+            build/packages/*.rpm
+            build/packages/*.AppImage
 
       - name: Upload workflow artifacts (manual runs)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: chemistry-draw-packages
-          path: dist-packages/*
+          path: build/packages/*
           if-no-files-found: error
 
   windows-packages:

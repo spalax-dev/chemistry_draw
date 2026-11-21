@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
 COPY scripts/build-libs.sh /tmp/build-libs.sh
 RUN bash /tmp/build-libs.sh && \
     mkdir -p /opt/chemistry/libs && \
-    cp -a build-libs/out/* /opt/chemistry/libs/ && \
-    rm -rf build-libs /tmp/indigo /tmp/imago /tmp/build-libs.sh
+    cp -a build/libs/out/* /opt/chemistry/libs/ && \
+    rm -rf build /tmp/indigo /tmp/imago /tmp/build-libs.sh
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     --default-toolchain stable --profile minimal
@@ -30,7 +30,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     rm -rf /var/lib/apt/lists/*
 
 # rpmbuild needs `cpio` to build the payload and `zstd` for compression.
-# Kept as a separate layer so the heavy build-libs layer above stays cached.
+# Kept as a separate layer so the heavy build/libs layer above stays cached.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends cpio zstd && \
     rm -rf /var/lib/apt/lists/*
