@@ -275,6 +275,10 @@ changes are dragged in at E2/E4, not merged ad hoc.
 
 ### E1 — Ketcher and Indigo to the latest stable release
 
+> **Line:** E1 is a **0.x maintenance activity on `main`**. It is not merged
+> into `develop`; the 1.x path adopts the Ketcher/Indigo upgrade in its own
+> integration (E4).
+
 Upgrade `ketcher-core`/`ketcher-react` to the latest **stable** release
 (3.21.x when it ships; 3.21.0-rc.3 is beta today), remove the local
 `parametrizeUrl` patch, enable the language selector, and pin the native

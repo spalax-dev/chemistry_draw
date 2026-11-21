@@ -32,6 +32,30 @@ not contain `test` or `implement` tasks.
 5. Delegate ONE task from ONE pending activity. **Never work directly — always
    delegate.**
 
+## Branch model (mandatory)
+
+Chemistry Draw has two maintained lines; choose the target line before creating
+any branch or worktree:
+
+- **`main` — 0.x maintenance/support.** The line users run today: bug fixes,
+  maintenance upgrades (including the Ketcher/Indigo/language E1) and releases.
+  Do not add the ML/1.x work to `main`.
+- **`develop` — 1.x integration.** Imago removal, ONNX/models/OCSR, NuGet and
+  the 1.x path. It is not the 0.x support line.
+
+Rules:
+
+- Create the activity's branch/worktree from the **target line**: `main` for a
+  0.x maintenance activity, `develop` for 1.x. **Never** base a main-targeted
+  activity on `develop`.
+- Merge the activity back to the same line. Do not cross-merge
+  `main`/`develop` unless the user explicitly asks; port an individual fix with
+  a cherry-pick and preserve each line's content.
+- Record the base branch in `progress/current.md` and the activity before
+  starting.
+- Reference: the build-layout activity was based on `main`, merged to `main`,
+  then ported to `develop`. E1 is main-only; it is not merged into `develop`.
+
 ## Repo map
 
 | Path                                          | When read                |

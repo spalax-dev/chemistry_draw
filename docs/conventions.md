@@ -343,6 +343,15 @@ disk glyph.
 
 ## 7. Commits and releases
 
+### Branch model
+
+- `main` is the 0.x maintenance/support line; `develop` is the 1.x
+  integration line (Imago removal, ONNX/models/OCSR/NuGet).
+- Base each activity branch/worktree on its target line: `main` for 0.x,
+  `develop` for 1.x. Never base a main-targeted activity on develop.
+- Merge back to the same line; do not cross-merge unless explicitly asked.
+  Port individual fixes with a cherry-pick and preserve each line.
+
 - **Conventional Commits** are mandatory. See
   **[commit-policy.md](commit-policy.md)** for the full rule.
 - Use `feat`/`fix` (and breaking markers) **only for product changes** that
