@@ -400,7 +400,9 @@ ADR 0009. The rules that must not be broken are:
 - Opening a `.mol`, `.smi`, `.sdf`, `.rxn` or other structure format imports it
   through `ketcher.setMolecule`; the tab keeps the source base name, has no
   backing path (`path: null`) and starts **clean**. Its first Save is a Save As
-  prefilled `<name>.ket`. Open… accepts `.ket` only and adopts the path.
+  prefilled `<name>.ket`. Open… accepts `.ket` only and adopts the path. The
+  imported structure is serialized back to KET for its snapshot, so it restores
+  on the next launch.
 - Export images use `ketcher.generateImage(ket, { outputFormat })`;
   `exportImage` is not used because Ketcher 3.18 supports only SVG there.
 - The window title and dialog copy use the active tab's title: the base name
@@ -447,13 +449,23 @@ ADR 0009. The rules that must not be broken are:
     More templates, and the Recent structures table.
   - **Open** — the same Recent structures table with Remove, then the open tabs.
   - **Models** — 1.x keeps the real Models dialog and toolbar entry as the model
-    setup surface; the rail never renders a fake model list or a mock counter.
+    setup surface; the rail button calls the App's `onOpenModels` and raises the
+    real dialog above the overlay, and it never renders a fake model list or a
+    mock counter.
   - **About** — app/Ketcher/React versions, Indigo version and sidecar port,
     platform, runtime and license links.
 - **File menu:** New, Open…, Import…, Save, Save As…, Export… and up to 10
   recent documents. Ketcher's native Save As is hidden (it defaults to Molfile);
   native Open stays visible as "load into the current canvas". The app's
-  document shortcuts are capture-phase and stop Ketcher from seeing them.
+  document shortcuts are capture-phase and stop Ketcher from seeing them:
+  `Ctrl+S`, `Ctrl+Shift+S`, `Ctrl+O`, `Ctrl+N`, `Ctrl+W`, `Ctrl+T` and
+  `Ctrl+Tab`. `Ctrl+W` closes the active tab and `Ctrl+Tab` cycles the strip.
+  A matched combination is always swallowed; its command is skipped while a
+  dialog, the backstage, the Models setup or a running save owns the app.
+- **Command surface:** the File menu is complete. The 1.x toolbar keeps Save,
+  New, Export and Models as a second entry point to the same tab-aware commands;
+  Models opens the real setup dialog. Errors use the in-app `ErrorDialog` and
+  `NoticeDialog`, never a native message box.
 - **Recent documents:** `localStorage["chemistry-draw.recent"]`, absolute `.ket`
   paths, newest first, deduplicated and capped at 10. Recorded on a successful
   Open…, Save and Save As; a missing entry is pruned with an in-app error and

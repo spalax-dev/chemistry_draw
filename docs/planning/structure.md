@@ -36,7 +36,7 @@
 ├── public/
 │   └── raphael.min.js
 ├── src/                          frontend source and colocated tests
-│   ├── App.tsx                   composition: provider, backstage, tabs, dialogs, polling
+│   ├── App.tsx                   composition: startup, backstage, tabs, file commands, dialogs
 │   ├── main.tsx
 │   ├── backstage.ts              backstage section model and default
 │   ├── tabs.ts                   pure tab model, titles, close-guard decisions
@@ -50,13 +50,13 @@
 │   ├── templates.ts              legacy curated descriptors (fallback only)
 │   ├── document.ts               pure document state and save/export mapping
 │   ├── autosave.ts               per-tab scheduling and recovery decision
-│   ├── autosaveStore.ts          app-data snapshot I/O
+│   ├── autosaveStore.ts          single-document snapshot I/O (legacy; no caller after ADR 0010)
 │   ├── saveRoute.ts              blob routing by extension
 │   ├── fileSaver.ts              file-saver alias target
 │   ├── logging.ts                console/error forwarding to the host log
 │   ├── recognizeErrors.ts        recognition error unwrapping and copy
 │   ├── modelSetup.ts             model status, actions and HTTP adapters
-│   ├── ketcherOptions.ts         in-place Ketcher option-store adapter
+│   ├── ketcherOptions.ts         Ketcher runtime seams: provider, API base, library, options
 │   ├── overrides.css             hides Ketcher's unused version label
 │   ├── ui/                       presentational components and tokens
 │   │   ├── Backstage.tsx         backstage overlay, rail and sections
@@ -64,7 +64,7 @@
 │   │   ├── FileMenu.tsx          File popup, recent section and keyboard
 │   │   ├── HomeButton.tsx        strip button that opens the backstage
 │   │   ├── backstage/            Welcome/Open/Models/About sections, cards, table
-│   │   └── ...                   Dialog, Button, DocumentDialogs, ModelSetupDialog
+│   │   └── ...                   Dialog, Button, DocumentDialogs, ModelSetupDialog (+ hook)
 │   └── *.test.ts                 Vitest suites, next to their module
 ├── src-tauri/
 │   ├── src/

@@ -160,8 +160,10 @@ Blank canvas, Import structure…, Open project…, four cards sampled from Ketc
 real Structure Library (with Indigo-rendered previews) and the Recent structures
 table. Open shows the same table with Remove plus the open tabs. About reads
 `package.json` and `/v2/info`. The Models rail entry never shows a fake model
-list; 1.x keeps the real Models dialog and toolbar entry as the model setup
-surface (ADR 0009). The backstage never mounts a second editor, never saves and
+list: its button calls the App's `onOpenModels` and raises the real
+`ModelSetupDialog` above the overlay while the backstage stays behind it. 1.x
+keeps the real Models dialog and toolbar entry as the model setup surface
+(ADR 0009, ADR 0010). The backstage never mounts a second editor, never saves and
 never discards work.
 
 **Component boundaries.** The port keeps the UI presentational and the state in
@@ -169,9 +171,9 @@ the pure modules: `src/backstage.ts`, `src/fileMenu.ts`, `src/tabs.ts`,
 `src/recent*.ts` and `src/templateLibrary.ts` own the models;
 `src/ui/Backstage.tsx`, `src/ui/TabStrip.tsx`, `src/ui/FileMenu.tsx` and
 `src/ui/backstage/` render them and report events; `src/App.tsx` owns the
-commands and the I/O. The Models pane accepts an optional `onOpenModels` handler,
-so the 1.x integration can route that rail entry to the real model dialog without
-adding a second setup surface or a fake list.
+commands and the I/O. The Models pane's `onOpenModels` handler is wired in
+`App.tsx` to the real model dialog, so there is no second setup surface or fake
+list (ADR 0010).
 
 **Tabs.** A tab is file state (`id`, `name`, `path`, committed `ket`, `dirty`)
 over the single editor. Switching serializes the outgoing tab with
@@ -181,7 +183,9 @@ the target dirty. `src/tabs.ts` owns the pure model; `src/tabStore.ts` owns the
 snapshot I/O. The title precedence is the base name of `path`, then `name`, then
 `Untitled`; dirty tabs show a dot in the strip and `*` in the window title. A
 `.ket` path belongs to at most one tab; Open… and a recent entry that target an
-open path activate that tab instead of creating a duplicate.
+open path activate that tab instead of creating a duplicate. An imported
+structure is serialized back to KET after `setMolecule`, so its snapshot is a
+real `.ket` document and restores on the next launch.
 
 **File menu.** All document commands live in a **File** menu at the left of the
 tab strip: New, Open… (`.ket`), Import… (`mol`, `smi`, `inchi`, `sdf`, `rxn`),
@@ -193,9 +197,20 @@ an untouched empty tab or opens a new one and never prompts; Open… reuses an
 untouched empty tab or opens a new one and never prompts for a dirty tab.
 Imported structures have `path: null` and a clean dirty flag; their first Save is
 a Save As. Ketcher's native Save As is hidden because it defaults to Molfile;
-native Open stays visible as the "load into the current canvas" shortcut. The
-app registers its document shortcuts in the capture phase so Ketcher never sees
-them.
+native Open stays visible as the "load into the current canvas" shortcut.
+
+**Command surface and shortcuts.** The File menu is the complete command
+surface. The 1.x top toolbar keeps Save, New, Export and Models as a second
+entry point to the same commands: the first three dispatch the active-tab
+command and Models opens the real setup dialog, so no rule is duplicated
+(ADR 0010). The app registers its document shortcuts in the capture phase so
+Ketcher never sees them: `Ctrl+S`, `Ctrl+Shift+S`, `Ctrl+O`, `Ctrl+N`, `Ctrl+W`,
+`Ctrl+T` and `Ctrl+Tab`. `Ctrl+W` closes the active tab, `Ctrl+T` is New and
+`Ctrl+Tab` cycles the strip. A matched combination is always swallowed; the
+command itself is skipped while the backstage, Models, Export, a close prompt,
+an error, a notice or a running save owns the app, and the File popup is
+dismissed first. Errors use the in-app `ErrorDialog`/`NoticeDialog`, never a
+native message box (`docs/planning/contracts.md` §5).
 
 **Save, close and recovery.** Save/Export route through the aliased `file-saver`
 and Tauri's fs plugin (`docs/planning/contracts.md` §5). Autosave writes the
@@ -243,8 +258,11 @@ The host chooses an unused preferred port, spawns the sidecar with `INDIGO_PORT`
 watches stdout for `INDIGO_PORT=<actual>`; the webview polls `GET /v2/info`
 until it answers and then mounts/updates Ketcher. The backstage renders from the
 first frame, replacing the loading splash, while the provider resolves and the
-tab set restores underneath; readiness does not dismiss it. A stdin-EOF watchdog
-inside the sidecar kills it if the host dies without a clean shutdown.
+tab set restores underneath; readiness does not dismiss it. On a clean install
+the model status read marks the setup dialog for one auto-open after paint; the
+dialog appears above the backstage, which stays behind it, and closing it returns
+to Welcome. A stdin-EOF watchdog inside the sidecar kills it if the host dies
+without a clean shutdown.
 
 ## 6. Cross-cutting concerns
 
@@ -266,15 +284,16 @@ Architecture decisions live in `docs/planning/adr/`. This document describes the
 current state of the 1.x line; the ADRs record why it changed. The decisions that
 shape this architecture are:
 
-| ADR                                                    | Decision                                                              |
-| ------------------------------------------------------ | --------------------------------------------------------------------- |
-| [0002](adr/0002-remove-imago-and-recognize-locally.md) | Remove Imago and recognize through a local ONNX pipeline              |
-| [0003](adr/0003-dynamic-onnx-runtime-loading.md)       | Load ONNX Runtime dynamically and ship the runtime, not weights       |
-| [0004](adr/0004-hugging-face-model-delivery.md)        | Deliver models from Hugging Face on demand (B3)                       |
-| [0005](adr/0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm, never `node_modules`          |
-| [0006](adr/0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a calibrated parity gate               |
-| [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                         |
-| [0009](adr/0009-update-1x-from-main-baseline.md)       | Update 1.x from the `main` 0.1.8 baseline, keeping the 1.x ML surface |
+| ADR                                                    | Decision                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [0002](adr/0002-remove-imago-and-recognize-locally.md) | Remove Imago and recognize through a local ONNX pipeline                  |
+| [0003](adr/0003-dynamic-onnx-runtime-loading.md)       | Load ONNX Runtime dynamically and ship the runtime, not weights           |
+| [0004](adr/0004-hugging-face-model-delivery.md)        | Deliver models from Hugging Face on demand (B3)                           |
+| [0005](adr/0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm, never `node_modules`              |
+| [0006](adr/0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a calibrated parity gate                   |
+| [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                             |
+| [0009](adr/0009-update-1x-from-main-baseline.md)       | Update 1.x from the `main` 0.1.8 baseline, keeping the 1.x ML surface     |
+| [0010](adr/0010-app-integration-and-model-surface.md)  | One command path, two entry points: workflow from `main`, Models from 1.x |
 
 If a story changes the architecture, it must update this document and add an ADR
 in the same activity.

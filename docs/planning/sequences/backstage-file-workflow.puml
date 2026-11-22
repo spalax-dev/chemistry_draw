@@ -90,10 +90,21 @@ opt Discard
 end
 
 == Model setup is not replaced ==
+user -> backstage: Models rail entry
+backstage -> app: onOpenModels()
+app -> app: open the real ModelSetupDialog above the overlay
 note right of app
   The real Models toolbar entry and dialog remain the model setup
-  surface. The backstage Models rail entry must route to it or be
-  omitted; it never shows a fake model list (ADR 0009).
+  surface. The rail never shows a fake model list (ADR 0009, 0010).
+  The backstage stays behind the dialog and returns when it closes.
+end note
+
+== One command path ==
+note right of app
+  The File menu and the Ketcher toolbar (Save, New, Export, Models)
+  dispatch the same active-tab commands. Ctrl+S, Ctrl+Shift+S, Ctrl+O,
+  Ctrl+N, Ctrl+W, Ctrl+T and Ctrl+Tab are capture-phase and never
+  reach Ketcher; dialogs and the backstage consume the command.
 end note
 
 @enduml

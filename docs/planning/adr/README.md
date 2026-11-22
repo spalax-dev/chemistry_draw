@@ -16,17 +16,18 @@
 
 ## Index
 
-| ADR                                                | Title                                        | Status   | Date       |
-| -------------------------------------------------- | -------------------------------------------- | -------- | ---------- |
-| [0001](0001-record-architecture-decisions.md)      | Record architecture decisions                | accepted | 2026-11-21 |
-| [0002](0002-remove-imago-and-recognize-locally.md) | Remove Imago and recognize locally           | accepted | 2026-11-21 |
-| [0003](0003-dynamic-onnx-runtime-loading.md)       | Load ONNX Runtime dynamically                | accepted | 2026-11-21 |
-| [0004](0004-hugging-face-model-delivery.md)        | Deliver models from Hugging Face on demand   | accepted | 2026-11-21 |
-| [0005](0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm       | accepted | 2026-11-21 |
-| [0006](0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a parity gate | accepted | 2026-11-21 |
-| [0007](0007-two-line-repository-model.md)          | Maintain two repository lines                | accepted | 2026-11-21 |
-| [0008](0008-adopt-two-stage-harness.md)            | Adopt the two-stage harness                  | accepted | 2026-11-21 |
-| [0009](0009-update-1x-from-main-baseline.md)       | Update 1.x from the main 0.1.8 baseline      | accepted | 2026-11-21 |
+| ADR                                                | Title                                           | Status   | Date       |
+| -------------------------------------------------- | ----------------------------------------------- | -------- | ---------- |
+| [0001](0001-record-architecture-decisions.md)      | Record architecture decisions                   | accepted | 2026-11-21 |
+| [0002](0002-remove-imago-and-recognize-locally.md) | Remove Imago and recognize locally              | accepted | 2026-11-21 |
+| [0003](0003-dynamic-onnx-runtime-loading.md)       | Load ONNX Runtime dynamically                   | accepted | 2026-11-21 |
+| [0004](0004-hugging-face-model-delivery.md)        | Deliver models from Hugging Face on demand      | accepted | 2026-11-21 |
+| [0005](0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm          | accepted | 2026-11-21 |
+| [0006](0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a parity gate    | accepted | 2026-11-21 |
+| [0007](0007-two-line-repository-model.md)          | Maintain two repository lines                   | accepted | 2026-11-21 |
+| [0008](0008-adopt-two-stage-harness.md)            | Adopt the two-stage harness                     | accepted | 2026-11-21 |
+| [0009](0009-update-1x-from-main-baseline.md)       | Update 1.x from the main 0.1.8 baseline         | accepted | 2026-11-21 |
+| [0010](0010-app-integration-and-model-surface.md)  | Integrate the backstage with the 1.x ML surface | accepted | 2026-11-21 |
 
 ADRs 0002–0007 were reconstructed from the code, the manifests and the existing
 documentation on 2026-11-21. Their dates record the reconstruction, not the
