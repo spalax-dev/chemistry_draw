@@ -576,8 +576,8 @@ re-review.
   AppImage 20,994,552 B; payload has `indigo-server`, `imago-worker`,
   `libimago.so`, Indigo 1.49 and OpenCV 4.6; no ONNX/models. The user verified
   the language selector/persistence and Recognize on 2026-11-22.
-- backlog added: **US-L10N** (localize the app chrome, last), **BUG-E1-H**
-  (Add/Remove Explicit Hydrogens: the sidecar lacks
-  `POST /v2/indigo/convert_explicit_hydrogens`), **DOC-E1-STEREO**
-  (stereochemistry guide/test).
+- backlog added: **US-L10N** (localize the app chrome, last), **BUG-EXP**
+  (export audit), **BUG-E1-H** (Add/Remove Explicit Hydrogens: the sidecar
+  lacks `POST /v2/indigo/convert_explicit_hydrogens`). **DOC-E1-STEREO** was
+  dropped at the user's request.
 - merged into `main` at `9daa4e0` (no push or tag); NSIS is CI-deferred.

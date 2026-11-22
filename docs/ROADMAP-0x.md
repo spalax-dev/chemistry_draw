@@ -85,19 +85,3 @@
   - use `indigoFoldUnfoldHydrogens` directly or count + `Fold`/`Unfold`;
   - should the endpoint be idempotent per call (toggle) or take an explicit
     `mode`?
-
-## DOC-E1-STEREO — Stereochemistry guide and verification
-
-- status: pending
-- value: the stereochemistry tools exist and the sidecar CIP endpoint works,
-  but there is no worked example and users cannot tell how to test them.
-- acceptance:
-  - a guide: draw a real stereocenter (four different substituents), add a
-    wedge/hash stereo bond, run **Calculate CIP**, and read the R/S labels
-  - a committed fixture (lactic acid or a F/Cl/Br/I center) and a sidecar
-    `/v2/indigo/calculate_cip` test
-  - a manual checklist; explain that identical substituents produce no
-    stereocenter and no CIP label
-- open questions:
-  - which surface is canonical (the stereochemistry panel vs the CIP action);
-  - do we document the wedge/hash semantics separately from CIP?
