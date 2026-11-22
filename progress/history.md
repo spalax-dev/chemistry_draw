@@ -580,4 +580,4 @@ re-review.
   (Add/Remove Explicit Hydrogens: the sidecar lacks
   `POST /v2/indigo/convert_explicit_hydrogens`), **DOC-E1-STEREO**
   (stereochemistry guide/test).
-- pending: merge to `main` (user approval); NSIS is CI-deferred.
+- merged into `main` at `9daa4e0` (no push or tag); NSIS is CI-deferred.
