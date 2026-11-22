@@ -19,7 +19,7 @@
 
 ## US-01 — Bring the backstage and file workflow into 1.x
 
-- status: awaiting-approval
+- status: done
 - value: Users of the 1.x line get the welcome/backstage experience from `main` (real templates, recent structures, project opens, a File menu and editor tabs) on top of the ML/B3 toolbar, instead of a bare editor.
 - acceptance:
   - the backstage view, real templates, recent structures, project opens, File menu, tabs and close/discard flow work on the 1.x line

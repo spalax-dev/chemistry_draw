@@ -822,3 +822,33 @@ Consolidate the project's generated artifacts under one ignored root.
 - at: 2026-11-22T00:06:46.820Z
 - approved by: Jorge
 - planning is closed: it cannot be re-entered.
+
+## US-01 — Bring the backstage and file workflow into 1.x
+
+- approved by: Jorge at 2026-11-22T03:55:32.396Z
+
+### US-01 close evidence
+
+- branch: `us-01-main-update`, based on `develop`; merged only after approval.
+- commits: `557d6d2`, `0166525`, `5f61fbb`, `2907610`, `3c47063`, `28e57bf`,
+  `cf16f8d`, `4b232cb`. Net diff vs `develop`: +8,096 lines across 72 files.
+- baseline: version carriers and release-please manifest reconciled to `0.1.8`;
+  the launch stays `1.0.0` and no 0.x release is re-cut.
+- workflow: backstage/Welcome, real templates, recent structures, Open vs Import,
+  File menu, tabs, close guard and per-tab recovery. One command path for
+  Save/New/Export/Models; the real Models dialog is the backstage entry.
+- preserved: ONNX classifier + OCSR, `/v2/imago/uploads` compatibility shim,
+  model download/verify/repair, `.ket` save/export and the sidecar `/v2`
+  contract. ADR 0009 and ADR 0010 record the decisions.
+- cleanup: removed the single-document recovery path (`autosaveStore.ts`,
+  `shouldOfferRecovery`); `tabStore` is the only snapshot writer/reader.
+- gates: full harness green (format, lint, type, structure, docs, test, build,
+  docsgen, docblocks); 477 Vitest, 112 contract tests, sidecar cargo suite
+  including the model-gated OCSR test.
+- packages: `.deb` 29,696,028 B, `.rpm` 29,826,093 B, AppImage 28,023,288 B;
+  payload and sidecar `/v2` smoke checked.
+- pending/manual: packaged GUI checklist in `docs/harness/verification.md` §10;
+  the user verified the app and approved.
+- known performance: cold OCSR pair load ~92 s on this machine; recorded in
+  US-02 for measurement and a warm-up/session-reuse decision.
+- approval: Jorge, 2026-11-22T03:55:32.396Z.
