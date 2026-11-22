@@ -27,6 +27,40 @@
   - whether sidecar error text is translated in the app or mapped from codes;
   - do we translate the About/licence text or keep the legal copy in English?
 
+## BUG-EXP — Export formats error or write the wrong file
+
+- status: pending
+- value: Export is the only route to Molfile/SMILES/InChI/SVG/PNG; a failed or
+  wrong export loses a deliverable the user cannot recover from the `.ket`.
+- scope: `main` (0.x), Ketcher 3.21 + Indigo 1.49.
+- acceptance:
+  - reproduce every format from (a) benzene, (b) an imported `.mol`/`.smi`,
+    (c) an untitled document and (d) a reaction (if the format is supported)
+  - each export writes a non-empty file with the right extension and MIME:
+    V2000/V3000 open in Indigo/Ketcher, SMILES/InChI are canonical, SVG/PNG
+    render at the expected size
+  - Export never changes the tab's path, format or dirty flag; the file name
+    follows the tab precedence; the `.ket` is never overwritten
+  - cancel writes nothing; an error names the format and is actionable
+  - the Tauri save dialog can write to any path the app supports (the current
+    capability scope is `$HOME/**` and `$APPDATA/**`; a user-chosen path
+    outside it must fail with a clear message or be supported deliberately)
+  - tests: `document.ts` export requests/names, a fake-Ketcher integration test
+    for each source, plus the packaged manual checklist
+- known suspects:
+  - `getMolfile` throws for reaction arrows (expected; decide whether to offer
+    RXN/SDF/RXN V3000 instead)
+  - SVG goes through `writeTextFile` and PNG through `writeFile`; check the
+    Blob MIME, extension and save-dialog filter
+  - Ketcher 3.21 API: `getSmiles(isExtended)`, `getInchi(withAuxInfo)`,
+    `getMolfile(format)`, `generateImage(ket, { outputFormat })`
+  - server mode must be applied before export (the option-store adapter)
+- open questions:
+  - which format(s) fail, and what is the exact error/console output?
+  - defaults: V2000 vs V3000, InChI with/without AuxInfo, SMILES extended?
+  - is reaction export in scope (RXN/SDF) or explicitly out?
+  - is the failure format-specific or the Tauri save path/scope?
+
 ## BUG-E1-H — Add/Remove Explicit Hydrogens fails
 
 - status: pending
