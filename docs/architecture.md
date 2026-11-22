@@ -22,15 +22,15 @@ Instead of Ketcher's WASM backend, the app ships a **native REST sidecar** that
 implements the Indigo v2 HTTP API on top of EPAM's C++ libraries. This is a
 community packaging: it is not an official EPAM product.
 
-| Piece             | Technology                                                      |
-| ----------------- | --------------------------------------------------------------- |
-| Desktop shell     | Tauri v2 (Rust)                                                 |
-| Frontend          | React 18 + TypeScript + Vite                                    |
-| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §10)      |
-| Chemistry backend | `indigo-server` sidecar: Rust + axum                            |
-| Native chemistry  | `libindigo`, `libindigo-renderer`, `libimago` (FFI)             |
-| OCR worker        | `imago-worker` child process (Linux only)                       |
-| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS |
+| Piece             | Technology                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Desktop shell     | Tauri v2 (Rust)                                                                                                        |
+| Frontend          | React 18 + TypeScript + Vite                                                                                           |
+| Editor            | `ketcher-react` / `ketcher-core` 3.21.0; multi-language `ketcher-react` tarball, narrowed `parametrizeUrl` patch (§10) |
+| Chemistry backend | `indigo-server` sidecar: Rust + axum                                                                                   |
+| Native chemistry  | `libindigo`, `libindigo-renderer`, `libimago` (FFI)                                                                    |
+| OCR worker        | `imago-worker` child process (Linux only)                                                                              |
+| Packaging         | Linux: Docker builder → `.deb`, `.rpm`, AppImage; Windows: NSIS                                                        |
 
 ---
 
@@ -106,6 +106,82 @@ Pattern rules:
   unhandled rejections into the Tauri log. It is a no-op outside Tauri.
 - Hash/`file-saver` shims exist for the webview; do not add Node-only APIs.
   `file-saver` resolves through the Vite alias described in §5.9.
+
+### 4.1 Ketcher 3.21.0, the language selector and app options
+
+**Versions and packaging.** The app consumes `ketcher-core@3.21.0` and
+`ketcher-react@3.21.0` exactly (no caret). `ketcher-core` is the published npm
+package with one narrowed patch (§10). `ketcher-react` is the committed
+multi-language tarball `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`
+(2.3 MB), built from the `v3.21.0` tag by `scripts/build-ketcher-react.sh`
+(pnpm-only, Node 24.20+; the step-by-step mechanism is in
+`docs/TOOLCHAIN.md` §2.2); the published npm `ketcher-react@3.21.0` is
+English-only and has no language picker. The tarball is committed so CI, Windows
+and fresh worktrees need only `pnpm install`; only regenerating it needs the
+Ketcher source build.
+
+**Language selector is a build-time feature.** Ketcher 3.21.0 exposes no
+runtime prop or option for the picker. The supported configuration is the
+upstream build flag `KETCHER_MULTI_LANGUAGE_BUILD=true`, consumed by
+`packages/ketcher-react/rollup.config.mjs` through `@rollup/plugin-replace`
+while building `ketcher-react` from the `v3.21.0` tag. Without it, non-English
+locale imports are tree-shaken away and `SUPPORTED_LANGUAGES` contains only
+`en`, so the Settings selector is hidden. The committed build ships **English
+(`en`)** and **Simplified Chinese (`zh-CN`)**.
+
+**Selector contract.** The picker appears under **Settings → General Editing
+& Display → Language**. Choosing a language calls `i18n.changeLanguage` and applies
+immediately to toolbars, dialogs, context menus and Settings itself — no reload
+and no remount. The choice is persisted in
+`localStorage["ketcher-language"]` (the `languageChanged` handler writes it) and
+restored on the next launch; a missing or unsupported value falls back to `en`.
+Chemistry vocabulary (element symbols, bond-type names, file-format codes)
+stays untranslated. The language is UI state only: it does not change
+`apiPath`, `resolveApiBase()` or the struct-service provider, so the
+explicit-port Indigo base and the Recognize poll are unaffected.
+
+**Main app compatibility with 3.21.** Ketcher 3.21 narrows `Editor#options` to
+render options (`RenderOptions` plus `viewOnlyMode`); `app` is no longer part of
+that call. `app` is Redux store state (`state.options.app.server`), read by the
+server-backed toolbar controls, so passing it to `editor.options()` is ignored
+and also rebuilds the render (clears and recreates the client area).
+`handleInit` therefore must not call `ketcher.editor.options({ app: ... })`.
+The compatibility contract is:
+
+- `src/App.tsx` `handleInit(ketcher)` stores `ketcherRef.current` and calls
+  `applyKetcherAppOptions(ketcher, { server: true })`.
+- `src/ketcherOptions.ts` exports
+  `applyKetcherAppOptions(ketcher: Ketcher | null, app: Record<string, unknown>): boolean`.
+  It resolves the mounted store through the existing adapter
+  (`findKetcherStore(ketcher)`, which uses `findKetcherRoot` and
+  `storeFromRoot`) and dispatches Ketcher's own sequence: `APP_OPTIONS` with
+  `{ ...app }`, `UPDATE`, then a no-op `ACTION` (`action: () => undefined`) so
+  the derived `actionState` (for example the Recognize `disabled` flag) is
+  recomputed. It returns `false` without dispatching when the root/store is
+  missing or a dispatch throws. The dispatch sequence is factored into a pure
+  `applyAppOptionsToStore(store, app)` so the contract is unit-testable without
+  a DOM.
+- On `false`, `handleInit` logs
+  `[chemistry-draw] could not enable Ketcher server mode; server-backed controls stay disabled.`
+  and still calls `setReady(true)`; it never fabricates the capability.
+  Ketcher 3.21 also runs its own `checkServer()` on mount, which sets
+  `app.server` from `/v2/info` `isAvailable`, so the workspace stays usable if
+  the store lookup fails.
+- The update happens once on init, does not remount the editor, does not call
+  `setMolecule`, and leaves the canvas, selection and undo history intact.
+
+The adapter is private Ketcher internals and stays defensive: a Ketcher upgrade
+must re-check the store shape and the `APP_OPTIONS`/`UPDATE`/`ACTION` contract
+before bumping the dependency. `src/ketcherOptions.test.ts` covers
+`applyAppOptionsToStore` with a fake store and asserts `App.tsx` uses
+`applyKetcherAppOptions` (and no longer passes `app` to `editor.options()`);
+the observable outcome is the manual step in `docs/verification.md` §2,
+"Ketcher 3.21.0 upgrade and language selector".
+
+**Client area.** `findKetcherRoot` **prefers** `render.clientArea`, falls back
+to `editor.canvas`, and only then to the `.Ketcher-root` query selector. The app
+does not derive the canvas position itself; it uses the element the adapter
+returns.
 
 ---
 
@@ -266,7 +342,7 @@ tab exports as `<name>.<ext>`.
 
 Image formats render through `generateImage`, which returns a `Blob` that goes
 through the same save dialog as the text formats. `ketcher.exportImage` is
-deliberately **not** used: in Ketcher 3.18 it supports only `"svg"` and throws
+deliberately **not** used: in Ketcher 3.21 it supports only `"svg"` and throws
 for `"png"`, while `generateImage` covers both through the same save route.
 
 `getSdf`, `getCml`, `getCDXml` and `getRxn` exist on the same API if more
@@ -415,7 +491,7 @@ Ketcher API used:
 - Dirty signal: `ketcher.changeEvent` (`add` / `remove`).
 - Export: `getMolfile(format)`, `getSmiles()`, `getInchi()`, and
   `generateImage(ket, { outputFormat: "svg" | "png" })` for image formats.
-  `exportImage` is not used: it supports only SVG in Ketcher 3.18, while
+  `exportImage` is not used: it supports only SVG in Ketcher 3.21, while
   `generateImage` covers SVG and PNG through the same route.
 - Import of non-`.ket` files: `ketcher.setMolecule`, used by `importStructure`
   after Open dispatches by extension (§5.4); `.ket` files go through
@@ -1063,7 +1139,7 @@ status.
 | `src/backstage.ts`                           | pure model: ordered section list and default, `normalizeSection` (unknown id → Welcome), declared-version helper                                                                                                                                                                         |
 | `src/templateLibrary.ts`                     | pure real-library model: provider lists → `TemplateEntry[]` with slug ids and name/abbreviation dedupe, KET per entry, the `TEMPLATE_CARD_COUNT` (4), `sampleTemplates`, the preview-only SGroup-free preview-copy helper and `cancelActiveTool` dispatching Escape to the Ketcher root  |
 | `src/templates.ts`                           | legacy curated ring descriptors, retained only as a documented fallback; never rendered as cards and never used when the library is empty                                                                                                                                                |
-| `src/ketcherOptions.ts`                      | narrow Ketcher store adapter: `findKetcherRoot` and `openStructureLibrary`, dispatching `MODAL_OPEN` (`templates`, `tab: null`)                                                                                                                                                          |
+| `src/ketcherOptions.ts`                      | narrow Ketcher store adapter: `findKetcherRoot`, `openStructureLibrary` (`MODAL_OPEN` with `templates`/`tab: null`) and `applyKetcherAppOptions` (`APP_OPTIONS` + `UPDATE` + no-op `ACTION` for `app.server`; §4.1)                                                                      |
 | `src/ui/HomeButton.tsx`                      | house button in the tab strip that opens the backstage                                                                                                                                                                                                                                   |
 
 #### 5.11.1 Settings
@@ -1116,13 +1192,18 @@ upload-and-poll contract is described in `sidecar/src/job/mod.rs`.
 
 ## 7. Native libraries
 
-Indigo, Indigo Renderer and Imago are **not vendored in git**.
+Indigo, Indigo Renderer, Imago and the minimal OpenCV are **not vendored in
+git**. Indigo is pinned to the stable tag **`indigo-1.49.0`** (git refs are
+lowercase; the GitHub release is `Indigo-1.49.0`). The Linux builder builds that
+tag, not `master`, and the pinned tag reports `1.49.0` through `/v2/info` and
+`/v2/health`; a `1.51.0-dev…` string means the builder cloned `master` instead.
 
-- **Linux**: built in the Docker builder and copied by `task libs` into
-  `src-tauri/lib/linux-x86_64/` (gitignored). The same directory is what
-  packaging ships. The **bundled set** is Indigo, Indigo Renderer, Imago, the
-  **minimal OpenCV** (core, imgproc, imgcodecs; PNG/JPEG only) and their
-  non-platform dependencies such as `libjpeg`. `libstdc++` and `libgcc_s` are
+- **Linux**: built in the Docker builder from `--branch indigo-1.49.0` and
+  copied by `task libs` into `src-tauri/lib/linux-x86_64/` (gitignored). The
+  same directory is what packaging ships. The **bundled set** is Indigo, Indigo
+  Renderer, Imago, the **minimal OpenCV** (core, imgproc, imgcodecs; PNG/JPEG
+  only) and their non-platform dependencies such as `libjpeg`. `libstdc++` and
+  `libgcc_s` are
   **never** shipped: the target distro runtime is used.
 - **Host-provided**: `libfontconfig`, `libfreetype`, `libexpat`, `libpng` and
   `libbrotli` are **not** bundled, and neither are `libc`, `libm`, `libz` or the
@@ -1143,7 +1224,8 @@ Indigo, Indigo Renderer and Imago are **not vendored in git**.
   likewise contains only our libraries and resolves the platform libraries from
   the host.
 - **Windows**: `scripts/fetch-windows-libs.ps1` downloads the pinned EPAM
-  Indigo **1.46.0** x86_64 archive, verifies its SHA-256, extracts
+  Indigo **1.49.0** x86_64 archive, verifies the SHA-256
+  `5bd405cc4c2b19521b88e015e7266f1a2914bc7d5ca7b769f1e1c16378871515`, extracts
   `indigo.dll`, `indigo-renderer.dll`, `msvcp140.dll`, `vcruntime140.dll` and
   `vcruntime140_1.dll` into `src-tauri/lib/windows-x86_64/` (gitignored) and
   generates the MSVC import libraries `indigo.lib` / `indigo-renderer.lib`
@@ -1204,25 +1286,26 @@ Version bumps are driven by release-please and must stay in sync across
 
 ## 10. Temporary workarounds
 
-`ketcher-core` 3.18.0 has a bug in `parametrizeUrl` that turns the port in
-`127.0.0.1:9321` into a placeholder. We ship `patches/ketcher-core@3.18.0.patch`
-(registered in `pnpm-workspace.yaml`). Upstream fixed it in
-[epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552) but has not
-published a release with the fix yet. Removal procedure:
-`docs/KETCHER-BUG-parametrizeUrl.md`.
+**One narrowed Ketcher patch remains.** `ketcher-core` 3.21.0 still has the
+`parametrizeUrl` bug that turns the port in `127.0.0.1:9321` into a placeholder,
+so `patches/ketcher-core@3.21.0.patch` (registered in `pnpm-workspace.yaml` as
+`ketcher-core@3.21.0: patches/ketcher-core@3.21.0.patch`) carries **only** the
+two `parametrizeUrl` hunks (`remoteStructService.js` and
+`remoteStructService.modern.js`). The 3.18 patch is removed. The fix shipped in
+`3.22.0-rc.1` (prerelease); the npm `beta` tag still resolves to
+`3.21.0-rc.3`, and `3.21.0` stable has the bug. The bug and the removal plan
+live in `docs/KETCHER-BUG-parametrizeUrl.md`.
 
-The same patch file guards `ReBond` against a struct/render desync. When a bond
-still references a half-bond that is no longer in `restruct.molecule.halfBonds`
-(invalid-valence edits, undo of deletions), `ReBond.getSelectionPoints` dereferences
-`undefined` (`halfBonds.get(bond.hb1).p`) and throws every frame, flooding the
-console with uncaught render-loop errors. The patch mirrors
-[epam/ketcher#11165](https://github.com/epam/ketcher/pull/11165) in both
-`dist/application/render/restruct/rebond.js` and `rebond.modern.js`: a missing
-half-bond returns an empty point list, `getSelectionContour` returns `null` for
-that list, and `makeHoverPlate`, `makeSelectionPlate`, `makeHighlitePlate` and
-`drawHover` no-op on `null`. The bond then simply renders without hover or
-selection instead of crashing. The patch rules are in `docs/conventions.md` §11
-and the manual check is in `docs/verification.md` §2.
+The `ReBond` half-bond guard is **upstream in 3.21.0** ([epam/ketcher#11165](https://github.com/epam/ketcher/pull/11165)):
+a bond whose half-bond is missing renders without a hover or selection plate
+instead of throwing every frame, so those hunks are no longer patched. The patch
+rules are in `docs/conventions.md` §11 and the manual check is in
+`docs/verification.md` §2, "Ketcher render robustness".
+
+The patch is temporary: when **3.22.0 stable** ships (it already carries the
+upstream fix in `3.22.0-rc.1`), bump both Ketcher packages, delete the patch
+file, remove the `patchedDependencies` entry, run `pnpm install` and re-run the
+harness.
 
 ---
 

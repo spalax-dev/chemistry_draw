@@ -58,7 +58,7 @@ Environment used for acceptance:
 
 | Tool | Version                                                       |
 | ---- | ------------------------------------------------------------- |
-| Node | **24.20.0** used (floor **24.14.1**, from `.nvmrc`/`engines`) |
+| Node | **24.20.0** used (floor **24.20.0**, from `.nvmrc`/`engines`) |
 | pnpm | **12.21.0** via Corepack (`packageManager`)                   |
 | Rust | **1.99.1** stable                                             |
 
@@ -141,6 +141,73 @@ Run against the desktop build (`task run`) with the developer console open.
    result, not a failure.
 3. **No regression.** Hover and select a normal, valid bond: the hover plate and
    selection plate draw as before.
+
+### Ketcher 3.21.0 upgrade and language selector (E1)
+
+Run against the desktop build (`task run`) with the committed
+`vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`. The native side requires
+the rebuilt Imago builder image/libs (`task builder-image -- --no-cache` then
+`task libs`) with Indigo `indigo-1.49.0`; the packaged step repeats 2-8 on the
+installed artifacts.
+
+1. **Versions and patch.** `pnpm ls ketcher-core ketcher-react --depth 0` shows
+   exactly `3.21.0`. No stale 3.18 reference remains in the shipped config:
+
+   ```bash
+   git grep -n "ketcher-core@3.18" -- package.json pnpm-workspace.yaml pnpm-lock.yaml patches/ src/ scripts/
+   ```
+
+   must print nothing (the test that names the old patch file,
+   `src/ketcherPatch.test.ts`, is updated in activity 4; do not grep
+   `docs/`/history). `pnpm-workspace.yaml` registers `ketcher-core@3.21.0` and
+   `patches/ketcher-core@3.21.0.patch` contains only the `parametrizeUrl`
+   hunks. The installed `ketcher-react` is the vendor tarball, not the
+   English-only npm bundle.
+
+2. **Indigo pin.** `/v2/info` and `/v2/health` report an `indigo_version` that
+   starts with `1.49.0`; a `1.51.0-dev` string means the builder still cloned
+   `master` and the builder image must be rebuilt with
+   `task builder-image -- --no-cache`. On Windows, the same check against the
+   packaged NSIS sidecar confirms the 1.49.0 DLLs.
+3. **Main app initializes on 3.21.** Open the app, the backstage, a template and
+   a saved tab. There is no console error about the `app` option, no
+   `could not enable Ketcher server mode` line, and the canvas is never wiped
+   after `onInit` (selection and undo history survive the first paint).
+   Server-backed controls — **Recognize Molecule** on Linux and the Indigo
+   operations — are enabled and work. The File menu, tabs, autosave and the
+   backstage Recent structures table keep their 0.x behaviour.
+4. **Explicit-port Recognize.** Draw nothing, open **Recognize Molecule**, choose
+   `src-tauri/sidecar/fixtures/caffeine.png`. In the webview's Network panel the
+   poll URL is `http://127.0.0.1:<port>/v2/imago/uploads/<id>` with the real
+   port; there is no `127.0.0.1undefined`, no `TypeError: Load failed`, and the
+   preview/Add to Canvas flow works. Repeat with the window at a different
+   sidecar port (restart the app): the port changes and the poll still resolves.
+5. **Language selector present.** Open **Settings → General Editing & Display →
+   Language**. The
+   select lists **English** and **简体中文** and the current value is `English`
+   on a fresh profile.
+6. **Switch without reload.** Choose **简体中文**: toolbar tooltips, Settings,
+   dialogs and context menus switch immediately; the canvas, selection and undo
+   history survive (no remount, no page reload). Chemistry vocabulary stays in
+   Latin: element symbols (`C`, `N`, `O`), bond-type names in the structure and
+   file-format codes are unchanged.
+7. **Persistence.** `localStorage.getItem("ketcher-language")` is `"zh-CN"` in
+   the webview. Close and reopen the app: it starts in Chinese, the select shows
+   `简体中文`, and no manual step is needed. Switch back to English; the stored
+   value becomes `"en"` and the next launch is English.
+8. **No Indigo regression.** With Chinese selected, run Layout and Clean and
+   Recognize once: they still hit the same explicit-port `apiPath` and succeed.
+   The language choice does not alter `/v2/info`, `resolveApiBase()` or the
+   struct-service provider.
+9. **Render robustness remains upstream.** Repeat "Ketcher render robustness"
+   above: 3.21.0 carries the ReBond guard, so the stale half-bond case must not
+   flood the console even though the local patch no longer contains those hunks.
+10. **Packaged smoke.** Install the rebuilt `.deb`/`.rpm`/AppImage (and the NSIS
+    installer on Windows) and repeat steps 2-8. The packaged app must show both
+    languages, persist the choice across launches, initialize on 3.21 without
+    the `app` option, and complete an explicit-port Recognize on Linux. The
+    payload still contains `imago-worker`, `libimago.so` and the minimal OpenCV
+    on Linux; Windows still ships none of them.
 
 ### Documents, autosave and recovery
 

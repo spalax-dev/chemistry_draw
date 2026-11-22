@@ -13,7 +13,7 @@ ONNX/OCSR stack; see §5.
 
 | Component        | Supported version                                          | Where it is declared                                         |
 | ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
-| Node.js          | **24 LTS** (`>=24.14.1 <25`), local pin **24.14.1**        | `.nvmrc` (`24.14.1`), `engines`, CI `node-version: 24`       |
+| Node.js          | **24 LTS** (`>=24.20.0 <25`), local pin **24.20.0**        | `.nvmrc` (`24.20.0`), `engines`, CI `node-version: 24`       |
 | pnpm             | **12.21.0** (exact)                                        | `packageManager` in `package.json`, enabled by Corepack      |
 | Rust             | **stable**                                                 | CI (`dtolnay/rust-toolchain@stable`) and the Docker builder  |
 | Linux build base | **Debian 12** (glibc **2.36**)                             | packaging scripts and the builder image                      |
@@ -21,19 +21,18 @@ ONNX/OCSR stack; see §5.
 | Linux runtime    | GTK3 + **webkit2gtk 4.1**                                  | Tauri v2 requires it; Debian 12 is the floor                 |
 | Windows          | **x64**, WebView2, MSVC toolchain                          | Windows CI job and `scripts/fetch-windows-libs.ps1`          |
 
-- Node is installed locally from `.nvmrc`, which pins **`24.14.1`** — the
-  `engines.node` floor declared by Ketcher 3.18 (`ketcher-core` and
-  `ketcher-react` both require `>=24.14.1`). The supported range is
-  **`>=24.14.1 <25`**. CI (`node-version: 24`) and Docker resolve the latest
-  24.x (currently 24.22.3), which satisfies the floor.
-- `nvm install && nvm use` installs the pinned **24.14.1**, because nvm reads
-  `.nvmrc`; the explicit `nvm install 24.14.1 && nvm use` form is equivalent.
+- Node is installed locally from `.nvmrc`, which pins **`24.20.0`** — the
+  `engines.node` floor declared by Ketcher 3.21 (`ketcher-core` and the
+  multi-language `ketcher-react` build both require `>=24.20.0`). The supported
+  range is **`>=24.20.0 <25`**. CI (`node-version: 24`) and Docker resolve the
+  latest 24.x (currently 24.22.3), which satisfies the floor.
+- `nvm install && nvm use` installs the pinned **24.20.0**, because nvm reads
+  `.nvmrc`; the explicit `nvm install 24.20.0 && nvm use` form is equivalent.
   `.nvmrc` and the `engines`/`packageManager` fields in `package.json` are the
   declarations this policy requires.
-- **Local baseline:** any Node below 24.14.1 (for example 24.13.1) is **below**
-  the floor and is not a supported development runtime; upgrade to 24.14.1 or
-  later. The accepted verification environment is Node **24.20.0**
-  (`docs/verification.md` §1.1).
+- **Local baseline:** any Node below 24.20.0 is **below** the floor and is not a
+  supported development runtime; upgrade to 24.20.0 or later. The accepted
+  verification environment is Node **24.20.0** (`docs/verification.md` §1.1).
 - **Builder decision.** The builder keeps `FROM debian:12-slim` and installs
   Node 24 from the NodeSource `setup_24.x` repository, then enables pnpm with
   Corepack (`corepack enable`, `corepack prepare pnpm@12.21.0 --activate`). The
@@ -62,34 +61,77 @@ ONNX/OCSR stack; see §5.
 
 The editor is Ketcher; its peer ranges bound the app's runtime majors.
 
-| Package                          | 0.x version | Ketcher 3.18 peer range | Rule                                                         |
-| -------------------------------- | ----------- | ----------------------- | ------------------------------------------------------------ |
-| React                            | **18.3.1**  | `^18.2.0 \|\| ^19.0.0`  | Stay on React 18; React 19 needs a Ketcher/E1 decision first |
-| React DOM                        | **18.3.1**  | same as React           | Must match React exactly                                     |
-| `ketcher-core` / `ketcher-react` | **3.18.x**  | —                       | Ketcher 3.18 on 0.x until E1                                 |
+| Package         | 0.x version | Ketcher 3.21 peer range | Rule                                                        |
+| --------------- | ----------- | ----------------------- | ----------------------------------------------------------- |
+| React           | **18.3.1**  | `^18.2 \|\| ^19`        | Stay on React 18; React 19 needs a separate decision        |
+| React DOM       | **18.3.1**  | same as React           | Must match React exactly                                    |
+| `ketcher-core`  | **3.21.0**  | —                       | Exact pin, published package, one narrowed patch (§2.2)     |
+| `ketcher-react` | **3.21.0**  | —                       | Committed multi-language tarball, not the npm bundle (§2.2) |
 
-- Ketcher **3.21** belongs to **E1 / US-07** and must not be pulled into `main`.
-  A Ketcher bump is an activity of its own (patches, peer ranges, golden tests),
-  not a dependency refresh.
-- Ketcher 3.18's peer range also allows React 19, but the app's patches, hooks
+- Ketcher **3.21.0** is the 0.x editor on the E1 line. A further Ketcher bump
+  (for example 3.22.0 stable) is an activity of its own — patches, peer ranges,
+  tarball, golden tests — not a dependency refresh.
+- Ketcher 3.21's peer range also allows React 19, but the app's patches, hooks
   and golden tests are validated on 18.3.1. Do not jump to React 19 without a
-  Ketcher/E1 decision recorded in the activity.
+  recorded decision.
 
-### 2.2 Intentional pins
+### 2.2 Ketcher 3.21 packaging contract (E1)
+
+- `ketcher-core` is the published **3.21.0** package, pinned exactly.
+- `ketcher-react` comes from the committed
+  **`vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`** (2.3 MB), built from
+  tag `v3.21.0` with `KETCHER_MULTI_LANGUAGE_BUILD=true`. The published npm
+  bundle is English-only and has no language picker, so it is not used.
+- **Regeneration is pnpm-only and needs no npm/npx.** The `v3.21.0` tag is an
+  npm-workspace monorepo (root `workspaces`, `package-lock.json`,
+  `engines.npm`; `packages/ketcher-react` has `prebuild: npm run i18n:generate`
+  and `build: cross-env NODE_ENV=production rollup -c ...`), so the committed
+  tarball is regenerated in a throwaway `build/ketcher-src` checkout that never
+  enters the app's dependency graph:
+  1. `nvm install 24.20.0 && nvm use` — the tag requires Node **>= 24.20.0**;
+     no npx/npm provisioning.
+  2. Clone the `v3.21.0` tag into `build/ketcher-src`.
+  3. Write a temporary `pnpm-workspace.yaml` there with
+     `packages: ["packages/*"]`.
+  4. `pnpm install --ignore-scripts --no-frozen-lockfile` (the root npm lock is
+     ignored; husky is skipped).
+  5. `export KETCHER_MULTI_LANGUAGE_BUILD=true`.
+  6. Run the locale generator directly with
+     `pnpm --filter ketcher-react run i18n:generate` (bypassing the npm-based
+     `prebuild`).
+  7. Build with
+     `pnpm --filter ketcher-react exec cross-env NODE_ENV=production rollup -c rollup.config.mjs -m true`.
+  8. Guard `zh-CN` in `dist/index.js`, then
+     `pnpm --filter ketcher-react pack --pack-destination vendor/ketcher-react`
+     and rename the result to `ketcher-react-3.21.0-multi.tgz`.
+
+  `scripts/build-ketcher-react.sh` encodes this sequence; activity 2 must prove
+  it end to end.
+
+- `patches/ketcher-core@3.21.0.patch` carries **only** the two `parametrizeUrl`
+  hunks (`remoteStructService.js` and `.modern.js`). The 3.18 patch is removed;
+  the ReBond guard is upstream in 3.21.0. `3.22.0-rc.1` has the `parametrizeUrl`
+  fix, `3.21.0` stable does not; the patch is removed when **3.22.0 stable**
+  ships.
+- Language selector: English plus Simplified Chinese (`zh-CN`), **Settings →
+  General Editing & Display → Language**, persisted in
+  `localStorage["ketcher-language"]`.
+
+### 2.3 Intentional pins
 
 These are deliberate, not stale. Each one has a reason and a trigger for
 revisiting it.
 
-| Pin                        | Value                 | Reason                                                                                                            | Revisit when                                        |
-| -------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Debian / glibc floor       | Debian 12, glibc 2.36 | Indigo/Imago and the Tauri app build against it; packages must not raise it                                       | Linux support policy changes                        |
-| Tauri                      | 2.x                   | The host, capabilities and packaging target Tauri v2                                                              | A Tauri 3 migration activity exists                 |
-| Indigo / Imago             | 0.x line versions     | Sidecar FFI, patches and Windows DLL pins are validated against them                                              | Native-lib upgrade activity                         |
-| Windows Indigo             | **1.46**              | Prebuilt DLLs pinned by SHA-256 in `scripts/fetch-windows-libs.ps1`                                               | Windows native-lib activity                         |
-| Tauri JS plugin parity     | minor = Rust crate    | Each `@tauri-apps/plugin-*` npm minor must equal its Rust crate minor exactly; the harness and bundler enforce it | A plugin upgrade activity bumps both sides together |
-| ONNX / models / OCSR stack | **1.x only**          | Not part of the 0.x product; `main` must stay Imago-based                                                         | Never on `main` — see §5                            |
+| Pin                        | Value                                  | Reason                                                                                                                                 | Revisit when                                        |
+| -------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Debian / glibc floor       | Debian 12, glibc 2.36                  | Indigo/Imago and the Tauri app build against it; packages must not raise it                                                            | Linux support policy changes                        |
+| Tauri                      | 2.x                                    | The host, capabilities and packaging target Tauri v2                                                                                   | A Tauri 3 migration activity exists                 |
+| Indigo / Imago             | **Indigo 1.49.0**; Imago/OpenCV on 0.x | Indigo Linux tag `indigo-1.49.0`; Windows ZIP 1.49.0; `/v2/info` reports 1.49.0                                                        | Native-lib upgrade activity                         |
+| Windows Indigo             | **1.49.0**                             | Prebuilt DLLs pinned by SHA-256 `5bd405cc4c2b19521b88e015e7266f1a2914bc7d5ca7b769f1e1c16378871515` in `scripts/fetch-windows-libs.ps1` | Windows native-lib activity                         |
+| Tauri JS plugin parity     | minor = Rust crate                     | Each `@tauri-apps/plugin-*` npm minor must equal its Rust crate minor exactly; the harness and bundler enforce it                      | A plugin upgrade activity bumps both sides together |
+| ONNX / models / OCSR stack | **1.x only**                           | Not part of the 0.x product; `main` must stay Imago-based                                                                              | Never on `main` — see §5                            |
 
-### 2.3 Outdated-but-supported majors are recorded, not blindly upgraded
+### 2.4 Outdated-but-supported majors are recorded, not blindly upgraded
 
 These majors are behind the newest release but supported and pinned by the
 0.x contract. Record them here; upgrade them only through their own activity
@@ -172,8 +214,8 @@ pnpm gates:
 - Vitest 4 removes `tinypool` from its dependency graph entirely, so the
   lockfile has no `tinypool` entry; the contract test only checks its floor when
   it is actually resolved.
-- Related pins, unchanged: **React 18.3.1 exact** (Ketcher 3.18 peer
-  `^18.2.0 || ^19.0.0`; no React 19), `@types/node` `^24.19.2` (matches Node 24),
+- Related pins, unchanged: **React 18.3.1 exact** (Ketcher 3.21 peer
+  `^18.2 || ^19`; no React 19), `@types/node` `^24.19.2` (matches Node 24),
   and **TypeScript 5.9**.
 
 #### 3.1.2 Rust advisories and their resolution (activity 4)
@@ -304,7 +346,7 @@ node scripts/harness.mjs --fast  # iteration: skips frontend build, uses cargo c
 ## 5. 0.x versus 1.x
 
 - **`main` (0.x)** is the support line users run today. This document is its
-  toolchain policy: Node 24, pnpm 12, Rust stable, React 18 with Ketcher 3.18,
+  toolchain policy: Node 24, pnpm 12, Rust stable, React 18 with Ketcher 3.21.0,
   Debian 12/glibc 2.36, Indigo/Imago.
 - **`develop` (1.x)** carries the ONNX/models/OCSR stack, NuGet and the Imago
   removal. It adopts these pins at launch; it is not the 0.x support line and

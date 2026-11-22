@@ -159,29 +159,68 @@ Rules:
   render with no `Fontconfig warning` and an `ldd` that resolves fontconfig from
   the host — is the manual step in `docs/verification.md`, section 2.
 
-### 4.3 Ketcher patch contract
+### 4.3 Ketcher patch contract (E1)
 
-`patches/ketcher-core@3.18.0.patch` is configuration the editor depends on, so a
-contract test (Vitest, alongside the capability test) reads the real patch file
-and the installed `dist/` and asserts the guards survive a reinstall:
+`patches/ketcher-core@3.21.0.patch` is configuration the editor depends on, so a
+contract test (Vitest, alongside the capability test) reads the real patch file,
+`pnpm-workspace.yaml` and the installed `dist/` and asserts the guard survives a
+reinstall:
 
-| Target                                      | Assertion                                                                                                                                                                       |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `patches/ketcher-core@3.18.0.patch`         | contains the `ReBond.getSelectionPoints` half-bond guards for both `dist/application/render/restruct/rebond.js` and `rebond.modern.js`                                          |
-| installed `ketcher-core` `rebond.modern.js` | the patched `getSelectionPoints` returns early on a missing half-bond, `getSelectionContour` returns `null` on an empty list, and the plate/`drawHover` helpers no-op on `null` |
+| Target                                         | Assertion                                                                                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm-workspace.yaml`                          | `patchedDependencies` names exactly `ketcher-core@3.21.0` and the 3.21.0 patch path; no `3.18.0` entry                                                                                |
+| `patches/ketcher-core@3.21.0.patch`            | contains **only** the `parametrizeUrl` hunks for `remoteStructService.js` and `remoteStructService.modern.js`; no ReBond hunk (3.21.0 ships it upstream)                              |
+| installed `ketcher-core` `remoteStructService` | both dist builds use `:([A-Za-z_]\w*)` plus `hasOwnProperty.call(params, key)`, and the function keeps the explicit port when applied to `http://127.0.0.1:9321/v2/imago/uploads/:id` |
 
 Rules:
 
-- Assert the real files, not a fixture. Removing either the `.js` or the
-  `.modern.js` hunk, or removing a guard from the installed bundle, must make
-  the test fail.
-- The test reads the patch text and the installed `node_modules/ketcher-core`
-  file; it does not run Ketcher. The end-to-end behaviour — hovering/selecting a
-  bond with a stale half-bond without an error flood — is the manual step in
-  `docs/verification.md` §2, "Ketcher render robustness".
-- Keep the assertions narrow: the `parametrizeUrl` hunk is covered by its own
-  upstream regression, so this test names only the ReBond guard symbols and the
-  two dist paths.
+- Assert the real files, not a fixture. Deleting either `parametrizeUrl` hunk,
+  restoring `:(\w+)`, or re-adding a ReBond hunk must each make the test fail.
+- Execute the installed `parametrizeUrl` with `{ id: "abc" }` and assert the
+  result is `http://127.0.0.1:9321/v2/imago/uploads/abc`: the port survives and
+  only the declared placeholder is substituted. Mutation check: the 3.18/3.21
+  `:(\w+)` body yields `http://127.0.0.1undefined/...` and fails the assertion.
+- The test reads the patch and the installed bundle; it does not run Ketcher.
+  The end-to-end behaviour — an explicit-port Imago Recognize poll — is the
+  manual step in `docs/verification.md` §2, "Ketcher 3.21.0 upgrade and
+  language selector".
+
+### 4.4 E1 upgrade contracts (Ketcher 3.21.0, Indigo 1.49.0, language selector)
+
+The E1 contract is configuration, so `scripts/lib/*.test.mjs` and Vitest read
+the real files:
+
+| Target                                 | Assertion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`                         | `ketcher-core` and `ketcher-react` are exactly `3.21.0` (no caret); `ketcher-react` resolves to the committed multi-language tarball (`file:vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`)                                                                                                                                                                                                                                                                                               |
+| `scripts/build-ketcher-react.sh`       | checks out tag `v3.21.0` into `build/ketcher-src`, writes `pnpm-workspace.yaml` (`packages: ["packages/*"]`), installs with `pnpm install --ignore-scripts --no-frozen-lockfile`, exports `KETCHER_MULTI_LANGUAGE_BUILD=true`, runs `pnpm --filter ketcher-react run i18n:generate` and the Rollup build via `pnpm --filter ketcher-react exec …`, guards `zh-CN`, packs into `vendor/ketcher-react/`; requires Node ≥ 24.20.0, uses no npm/npx, and fails loudly when the tag or flag is wrong |
+| `scripts/build-libs.sh`                | clones `--branch indigo-1.49.0` (never `master`), guards that the checkout is the tag, and still builds `indigo` / `indigo-renderer` plus Imago/OpenCV                                                                                                                                                                                                                                                                                                                                          |
+| `scripts/fetch-windows-libs.ps1`       | pins Indigo `1.49.0`, the SHA-256 `5bd405cc…` and the 10,955,395 B archive, and never vendors DLLs/`.lib` files                                                                                                                                                                                                                                                                                                                                                                                 |
+| installed `ketcher-react` locale build | `SUPPORTED_LANGUAGES` contains `en` and `zh-CN`, the Settings selector is reachable, and `LANGUAGE_STORAGE_KEY === "ketcher-language"`                                                                                                                                                                                                                                                                                                                                                          |
+| sidecar `/v2/info`                     | `indigo_version` starts with `1.49.0` on the built/packaged backend (a `1.51.0-dev` master string fails)                                                                                                                                                                                                                                                                                                                                                                                        |
+| main app 3.21 init                     | `src/App.tsx` calls `applyKetcherAppOptions(ketcher, { server: true })` and never `editor.options({ app: ... })`; `applyAppOptionsToStore` dispatches `APP_OPTIONS`, `UPDATE`, then a no-op `ACTION` and returns `false` on a throwing store                                                                                                                                                                                                                                                    |
+
+Rules:
+
+- Assert the real files, not a fixture. Restoring `master`, removing the build
+  flag, using the published English-only `ketcher-react`, pinning 3.18/1.46, or
+  restoring the old `editor.options({ app })` init must each make a contract
+  test fail.
+- The English-only npm package is the negative fixture: assert that the
+  installed build is **not** it (locale list has two entries). Do not assert a
+  translation string that could change between patch releases; assert the
+  locale list and the storage key.
+- The language selector is UI-only: the contract must not couple it to
+  `apiPath`. The explicit-port `parametrizeUrl` behaviour (§4.3) is a separate
+  test.
+- `/v2/info` is checked against the real linked Indigo; no unit test mocks the
+  version string. The manual packaged check is in `docs/verification.md` §2.
+- The app-init test is `src/ketcherOptions.test.ts`: it calls the pure
+  `applyAppOptionsToStore` with a fake store and asserts the dispatch order,
+  the `{ server: true }` payload, and `false` when a dispatch throws; a source
+  contract asserts `src/App.tsx` calls `applyKetcherAppOptions` and contains no
+  `editor.options({ app: ... })`. It does not mount the real editor; the
+  observable outcome is the manual `task run` step.
 
 ---
 

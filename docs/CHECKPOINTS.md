@@ -57,8 +57,8 @@
 
 ## C6 — Windows Build Without Imago
 
-- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.46.0, verifies SHA-256 and
-      never vendors DLLs/`.lib` files.
+- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.49.0, verifies the SHA-256
+      `5bd405cc…` and never vendors DLLs/`.lib` files.
 - [ ] Windows CI (`windows` job) builds and smoke-tests the sidecar: empty
       `imago_versions`, `imago_worker.found = false`, `/v2/imago/uploads` 404.
 - [ ] NSIS installer is uploaded as an artifact.
@@ -555,8 +555,9 @@
 
 ## C17 — Toolchain and security baseline (0.x)
 
-- [x] Node 24.14.1+ is declared in `.nvmrc` and `engines`; pnpm 12.21 is pinned
-      by `packageManager`; the Docker builder enables Corepack.
+- [ ] Node 24.20.0+ is declared in `.nvmrc` and `engines`; pnpm 12.21 is pinned
+      by `packageManager`; the Docker builder enables Corepack. (E1 raises the
+      floor from 24.14.1 to 24.20.0; `.nvmrc`/`engines` move in activity 2.)
 - [x] CI and the Docker builder use Node 24; the GitHub Actions are on the
       current majors.
 - [x] `pnpm run audit` and `pnpm run audit:prod` report no high/critical
@@ -568,8 +569,59 @@
       tests).
 - [x] The pnpm and Rust audit gates run in the quality workflow.
 
+## C18 — E1 Ketcher 3.21 / Indigo 1.49
+
+- [ ] `ketcher-core` and `ketcher-react` are exactly `3.21.0`; the installed
+      `ketcher-react` is the committed
+      `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`, built from the
+      `v3.21.0` tag with `KETCHER_MULTI_LANGUAGE_BUILD=true`, not the
+      English-only npm bundle. Regeneration goes through
+      `scripts/build-ketcher-react.sh` in a throwaway `build/ketcher-src`
+      (pnpm install `--ignore-scripts --no-frozen-lockfile`, `i18n:generate` and
+      Rollup via `pnpm --filter ketcher-react`, `pnpm pack` into
+      `vendor/ketcher-react/`), needs Node 24.20+, and uses no npm/npx.
+- [ ] `pnpm-workspace.yaml` registers `ketcher-core@3.21.0` and
+      `patches/ketcher-core@3.21.0.patch`; the patch contains only the two
+      `parametrizeUrl` hunks. No 3.18 patch or `ketcher-core@3.18.0` entry
+      remains, and the ReBond hunks are gone because 3.21.0 ships the upstream
+      guard.
+- [ ] `docs/KETCHER-BUG-parametrizeUrl.md` records that the fix is **not** in
+      `3.21.0` stable, shipped in `3.22.0-rc.1` (prerelease; the npm `beta` tag
+      still resolves to `3.21.0-rc.3`), and that the patch is deleted when
+      `3.22.0` stable ships.
+- [ ] The language selector works: **Settings → General Editing & Display →
+      Language** lists
+      English and 简体中文 (`zh-CN`), switching applies without a reload, the
+      choice persists in `localStorage["ketcher-language"]` across launches, and
+      chemistry vocabulary stays untranslated. The selector does not change the
+      Indigo `apiPath`.
+- [ ] The main/backstage app initializes on 3.21: `handleInit` calls
+      `applyKetcherAppOptions(ketcher, { server: true })` through
+      `src/ketcherOptions.ts` and no longer passes `app` to
+      `editor.options()`; the adapter dispatches `APP_OPTIONS` + `UPDATE` + a
+      no-op `ACTION`, the canvas is not wiped, and a missing store logs the
+      fallback instead of fabricating server mode. The backstage, tabs, File
+      menu and autosave still work.
+- [ ] Recognize works on Linux with the explicit-port base URL
+      (`http://127.0.0.1:<port>/v2/`): the Imago poll URL keeps the real port,
+      with no `127.0.0.1undefined` and no `TypeError: Load failed`.
+- [ ] `scripts/build-libs.sh` clones the `indigo-1.49.0` tag (lowercase ref, not
+      `master`) with a tag guard and still builds Imago/OpenCV;
+      `scripts/fetch-windows-libs.ps1` pins Indigo 1.49.0 with SHA-256
+      `5bd405cc…`; `/v2/info`/`/v2/health` report an `indigo_version` starting
+      with `1.49.0` on Linux and Windows.
+- [ ] The E1 contract tests exist and are mutation-checked: exact versions, no
+      3.18 patch entry, `parametrizeUrl` explicit-port behaviour, the committed
+      multi-language vendor tarball/build flag, the Indigo tag/Windows pins, the
+      sidecar version and the main app 3.21 init.
+- [ ] The Imago builder image/libs were rebuilt with the new pin and
+      `node scripts/harness.mjs` is green; the dev Recognize/Indigo flows pass;
+      the packaged smoke (`.deb`/`.rpm`/AppImage, NSIS on Windows) shows the
+      selector, persists the choice, initializes on 3.21 and completes an
+      explicit-port Recognize.
+
 ---
 
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C17 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C18 remain empty.

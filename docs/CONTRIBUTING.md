@@ -22,22 +22,31 @@ For larger changes, please open an issue first so we can align on the approach.
 See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for prerequisites, platform
 notes (Linux and Windows), how to build native libraries, run the app, and read
 diagnostics. Supported versions and the security policy are in
-**[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)**: Node 24 LTS (`>=24.14.1 <25`,
+**[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)**: Node 24 LTS (`>=24.20.0 <25`,
 Ketcher's floor), pnpm 12.21.0 (through Corepack; pnpm is the only package
-manager) and Rust stable. `.nvmrc` pins `24.14.1` (the Ketcher floor); `engines`
-and `packageManager` are declared in `package.json`, so `nvm install && nvm use`
-and `corepack enable` install the pinned toolchain. Any Node below 24.14.1 (for
-example 24.13.1) is below the floor; upgrade first.
+manager) and Rust stable. `.nvmrc` pins `24.20.0` (the Ketcher floor); `engines`
+and `packageManager` are declared in `package.json`, so
+`nvm install 24.20.0 && nvm use` and `corepack enable` install the pinned
+toolchain. Any Node below 24.20.0 is below the floor; upgrade first.
 
 Quick start (Linux):
 
 ```bash
-nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
-corepack enable         # installs the pnpm version from packageManager
+nvm install 24.20.0 && nvm use  # .nvmrc pins Node 24.20.0 (Ketcher 3.21 floor)
+corepack enable                 # installs the pnpm version from packageManager
 pnpm install --frozen-lockfile
 task libs   # builds Indigo/Imago libs via Docker; required for the sidecar
 task run
 ```
+
+`ketcher-react` comes from the committed multi-language tarball, so a fresh
+checkout needs only `pnpm install`. Regenerating it is pnpm-only and requires
+Node 24.20+: `scripts/build-ketcher-react.sh` clones `v3.21.0` into a throwaway
+`build/ketcher-src`, installs it with pnpm
+(`--ignore-scripts --no-frozen-lockfile`), sets
+`KETCHER_MULTI_LANGUAGE_BUILD=true`, runs `i18n:generate` and the Rollup build
+through `pnpm --filter ketcher-react`, guards `zh-CN`, and packs the tarball
+into `vendor/ketcher-react/` — no `npm`, `npx` or `yarn`.
 
 Dependency and toolchain checks:
 
