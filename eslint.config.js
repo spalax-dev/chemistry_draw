@@ -18,6 +18,8 @@ export default tseslint.config(
       "src-tauri/target",
       "src-tauri/lib",
       "patches",
+      // TypeDoc output: build output, ignored by git, not authored source.
+      "docs/generated",
     ],
   },
   js.configs.recommended,
@@ -40,6 +42,15 @@ export default tseslint.config(
   },
   {
     files: ["*.{js,mjs,cjs,ts}", "scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node },
+    },
+  },
+  {
+    // The OpenCode plugin runs in Node (reads `process.env`), not in a browser.
+    files: [".opencode/**/*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
