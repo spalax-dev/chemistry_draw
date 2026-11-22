@@ -195,8 +195,11 @@ task libs
 That builds the Docker builder image and copies the runtime libraries into
 `src-tauri/lib/linux-x86_64/`, which is gitignored. The builder clones
 `--depth 1 --branch indigo-1.49.0` (never `master`), so `/v2/info` reports
-`1.49.0`; after changing the pin, rebuild the image with
-`task builder-image -- --no-cache` before `task libs`. It includes the minimal
+`1.49.0`; after changing the pin, rebuild with
+`task builder-image && task libs` (`task builder-image -- --no-cache` when the
+Docker cache must be bypassed). Verify the pin with
+`cargo test -p indigo-server info_reports_pinned_indigo_version` (set
+`LD_LIBRARY_PATH` as the harness does). It includes the minimal
 OpenCV that Imago needs (`libopencv_*.so.406`) plus `libjpeg`. It does **not**
 copy `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or `libbrotli*`:
 those stay host-provided, as do `libc`, `libm`, `libz`, `libstdc++`,

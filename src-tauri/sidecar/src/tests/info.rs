@@ -23,6 +23,27 @@ async fn info_endpoint_returns_version() {
     );
 }
 
+/// E1 pins native Indigo to 1.49.0 on both platforms:
+/// `scripts/build-libs.sh` clones the `indigo-1.49.0` tag and
+/// `scripts/fetch-windows-libs.ps1` uses the 1.49.0 archive. The assertion
+/// runs against the real linked library; no test mocks the version string.
+#[tokio::test]
+async fn info_reports_pinned_indigo_version() {
+    let app = test_app();
+    let (status, body) = fetch_get(&app, "/v2/info").await;
+
+    assert_eq!(status, StatusCode::OK);
+    let version = body["indigo_version"]
+        .as_str()
+        .unwrap_or_else(|| panic!("info must report indigo_version, got: {body}"));
+
+    assert!(
+        version.starts_with("1.49.0"),
+        "native Indigo must be pinned to 1.49.0 (scripts/build-libs.sh, \
+         scripts/fetch-windows-libs.ps1), got: {version}"
+    );
+}
+
 /// /v2/indigo/info returns the same as /v2/info.
 /// Ketcher consulta ambas rutas dependiendo del contexto.
 #[tokio::test]

@@ -611,7 +611,8 @@
       `master`) with a tag guard and still builds Imago/OpenCV;
       `scripts/fetch-windows-libs.ps1` pins Indigo 1.49.0 with SHA-256
       `5bd405cc…`; `/v2/info`/`/v2/health` report an `indigo_version` starting
-      with `1.49.0` on Linux and Windows.
+      with `1.49.0` on Linux and Windows, asserted by the sidecar test
+      `info_reports_pinned_indigo_version`.
 - [ ] The E1 contract tests exist and are mutation-checked: exact versions, no
       3.18 patch entry, `parametrizeUrl` explicit-port behaviour, the committed
       multi-language vendor tarball/build flag, the Indigo tag/Windows pins, the

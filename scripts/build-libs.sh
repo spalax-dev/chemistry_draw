@@ -15,8 +15,16 @@ if ls src-tauri/lib/linux-x86_64/*.so* &>/dev/null; then
 fi
 
 # ----- Repo 1: Build Indigo -----
-echo "==> Cloning Indigo..."
-git clone --depth 1 https://github.com/epam/Indigo.git /tmp/indigo
+# Pinned to the stable `indigo-1.49.0` tag (git refs are lowercase; the GitHub
+# release is named `Indigo-1.49.0`). `master` reports a `1.51.0-dev…` version
+# string through /v2/info, which the E1 contract rejects.
+INDIGO_TAG=indigo-1.49.0
+echo "==> Cloning Indigo ${INDIGO_TAG}..."
+git clone --depth 1 --branch indigo-1.49.0 https://github.com/epam/Indigo.git /tmp/indigo
+if ! git -C /tmp/indigo tag --points-at HEAD | grep -qx "$INDIGO_TAG"; then
+  echo "ERROR: /tmp/indigo is not at the pinned $INDIGO_TAG tag." >&2
+  exit 1
+fi
 
 echo "==> Building Indigo..."
 mkdir -p /tmp/indigo/build

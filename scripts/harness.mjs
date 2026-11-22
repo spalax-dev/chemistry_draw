@@ -285,7 +285,7 @@ try {
 
 console.log("\n── 4. Native Libraries ───────────────────────────────");
 // Linux: `task libs` builds Indigo/Imago/OpenCV in the Docker builder.
-// Windows: `scripts/fetch-windows-libs.ps1` downloads Indigo 1.46.0 and
+// Windows: `scripts/fetch-windows-libs.ps1` downloads Indigo 1.49.0 and
 // generates the MSVC import libraries. Imago is intentionally absent there.
 
 const requiredLibs = IS_WINDOWS

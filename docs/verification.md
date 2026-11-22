@@ -167,7 +167,10 @@ installed artifacts.
 2. **Indigo pin.** `/v2/info` and `/v2/health` report an `indigo_version` that
    starts with `1.49.0`; a `1.51.0-dev` string means the builder still cloned
    `master` and the builder image must be rebuilt with
-   `task builder-image -- --no-cache`. On Windows, the same check against the
+   `task builder-image -- --no-cache`. After a rebuild
+   (`task builder-image && task libs`),
+   `cargo test -p indigo-server info_reports_pinned_indigo_version` passes and
+   asserts the same `/v2/info` prefix. On Windows, the same check against the
    packaged NSIS sidecar confirms the 1.49.0 DLLs.
 3. **Main app initializes on 3.21.** Open the app, the backstage, a template and
    a saved tab. There is no console error about the `app` option, no
