@@ -44,8 +44,8 @@ pnpm install --frozen-lockfile
 Before opening a change, run the audit gates and the full harness:
 
 ```bash
-pnpm audit --audit-level=high
-pnpm audit --prod --audit-level=high
+pnpm run audit                       # full graph; fails on high/critical
+pnpm run audit:prod                  # production graph; fails on high/critical
 cargo install cargo-audit --locked   # one-time
 cargo audit
 node scripts/harness.mjs

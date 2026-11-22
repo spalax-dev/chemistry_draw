@@ -45,6 +45,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit (high/critical)
+        run: |
+          pnpm run audit
+          pnpm run audit:prod
+
       - name: Policy tests
         run: node --test scripts/lib/*.test.mjs
 

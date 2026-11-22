@@ -2,3 +2,14 @@ allowBuilds:
   esbuild: false
 patchedDependencies:
   ketcher-core@3.18.0: patches/ketcher-core@3.18.0.patch
+
+# Security pins for transitive dependencies (docs/TOOLCHAIN.md §3).
+# pnpm 12 reads these settings from this file; package.json#pnpm is ignored.
+overrides:
+  fast-uri: ^3.1.9
+  postcss: ^8.5.23
+  nanoid: ^3.3.18
+  source-map-js: ^1.2.2
+  browserslist: ^4.28.7
+  qs: ^6.16.1
+  pbkdf2: ^3.1.7

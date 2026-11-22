@@ -92,8 +92,8 @@ task libs               # native Indigo/Imago libraries via Docker
 task run
 ```
 
-Check the dependency gates with `pnpm audit --audit-level=high`,
-`pnpm audit --prod --audit-level=high` and `cargo audit` (install it first with
+Check the dependency gates with `pnpm run audit` (full graph),
+`pnpm run audit:prod` (production graph) and `cargo audit` (install it first with
 `cargo install cargo-audit --locked`); `node scripts/harness.mjs`
 is the verification gate. Platform packages for Linux and Windows, and the
 supported distros, are listed in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

@@ -42,8 +42,8 @@ task run
 Dependency and toolchain checks:
 
 ```bash
-pnpm audit --audit-level=high
-pnpm audit --prod --audit-level=high
+pnpm run audit                       # full graph; fails on high/critical
+pnpm run audit:prod                  # production graph; fails on high/critical
 cargo install cargo-audit --locked   # one-time
 cargo audit
 ```

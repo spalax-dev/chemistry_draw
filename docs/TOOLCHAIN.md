@@ -78,13 +78,14 @@ The editor is Ketcher; its peer ranges bound the app's runtime majors.
 These are deliberate, not stale. Each one has a reason and a trigger for
 revisiting it.
 
-| Pin                        | Value                 | Reason                                                                      | Revisit when                        |
-| -------------------------- | --------------------- | --------------------------------------------------------------------------- | ----------------------------------- |
-| Debian / glibc floor       | Debian 12, glibc 2.36 | Indigo/Imago and the Tauri app build against it; packages must not raise it | Linux support policy changes        |
-| Tauri                      | 2.x                   | The host, capabilities and packaging target Tauri v2                        | A Tauri 3 migration activity exists |
-| Indigo / Imago             | 0.x line versions     | Sidecar FFI, patches and Windows DLL pins are validated against them        | Native-lib upgrade activity         |
-| Windows Indigo             | **1.46**              | Prebuilt DLLs pinned by SHA-256 in `scripts/fetch-windows-libs.ps1`         | Windows native-lib activity         |
-| ONNX / models / OCSR stack | **1.x only**          | Not part of the 0.x product; `main` must stay Imago-based                   | Never on `main` — see §5            |
+| Pin                        | Value                 | Reason                                                                                                            | Revisit when                                        |
+| -------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Debian / glibc floor       | Debian 12, glibc 2.36 | Indigo/Imago and the Tauri app build against it; packages must not raise it                                       | Linux support policy changes                        |
+| Tauri                      | 2.x                   | The host, capabilities and packaging target Tauri v2                                                              | A Tauri 3 migration activity exists                 |
+| Indigo / Imago             | 0.x line versions     | Sidecar FFI, patches and Windows DLL pins are validated against them                                              | Native-lib upgrade activity                         |
+| Windows Indigo             | **1.46**              | Prebuilt DLLs pinned by SHA-256 in `scripts/fetch-windows-libs.ps1`                                               | Windows native-lib activity                         |
+| Tauri JS plugin parity     | minor = Rust crate    | Each `@tauri-apps/plugin-*` npm minor must equal its Rust crate minor exactly; the harness and bundler enforce it | A plugin upgrade activity bumps both sides together |
+| ONNX / models / OCSR stack | **1.x only**          | Not part of the 0.x product; `main` must stay Imago-based                                                         | Never on `main` — see §5                            |
 
 ### 2.3 Outdated-but-supported majors are recorded, not blindly upgraded
 
@@ -92,16 +93,16 @@ These majors are behind the newest release but supported and pinned by the
 0.x contract. Record them here; upgrade them only through their own activity
 with a RED test and a review.
 
-| Dependency | 0.x version | Note                                                               |
-| ---------- | ----------- | ------------------------------------------------------------------ |
-| React      | 18          | Ketcher peer range allows 19, but 18.3.1 is the validated baseline |
-| TypeScript | 5.9         | Activity 3 target; the minor bump is planned, not yet applied      |
-| Vite       | 6.4         | Build/dev contract; a major bump is a separate decision            |
-| Vitest     | 4.1         | Test runtime; pairs with the Vite major                            |
-| axum       | 0.7         | Sidecar transport; handler signatures change across majors         |
-| tower-http | 0.5         | Follows axum                                                       |
-| thiserror  | 1           | Error derive; major changes the error contract                     |
-| base64     | 0.22        | API surface changed at 0.21/0.22; stable here                      |
+| Dependency | 0.x version | Note                                                                 |
+| ---------- | ----------- | -------------------------------------------------------------------- |
+| React      | 18          | Ketcher peer range allows 19, but 18.3.1 is the validated baseline   |
+| TypeScript | 5.9         | Applied in activity 3 (5.9.3); the next major is a separate decision |
+| Vite       | 6.4.6       | Build/dev contract; a major bump is a separate decision              |
+| Vitest     | 4.1.12      | Test runtime; pairs with the Vite major                              |
+| axum       | 0.7         | Sidecar transport; handler signatures change across majors           |
+| tower-http | 0.5         | Follows axum                                                         |
+| thiserror  | 1           | Error derive; major changes the error contract                       |
+| base64     | 0.22        | API surface changed at 0.21/0.22; stable here                        |
 
 Rules:
 
@@ -118,21 +119,57 @@ Rules:
 
 ### 3.1 Gates that must be clean
 
-| Gate                                   | Requirement                                         |
-| -------------------------------------- | --------------------------------------------------- |
-| `pnpm audit --audit-level=high`        | No **high** or **critical** findings (dev included) |
-| `pnpm audit --prod --audit-level=high` | No **high** or **critical** runtime findings        |
-| `cargo audit`                          | No **vulnerabilities** reported by RustSec          |
+| Gate                   | Command                                                        | Requirement                                         |
+| ---------------------- | -------------------------------------------------------------- | --------------------------------------------------- |
+| Dependency audit (all) | `pnpm run audit` = `pnpm audit --audit-level=high`             | No **high** or **critical** findings (dev included) |
+| Production audit       | `pnpm run audit:prod` = `pnpm audit --prod --audit-level=high` | No **high** or **critical** runtime findings        |
+| Rust advisory audit    | `cargo audit`                                                  | No **vulnerabilities** reported by RustSec          |
 
+- `pnpm run audit` and `pnpm run audit:prod` run in the quality workflow after
+  `pnpm install`; a high/critical finding fails it. `cargo audit` is the Rust
+  gate (activity 4).
 - Any high or critical advisory fails the change and is fixed — by upgrading,
-  patching through `pnpm`'s `patchedDependencies`, or replacing the dependency.
-  It is **never** allowlisted.
+  overriding through `overrides` in `pnpm-workspace.yaml`, patching through
+  `patchedDependencies`, or replacing the dependency. It is **never**
+  allowlisted.
 - `cargo audit` unmaintained/unsound warnings that have **no available fix** do
   not fail the build, but they are reported in the activity and tracked here
   (or in the activity record) until a fixed release exists. A vulnerability
   (RUSTSEC advisory with a patched version) is not in that exemption.
 - `npm audit` is not used: it reports against `package-lock.json` and ignores
   the pnpm graph. Use the pnpm commands above.
+
+#### 3.1.1 Fixed advisories and their resolution (activity 3)
+
+The npm-security baseline fixed every high/critical finding reported by the two
+pnpm gates:
+
+| Advisory        | Severity | Path                                  | Resolution                                  |
+| --------------- | -------- | ------------------------------------- | ------------------------------------------- |
+| `tinypool`      | critical | Vitest                                | **Vitest 4.1.12** removes tinypool entirely |
+| `fast-uri`      | high     | `ketcher-core > ajv` (prod)           | `overrides`: `fast-uri ^3.1.9`              |
+| `postcss`       | high     | dev/build                             | `overrides`: `postcss ^8.5.23`              |
+| `nanoid`        | high     | dev/build                             | `overrides`: `nanoid ^3.3.18`               |
+| `source-map-js` | high     | dev/build                             | `overrides`: `source-map-js ^1.2.2`         |
+| `browserslist`  | high     | dev/build                             | `overrides`: `browserslist ^4.28.7`         |
+| `vite`          | high     | dev/build                             | **Vite 6.4.6**                              |
+| `qs`            | moderate | transitive                            | `overrides`: `qs ^6.16.1`                   |
+| `pbkdf2`        | moderate | `vite-plugin-node-polyfills` dev-only | `overrides`: `pbkdf2 ^3.1.7`                |
+
+- The overrides live under `overrides:` in **`pnpm-workspace.yaml`** — pnpm 12
+  reads its settings from that file and ignores the `pnpm` field in
+  `package.json`. The lockfile records the resolved versions. Install with
+  **pnpm 12.21** through Corepack.
+- `fast-uri` is the only production-graph advisory fixed here; it is resolved by
+  the override, not by an allowlist entry.
+- `pbkdf2` is dev/build-only (the `vite-plugin-node-polyfills` chain) and fixed
+  within its major, so no allowlist entry is needed.
+- Vitest 4 removes `tinypool` from its dependency graph entirely, so the
+  lockfile has no `tinypool` entry; the contract test only checks its floor when
+  it is actually resolved.
+- Related pins, unchanged: **React 18.3.1 exact** (Ketcher 3.18 peer
+  `^18.2.0 || ^19.0.0`; no React 19), `@types/node` `^24.19.2` (matches Node 24),
+  and **TypeScript 5.9**.
 
 ### 3.2 Dated allowlist
 
@@ -164,8 +201,9 @@ Rules:
   allowlisted. High/critical is always a fix, never an allowlist line.
 - "Build-only" means the package is not present in the shipped `dist/` bundle and
   cannot run in the app; an allowlist entry states that evidence.
-- When a compatible override is viable, use `pnpm.overrides` instead of an
-  allowlist entry; allowlisting is the fallback, not the default.
+- When a compatible override is viable, use `overrides` in
+  `pnpm-workspace.yaml` instead of an allowlist entry; allowlisting is the
+  fallback, not the default.
 - At each expiry, re-run the gates: upgrade or extend the entry with a new date
   and a written reason. A silently expired entry is a review finding.
 
@@ -193,9 +231,11 @@ Rules:
 corepack enable                 # installs the pnpm version pinned by packageManager
 pnpm install --frozen-lockfile  # reproducible install; fails on lockfile drift
 
+# Security pins for transitive dependencies live in pnpm-workspace.yaml > overrides
+
 # Audit gates
-pnpm audit --audit-level=high
-pnpm audit --prod --audit-level=high
+pnpm run audit                       # = pnpm audit --audit-level=high
+pnpm run audit:prod                  # = pnpm audit --prod --audit-level=high
 cargo install cargo-audit --locked   # one-time; provides the cargo audit command
 cargo audit
 
