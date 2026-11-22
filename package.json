@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.8",
   "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24.14.1 <25",
+    "pnpm": ">=12.21.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -14,37 +19,39 @@
     "format:check": "prettier --check .",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check",
     "test": "vitest run",
-    "test:policy": "node --test scripts/lib/activity-policy.test.mjs"
+    "test:policy": "node --test scripts/lib/*.test.mjs",
+    "audit": "pnpm audit --audit-level=high",
+    "audit:prod": "pnpm audit --prod --audit-level=high"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.4",
-    "@tauri-apps/plugin-dialog": "^2",
-    "@tauri-apps/plugin-fs": "^2",
-    "@tauri-apps/plugin-log": "^2.10.1",
-    "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/plugin-dialog": "2.7.1",
+    "@tauri-apps/plugin-fs": "2.5.1",
+    "@tauri-apps/plugin-log": "^2.10.2",
+    "@tauri-apps/plugin-opener": "2.5.4",
+    "@tauri-apps/plugin-shell": "2.3.5",
     "ketcher-core": "^3.18.0",
     "ketcher-react": "^3.18.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tauri-apps/cli": "^2.12.4",
-    "@types/node": "^25.9.3",
+    "@tauri-apps/cli": "^2.12.6",
+    "@types/node": "^24.19.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^10.14.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
-    "prettier": "^3.9.10",
-    "typescript": "~5.6.2",
-    "typescript-eslint": "^8.72.1",
-    "vite": "^6.0.3",
+    "prettier": "^3.10.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "vite": "^6.4.6",
     "vite-plugin-node-polyfills": "^0.28.0",
-    "vitest": "^3.2.7",
+    "vitest": "^4.1.12",
     "yaml": "^2.9.1"
   }
 }

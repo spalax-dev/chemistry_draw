@@ -21,15 +21,38 @@ For larger changes, please open an issue first so we can align on the approach.
 
 See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for prerequisites, platform
 notes (Linux and Windows), how to build native libraries, run the app, and read
-diagnostics.
+diagnostics. Supported versions and the security policy are in
+**[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)**: Node 24 LTS (`>=24.14.1 <25`,
+Ketcher's floor), pnpm 12.21.0 (through Corepack; pnpm is the only package
+manager) and Rust stable. `.nvmrc` pins `24.14.1` (the Ketcher floor); `engines`
+and `packageManager` are declared in `package.json`, so `nvm install && nvm use`
+and `corepack enable` install the pinned toolchain. Any Node below 24.14.1 (for
+example 24.13.1) is below the floor; upgrade first.
 
 Quick start (Linux):
 
 ```bash
-pnpm install
+nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
+corepack enable         # installs the pnpm version from packageManager
+pnpm install --frozen-lockfile
 task libs   # builds Indigo/Imago libs via Docker; required for the sidecar
-task dev
+task run
 ```
+
+Dependency and toolchain checks:
+
+```bash
+pnpm run audit                       # full graph; fails on high/critical
+pnpm run audit:prod                  # production graph; fails on high/critical
+cargo install cargo-audit --locked   # one-time
+cargo audit                          # Rust gate: fails only on vulnerabilities; warnings are tracked
+```
+
+High or critical findings must be fixed; only **dev or build-only** low/moderate
+findings with no compatible in-range fix can be allowlisted, with an expiry date,
+as described in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) §3. `cargo audit` fails
+only on vulnerabilities; unfixable unmaintained/unsound warnings are reported and
+tracked (§3.1.2).
 
 ## Project workflow
 

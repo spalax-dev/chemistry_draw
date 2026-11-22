@@ -26,9 +26,9 @@
    `done`).
 
 The one-shot equivalent is `pnpm run check` (typecheck + ESLint + Prettier) plus
-the Rust commands above; `node scripts/harness.mjs` runs everything. Once Vitest
-is configured (`docs/testing.md` §5), `pnpm test` and the harness block that
-runs it must also be green.
+the Rust commands above; `node scripts/harness.mjs` runs everything. Vitest is
+configured (`docs/testing.md` §5), so `pnpm test` and the harness block that runs
+it must be green too.
 
 Packaging or dependency changes additionally require:
 
@@ -51,6 +51,48 @@ Windows changes are validated by the `windows` job in
     `target/release/bundle/nsis/*.exe`, uploaded by CI.
 17. `cargo check -p indigo-server --all-targets --target x86_64-pc-windows-msvc`
     catches `cfg(windows)` mistakes without linking the DLLs.
+
+### 1.1 Toolchain and security gates (0.x)
+
+Environment used for acceptance:
+
+| Tool | Version                                                       |
+| ---- | ------------------------------------------------------------- |
+| Node | **24.20.0** used (floor **24.14.1**, from `.nvmrc`/`engines`) |
+| pnpm | **12.21.0** via Corepack (`packageManager`)                   |
+| Rust | **1.99.1** stable                                             |
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run audit
+pnpm run audit:prod
+cargo audit
+node scripts/harness.mjs
+```
+
+Expected result:
+
+- `pnpm run audit` and `pnpm run audit:prod`: **0 high/critical** npm findings in
+  both graphs.
+- `cargo audit`: **0 vulnerabilities**. Remaining warnings are the tracked
+  no-fix set (`docs/TOOLCHAIN.md` §3.1.2).
+- Allowlist unchanged: `elliptic` low and `glob`/`minimatch` moderate
+  build-only, expiring **2027-06-30**.
+- Harness **14/14** blocks green.
+
+Evidence for this change:
+
+| Check            | Result                                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Policy tests     | 56 passing                                                                                                                    |
+| Vitest           | 442 passing                                                                                                                   |
+| Sidecar tests    | 87 passing                                                                                                                    |
+| Full harness     | green                                                                                                                         |
+| Builder image    | Node 24.22.3, pnpm 12.21.0                                                                                                    |
+| CI action majors | checkout v7, setup-node v7, upload-artifact v7, pnpm v6, buildx v4, build-push v7, cache v6, release-please v5, gh-release v3 |
+
+CI itself was not executed locally; the action tags were verified upstream.
 
 ---
 

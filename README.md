@@ -74,6 +74,30 @@ use `APPIMAGE_EXTRACT_AND_RUN=1`.
 builds. The app requires the Microsoft Edge WebView2 runtime, which is normally
 included with Windows 10/11.
 
+## Building from source
+
+Supported toolchain on the 0.x line: **Node 24 LTS**
+(`>=24.14.1 <25`, Ketcher's floor), **pnpm 12.21.0** through Corepack (pnpm is
+the only package manager) and **Rust stable**. Full versions, intentional pins
+and the audit policy are in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). `.nvmrc` pins
+`24.14.1` (the Ketcher 3.18 floor); `engines` and `packageManager` are declared in
+`package.json`, so `nvm install && nvm use` and `corepack enable` install the
+pinned toolchain.
+
+```bash
+nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
+corepack enable         # installs the pnpm version from packageManager
+pnpm install --frozen-lockfile
+task libs               # native Indigo/Imago libraries via Docker
+task run
+```
+
+Check the dependency gates with `pnpm run audit` (full graph),
+`pnpm run audit:prod` (production graph) and `cargo audit` (install it first with
+`cargo install cargo-audit --locked`); `node scripts/harness.mjs`
+is the verification gate. Platform packages for Linux and Windows, and the
+supported distros, are listed in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
 ## Contributing
 
 Contributions are welcome — bug reports, ideas, docs, and code.

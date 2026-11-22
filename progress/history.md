@@ -530,3 +530,27 @@ re-review.
   real atoms and bonds (verified against the sidecar: Boc 4.5 KB label vs 8.5 KB
   with bond strokes). Insertion keeps the original KET, so the document still
   carries the abbreviation SGroup. 439 tests, harness green.
+
+## 2026-11-22 — US-10: toolchain and security baseline (main)
+
+- branch `us-10-toolchain-security`, based on `main` `4e6de73`; not merged,
+  pushed or tagged.
+- activities (docs -> test -> implement -> review): `4a38562` toolchain policy,
+  `5c02e20` Node 24/pnpm 12/Actions, `5bc7196` npm security, `1b2914a` Rust
+  security, `c4954fd` AbortSignal.timeout, `112ea85` verification evidence.
+- toolchain: Node **24.14.1+** (`.nvmrc`/`engines`; acceptance on 24.20.0),
+  pnpm **12.21.0** via Corepack, NodeSource 24 in the Debian 12 builder with the
+  native-libs layer preserved, current GitHub Actions majors.
+- npm: Vitest 4.1.12, Vite 6.4.6, TypeScript 5.9, @types/node 24, exact React
+  18.3.1 (Ketcher 3.18 peers), overrides in `pnpm-workspace.yaml`; **0
+  high/critical** in the full and production graphs. `elliptic` low (dev, no
+  fix) and `glob`/`minimatch` moderate (build-only) allowlisted to 2027-06-30.
+- Rust: targeted `cargo update` (quick-xml/plist, url, anyhow, tokio, rustix,
+  event-listener, async-executor) and the 0.1.7 lock drift fixed; `cargo audit`
+  reports **0 vulnerabilities** and 6 no-fix warnings (glib unsound, four
+  unmaintained, chrono lock-only).
+- app: `fetchWithTimeout` now uses `AbortSignal.timeout(ms)`.
+- gates: full harness 14/14, 442 Vitest, 87 sidecar, 56 policy tests; builder
+  Node 24.22.3 + pnpm 12.21.0. Local shell Node 24.13.1 is below the floor;
+  acceptance used 24.20.0.
+- no code/config skipped; no `.so`, `target/`, `dist/` or generated docs tracked.
