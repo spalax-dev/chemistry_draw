@@ -21,15 +21,35 @@ For larger changes, please open an issue first so we can align on the approach.
 
 See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for prerequisites, platform
 notes (Linux and Windows), how to build native libraries, run the app, and read
-diagnostics.
+diagnostics. Supported versions and the security policy are in
+**[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)**: Node 24 LTS (`>=24.14.1 <25`,
+Ketcher's floor), pnpm 12.21.0 (through Corepack; pnpm is the only package
+manager) and Rust stable. `.nvmrc`, `engines` and `packageManager` land with the
+Node/pnpm activity, so `nvm use` alone does not work yet; install a satisfying
+patch directly. A local Node 24.13.1 is below the floor; upgrade first.
 
 Quick start (Linux):
 
 ```bash
-pnpm install
+nvm install 24 && nvm use   # Node 24.14.1+ (floor from Ketcher 3.18)
+corepack enable         # installs the pnpm version from packageManager
+pnpm install --frozen-lockfile
 task libs   # builds Indigo/Imago libs via Docker; required for the sidecar
-task dev
+task run
 ```
+
+Dependency and toolchain checks:
+
+```bash
+pnpm audit --audit-level=high
+pnpm audit --prod --audit-level=high
+cargo install cargo-audit --locked   # one-time
+cargo audit
+```
+
+High or critical findings must be fixed; only **dev or build-only** low/moderate
+findings with no compatible in-range fix can be allowlisted, with an expiry date,
+as described in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) §3.
 
 ## Project workflow
 

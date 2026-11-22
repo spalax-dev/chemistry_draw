@@ -16,6 +16,47 @@ Every change follows **docs → test → implement → review**:
 `phase` order in `activities.json` with `scripts/lib/activity-policy.mjs`.
 Docs-only activities (`type: "docs"`) run docs → review and skip test/implement.
 
+## Toolchain and prerequisites
+
+The supported versions, pins and audit gates are in
+**[docs/TOOLCHAIN.md](TOOLCHAIN.md)**. For the 0.x `main` line:
+
+| Tool | Version                                        |
+| ---- | ---------------------------------------------- |
+| Node | 24 LTS (`>=24.14.1 <25`), from `.nvmrc` (`24`) |
+| pnpm | 12.21.0, pinned by `packageManager` + Corepack |
+| Rust | stable (local baseline rustc 1.99.1)           |
+
+pnpm is the **only** package manager: use it for installs, scripts and audits.
+`npm install`, `npm ci` and `yarn` are not supported.
+
+Ketcher 3.18 declares `engines.node >= 24.14.1`, so 24.14.1 is the real floor;
+`.nvmrc` `24` resolves to a satisfying patch. A local Node 24.13.1 is below it —
+upgrade before working on this branch. `.nvmrc`, `engines` and `packageManager`
+land with the Node/pnpm activity, so `nvm use` does not work yet; install and use
+a satisfying patch directly:
+
+```bash
+nvm install 24 && nvm use   # Node 24.14.1+ (floor from Ketcher 3.18)
+corepack enable         # installs the pnpm version from packageManager
+pnpm install --frozen-lockfile
+```
+
+Before opening a change, run the audit gates and the full harness:
+
+```bash
+pnpm audit --audit-level=high
+pnpm audit --prod --audit-level=high
+cargo install cargo-audit --locked   # one-time
+cargo audit
+node scripts/harness.mjs
+```
+
+`node scripts/harness.mjs --fast` is for local iteration (skips the frontend
+build, uses `cargo check`, skips sidecar tests); the full run is required before
+review. The allowlist policy and the dated exceptions are in
+[docs/TOOLCHAIN.md](TOOLCHAIN.md) §3.
+
 ## Branch model (mandatory)
 
 Chemistry Draw has two maintained lines; choose the target line before creating
@@ -40,7 +81,7 @@ Rules:
 - Reference: the build-layout activity was based on `main`, merged to `main`,
   then ported to `develop`. E1 is main-only; it is not merged into `develop`.
 
-## Local development (`task dev` / `task run`)
+## Local development (`task run`)
 
 These are **development packages** (`-devel`/`-dev`) because `pkg-config` and headers are required to compile crates like `glib-sys`, `gtk-sys`, `webkit2gtk-sys`.
 
@@ -166,7 +207,8 @@ Prerequisites:
 
 - Visual Studio Build Tools with **Desktop development with C++** (MSVC x64 +
   Windows SDK)
-- Rust stable MSVC toolchain, Node.js ≥ 22, pnpm and PowerShell 5.1+
+- Rust stable MSVC toolchain, Node.js 24 LTS (`>=24.14.1 <25`), pnpm 12 via
+  Corepack (`corepack enable`), and PowerShell 5.1+
 - WebView2 Runtime (included in Windows 11; the installer embeds the
   bootstrapper for Windows 10)
 
@@ -175,7 +217,8 @@ Prerequisites:
 pwsh scripts/fetch-windows-libs.ps1
 
 $env:PATH = "$PWD\src-tauri\lib\windows-x86_64;$env:PATH"
-pnpm install
+corepack enable
+pnpm install --frozen-lockfile
 cargo build --release -p indigo-server --bin indigo-server
 Copy-Item target\release\indigo-server.exe `
   target\release\indigo-server-x86_64-pc-windows-msvc.exe
