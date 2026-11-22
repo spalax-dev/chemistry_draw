@@ -203,9 +203,15 @@ Docker cache must be bypassed). Verify the pin with
 OpenCV that Imago needs (`libopencv_*.so.406`) plus `libjpeg`. It does **not**
 copy `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or `libbrotli*`:
 those stay host-provided, as do `libc`, `libm`, `libz`, `libstdc++`,
-`libgcc_s` and GL/X11/xcb. If your `src-tauri/lib/linux-x86_64/` was populated
-before this split, delete those files (the directory is gitignored) so the
-sidecar loads the host copies.
+`libgcc_s` and GL/X11/xcb.
+
+If your `src-tauri/lib/linux-x86_64/` was populated before this split, delete
+those files (the directory is gitignored) so the sidecar loads the host copies.
+
+`task packages` prunes the development lib directory to the sidecar libraries,
+so run `task libs` again before `node scripts/harness.mjs`: the dev `libimago.so`
+needs the bundled OpenCV. The packages themselves still include the OpenCV
+libraries.
 
 The reason: Debian 12 ships fontconfig **2.14**, which cannot parse the newer
 `/etc/fonts` syntax of current distros (Fedora 45 uses fontconfig **2.18**), so

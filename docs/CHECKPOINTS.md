@@ -498,7 +498,7 @@
       covered by Vitest; the "Recent structures" manual checklist in
       `docs/verification.md` §2 passes and `node scripts/harness.mjs` is green.
 
-- [ ] **Activity 29 — shared Open table:** Open renders the same
+- [x] **Activity 29 — shared Open table:** Open renders the same
       **Recent structures** table as Welcome — the same six columns, thumbnails,
       loading and empty states — fed by the single `App` loader
       (`src/recentStructures.ts`), so no second loader or duplicate
@@ -509,6 +509,9 @@
       Tests pin the shared table reuse, the optional Remove and the retained
       tabs list; `docs/architecture.md` §5.11 and `docs/conventions.md` §6.8
       describe it and the "Open" step in `docs/verification.md` §2 passes.
+      Shipped: `RecentStructuresTable` with the optional `onRemove`,
+      `recentStructures.test.ts`, recorded in `progress/history.md` on
+      2026-11-19.
 
 - [x] **Activity 30 — expanded template previews (historical):** superseded by
       Activity 32, which strips the SGroups instead of marking them expanded.
@@ -555,9 +558,9 @@
 
 ## C17 — Toolchain and security baseline (0.x)
 
-- [ ] Node 24.20.0+ is declared in `.nvmrc` and `engines`; pnpm 12.21 is pinned
+- [x] Node 24.20.0+ is declared in `.nvmrc` and `engines`; pnpm 12.21 is pinned
       by `packageManager`; the Docker builder enables Corepack. (E1 raises the
-      floor from 24.14.1 to 24.20.0; `.nvmrc`/`engines` move in activity 2.)
+      floor from 24.14.1 to 24.20.0; `.nvmrc`/`engines` moved in activity 2.)
 - [x] CI and the Docker builder use Node 24; the GitHub Actions are on the
       current majors.
 - [x] `pnpm run audit` and `pnpm run audit:prod` report no high/critical
@@ -565,13 +568,13 @@
       2027-06-30).
 - [x] `cargo audit` reports no vulnerabilities; the warnings with no fix
       reachable on the 0.x graph are tracked in `docs/TOOLCHAIN.md` §3.1.2.
-- [x] `node scripts/harness.mjs` is green (442 Vitest, 87 sidecar and 56 policy
-      tests).
+- [x] `node scripts/harness.mjs` is green (451 Vitest, 88 sidecar and 68
+      policy/contract tests).
 - [x] The pnpm and Rust audit gates run in the quality workflow.
 
 ## C18 — E1 Ketcher 3.21 / Indigo 1.49
 
-- [ ] `ketcher-core` and `ketcher-react` are exactly `3.21.0`; the installed
+- [x] `ketcher-core` and `ketcher-react` are exactly `3.21.0`; the installed
       `ketcher-react` is the committed
       `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`, built from the
       `v3.21.0` tag with `KETCHER_MULTI_LANGUAGE_BUILD=true`, not the
@@ -582,46 +585,49 @@
       Rollup via `pnpm --filter ketcher-react`, and `pnpm pack`s into
       `vendor/ketcher-react/`. Needs Node 24.20+, uses no npm/npx, and the
       detailed mechanism is in `docs/TOOLCHAIN.md` §2.2.
-- [ ] `pnpm-workspace.yaml` registers `ketcher-core@3.21.0` and
+- [x] `pnpm-workspace.yaml` registers `ketcher-core@3.21.0` and
       `patches/ketcher-core@3.21.0.patch`; the patch contains only the two
       `parametrizeUrl` hunks. No 3.18 patch or `ketcher-core@3.18.0` entry
       remains, and the ReBond hunks are gone because 3.21.0 ships the upstream
       guard.
-- [ ] `docs/KETCHER-BUG-parametrizeUrl.md` records that the fix is **not** in
+- [x] `docs/KETCHER-BUG-parametrizeUrl.md` records that the fix is **not** in
       `3.21.0` stable, shipped in `3.22.0-rc.1` (prerelease; the npm `beta` tag
       still resolves to `3.21.0-rc.3`), and that the patch is deleted when
       `3.22.0` stable ships.
-- [ ] The language selector works: **Settings → General Editing & Display →
-      Language** lists
-      English and 简体中文 (`zh-CN`), switching applies without a reload, the
-      choice persists in `localStorage["ketcher-language"]` across launches, and
-      chemistry vocabulary stays untranslated. The selector does not change the
-      Indigo `apiPath`.
-- [ ] The main/backstage app initializes on 3.21: `handleInit` calls
+- [ ] **Pending packaged smoke (`.deb`/AppImage; NSIS is CI-deferred, not
+      locally verified).** The language selector works:
+      **Settings → General Editing & Display → Language** lists English and
+      简体中文 (`zh-CN`), switching applies without a reload, the choice persists
+      in `localStorage["ketcher-language"]` across launches, and chemistry
+      vocabulary stays untranslated. The selector does not change the Indigo
+      `apiPath`.
+- [x] The main/backstage app initializes on 3.21: `handleInit` calls
       `applyKetcherAppOptions(ketcher, { server: true })` through
       `src/ketcherOptions.ts` and no longer passes `app` to
       `editor.options()`; the adapter dispatches `APP_OPTIONS` + `UPDATE` + a
       no-op `ACTION`, the canvas is not wiped, and a missing store logs the
       fallback instead of fabricating server mode. The backstage, tabs, File
       menu and autosave still work.
-- [ ] Recognize works on Linux with the explicit-port base URL
-      (`http://127.0.0.1:<port>/v2/`): the Imago poll URL keeps the real port,
-      with no `127.0.0.1undefined` and no `TypeError: Load failed`.
-- [ ] `scripts/build-libs.sh` clones the `indigo-1.49.0` tag (lowercase ref, not
+- [ ] **Pending packaged smoke (`.deb`/AppImage; NSIS is CI-deferred, not
+      locally verified).** Recognize works on Linux with the explicit-port base
+      URL (`http://127.0.0.1:<port>/v2/`): the Imago poll URL
+      keeps the real port, with no `127.0.0.1undefined` and no
+      `TypeError: Load failed`.
+- [x] `scripts/build-libs.sh` clones the `indigo-1.49.0` tag (lowercase ref, not
       `master`) with a tag guard and still builds Imago/OpenCV;
       `scripts/fetch-windows-libs.ps1` pins Indigo 1.49.0 with SHA-256
       `5bd405cc…`; `/v2/info`/`/v2/health` report an `indigo_version` starting
       with `1.49.0` on Linux and Windows, asserted by the sidecar test
       `info_reports_pinned_indigo_version`.
-- [ ] The E1 contract tests exist and are mutation-checked: exact versions, no
+- [x] The E1 contract tests exist and are mutation-checked: exact versions, no
       3.18 patch entry, `parametrizeUrl` explicit-port behaviour, the committed
       multi-language vendor tarball/build flag, the Indigo tag/Windows pins, the
       sidecar version and the main app 3.21 init.
-- [ ] The Imago builder image/libs were rebuilt with the new pin and
-      `node scripts/harness.mjs` is green; the dev Recognize/Indigo flows pass;
-      the packaged smoke (`.deb`/`.rpm`/AppImage, NSIS on Windows) shows the
-      selector, persists the choice, initializes on 3.21 and completes an
-      explicit-port Recognize.
+- [x] The Imago builder image/libs were rebuilt with the new pin and
+      `node scripts/harness.mjs` is green (451 Vitest, 88 sidecar, 68
+      policy/contract); the dev Recognize/Indigo flows pass. The packaged smoke
+      (`.deb`/AppImage locally; NSIS is CI-deferred) remains pending the user's
+      manual pass (`docs/verification.md` §2, E1 step 10).
 
 ---
 
