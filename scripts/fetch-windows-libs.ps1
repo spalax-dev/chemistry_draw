@@ -5,7 +5,7 @@
     MSVC import libraries the sidecar links against.
 
 .DESCRIPTION
-    Downloads indigo-libs-windows-x86_64.zip 1.46.0, verifies its SHA-256,
+    Downloads indigo-libs-windows-x86_64.zip 1.49.0, verifies its SHA-256,
     extracts only the runtime DLLs into src-tauri/lib/windows-x86_64/ and
     builds indigo.lib / indigo-renderer.lib from the DLL exports.
 
@@ -33,9 +33,12 @@ Set-StrictMode -Version Latest
 [Net.ServicePointManager]::SecurityProtocol =
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$IndigoVersion = "1.46.0"
+# Indigo 1.49.0 is the stable tag pinned on Linux too (git ref
+# `indigo-1.49.0`, release name `Indigo-1.49.0`); keeping both platforms on the
+# same version keeps /v2/info.indigo_version consistent.
+$IndigoVersion = "1.49.0"
 $DownloadUrl = "https://lifescience.opensource.epam.com/downloads/indigo-$IndigoVersion/indigo-libs-windows-x86_64.zip"
-$ExpectedSha256 = "c6fac67a2bd79ed0c39930fa4c031a856055883fec97921e13fef831820ed598"
+$ExpectedSha256 = "5bd405cc4c2b19521b88e015e7266f1a2914bc7d5ca7b769f1e1c16378871515"
 
 # Runtime DLLs the sidecar needs next to the executable.
 $RuntimeDlls = @(

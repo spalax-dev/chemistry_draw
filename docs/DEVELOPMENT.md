@@ -23,24 +23,57 @@ The supported versions, pins and audit gates are in
 
 | Tool | Version                                        |
 | ---- | ---------------------------------------------- |
-| Node | `24.14.1` from `.nvmrc` (`>=24.14.1 <25`)      |
+| Node | `24.20.0` from `.nvmrc` (`>=24.20.0 <25`)      |
 | pnpm | 12.21.0, pinned by `packageManager` + Corepack |
 | Rust | stable (local baseline rustc 1.99.1)           |
 
 pnpm is the **only** package manager: use it for installs, scripts and audits.
-`npm install`, `npm ci` and `yarn` are not supported.
+`npm install`, `npm ci`, `npx` and `yarn` are not supported.
 
-Ketcher 3.18 declares `engines.node >= 24.14.1`, so 24.14.1 is the real floor
-and the repo's `.nvmrc` pins it. Any Node below 24.14.1 (for example 24.13.1) is
-below it — upgrade before working on this branch; acceptance ran on 24.20.0.
-`engines` and `packageManager` are declared in `package.json`, so
-`nvm install && nvm use` installs the pinned 24.14.1:
+Ketcher 3.21 declares `engines.node >= 24.20.0`, so 24.20.0 is the real floor
+and the repo's `.nvmrc` pins it. Any Node below 24.20.0 is below it — upgrade
+before working on this branch. `engines` and `packageManager` are declared in
+`package.json`, so `nvm install 24.20.0 && nvm use` installs the pinned
+release (the same command works as `nvm install && nvm use`, which reads
+`.nvmrc`):
 
 ```bash
-nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
-corepack enable         # installs the pnpm version from packageManager
+nvm install 24.20.0 && nvm use  # .nvmrc pins Node 24.20.0 (Ketcher 3.21 floor)
+corepack enable                 # installs the pnpm version from packageManager
 pnpm install --frozen-lockfile
 ```
+
+### Ketcher 3.21 multi-language `ketcher-react`
+
+`ketcher-react` is not the published npm bundle (English-only): the app uses the
+committed `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`, built from tag
+`v3.21.0` with `KETCHER_MULTI_LANGUAGE_BUILD=true`. A fresh checkout, CI and
+Windows only need `pnpm install`; regenerate the tarball only when the Ketcher
+build must change, in the pinned toolchain:
+
+```bash
+scripts/build-ketcher-react.sh
+```
+
+The script is pnpm-only (no `npm`, `npx` or `yarn`) and requires Node 24.20+. It
+regenerates the tarball in a throwaway `build/ketcher-src` checkout:
+
+1. clone tag `v3.21.0` into `build/ketcher-src`;
+2. write `pnpm-workspace.yaml` with `packages: ["packages/*"]`;
+3. `pnpm install --ignore-scripts --no-frozen-lockfile` (root npm lock ignored,
+   husky skipped);
+4. `export KETCHER_MULTI_LANGUAGE_BUILD=true`;
+5. `pnpm --filter ketcher-react run i18n:generate` (bypasses the npm-based
+   `prebuild`);
+6. `pnpm --filter ketcher-react exec cross-env NODE_ENV=production rollup -c rollup.config.mjs -m true`;
+7. guard `zh-CN` in `dist/index.js`, then
+   `pnpm --filter ketcher-react pack --pack-destination vendor/ketcher-react`
+   and rename to `ketcher-react-3.21.0-multi.tgz`.
+
+The throwaway checkout never enters the app's dependency graph. `ketcher-core`
+stays the published 3.21.0 package with one narrowed `parametrizeUrl` patch;
+`docs/KETCHER-BUG-parametrizeUrl.md` carries the bug and the removal condition
+(3.22 stable with the upstream fix).
 
 Before opening a change, run the audit gates and the full harness:
 
@@ -150,6 +183,8 @@ sudo pacman -S --needed \
 ## Native libraries (Indigo / Imago)
 
 The `indigo-server` sidecar links against prebuilt Indigo/Imago/OpenCV libraries.
+Indigo is pinned to the stable Linux tag **`indigo-1.49.0`** (git refs are
+lowercase; the GitHub release is `Indigo-1.49.0`).
 
 - They are **not committed** (they are binaries). Generate them with:
 
@@ -158,13 +193,25 @@ task libs
 ```
 
 That builds the Docker builder image and copies the runtime libraries into
-`src-tauri/lib/linux-x86_64/`, which is gitignored. It includes the minimal
+`src-tauri/lib/linux-x86_64/`, which is gitignored. The builder clones
+`--depth 1 --branch indigo-1.49.0` (never `master`), so `/v2/info` reports
+`1.49.0`; after changing the pin, rebuild with
+`task builder-image && task libs` (`task builder-image -- --no-cache` when the
+Docker cache must be bypassed). Verify the pin with
+`cargo test -p indigo-server info_reports_pinned_indigo_version` (set
+`LD_LIBRARY_PATH` as the harness does). It includes the minimal
 OpenCV that Imago needs (`libopencv_*.so.406`) plus `libjpeg`. It does **not**
 copy `libfontconfig*`, `libfreetype*`, `libexpat*`, `libpng*` or `libbrotli*`:
 those stay host-provided, as do `libc`, `libm`, `libz`, `libstdc++`,
-`libgcc_s` and GL/X11/xcb. If your `src-tauri/lib/linux-x86_64/` was populated
-before this split, delete those files (the directory is gitignored) so the
-sidecar loads the host copies.
+`libgcc_s` and GL/X11/xcb.
+
+If your `src-tauri/lib/linux-x86_64/` was populated before this split, delete
+those files (the directory is gitignored) so the sidecar loads the host copies.
+
+`task packages` prunes the development lib directory to the sidecar libraries,
+so run `task libs` again before `node scripts/harness.mjs`: the dev `libimago.so`
+needs the bundled OpenCV. The packages themselves still include the OpenCV
+libraries.
 
 The reason: Debian 12 ships fontconfig **2.14**, which cannot parse the newer
 `/etc/fonts` syntax of current distros (Fedora 45 uses fontconfig **2.18**), so
@@ -202,7 +249,7 @@ mkdir -p build/appimage
 
 ## Windows 10/11 (x86_64)
 
-Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker
+Windows uses the prebuilt EPAM Indigo 1.49.0 DLLs instead of the Docker
 builder. Imago and OpenCV are **not** built or shipped: image recognition is
 unavailable and Ketcher disables **Recognize Molecule** (`imago_versions` is an
 empty array).
@@ -211,7 +258,7 @@ Prerequisites:
 
 - Visual Studio Build Tools with **Desktop development with C++** (MSVC x64 +
   Windows SDK)
-- Rust stable MSVC toolchain, Node.js 24 LTS (`>=24.14.1 <25`), pnpm 12 via
+- Rust stable MSVC toolchain, Node.js 24 LTS (`>=24.20.0 <25`), pnpm 12 via
   Corepack (`corepack enable`), and PowerShell 5.1+
 - WebView2 Runtime (included in Windows 11; the installer embeds the
   bootstrapper for Windows 10)

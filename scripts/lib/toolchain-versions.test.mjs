@@ -14,8 +14,8 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 
 const read = (relativePath) => readFileSync(path.join(ROOT, relativePath), "utf8");
 
-const NODE_FLOOR = ">=24.14.1 <25";
-const NODE_PIN = "24.14.1";
+const NODE_FLOOR = ">=24.20.0 <25";
+const NODE_PIN = "24.20.0";
 const PNPM_PIN = "12.21.0";
 
 /** Actions whose major the toolchain policy fixes, with the supported major. */

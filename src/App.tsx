@@ -84,7 +84,7 @@ import {
   type LibraryTemplate,
   type TemplateSource,
 } from "./templateLibrary";
-import { cancelActiveTool, openStructureLibrary } from "./ketcherOptions";
+import { applyKetcherAppOptions, cancelActiveTool, openStructureLibrary } from "./ketcherOptions";
 import type { FileMenuId } from "./fileMenu";
 
 /** The Save / Export helpers work on a document view of the active tab. */
@@ -434,11 +434,15 @@ function App() {
 
   const handleInit = useCallback((ketcher: Ketcher) => {
     ketcherRef.current = ketcher;
-    const currentOptions = ketcher.editor.options();
-    ketcher.editor.options({
-      ...currentOptions,
-      app: { ...currentOptions.app, server: true },
-    });
+    // Ketcher 3.21 narrowed `editor.options()` to render options: `app` is
+    // Redux store state, read by the server-backed toolbar controls. Enable
+    // server mode through the option-store adapter instead of rebuilding the
+    // render; the canvas, selection and undo history are left untouched.
+    if (!applyKetcherAppOptions(ketcher, { server: true })) {
+      console.warn(
+        "[chemistry-draw] could not enable Ketcher server mode; server-backed controls stay disabled.",
+      );
+    }
     setReady(true);
   }, []);
 
