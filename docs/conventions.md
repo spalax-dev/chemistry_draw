@@ -88,6 +88,31 @@ Rules:
   is the sanctioned exception (§6.5).
 - Do not log sensitive data; `console.*` is now persisted.
 
+### 3.1 Web API modernisation
+
+For request timeouts use the platform primitive, not hand-rolled timers:
+
+```ts
+const res = await fetch(url, { signal: AbortSignal.timeout(ms) });
+```
+
+- The shared helper lives in `src/fetchWithTimeout.ts`; `src/App.tsx` imports it
+  instead of defining its own `fetchWithTimeout`.
+- **Do not** hand-roll `AbortController` + `setTimeout` + `clearTimeout` for a
+  timeout. `AbortSignal.timeout(ms)` is the whole implementation.
+- **Runtime:** `AbortSignal.timeout` is **Baseline 2024** — it exists since
+  Chrome 103, Firefox 100 and Safari 16, but Chrome 103–123 abort with
+  `AbortError` instead of `TimeoutError`. The app requires webkit2gtk 4.1 /
+  Debian 12 (WebKitGTK 2.40+, the engine behind webkit2gtk 4.1) and the browser
+  dev server, both with full support, so the timeout rejects with
+  `TimeoutError`.
+- **Why:** the old helper built a controller, a timer and a `clearTimeout`; the
+  timeout signal removes that scaffolding and the `AbortError`/`TimeoutError`
+  mismatch risk. The caller already catches all fetch errors, so no
+  `AbortError`-specific handling is lost.
+- Source: `modern-web-guidance` `js/abort-signal-timeout` legacy-scan finding in
+  `src/App.tsx`.
+
 ---
 
 ## 4. Naming

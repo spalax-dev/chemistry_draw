@@ -30,6 +30,7 @@ import {
   type SaveOutcome,
 } from "./document";
 import { createAutosaveScheduler, type AutosaveScheduler } from "./autosave";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 import {
   activateTab,
   activeTab,
@@ -139,16 +140,6 @@ function friendly(msg: string): string {
 function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.length > 0 ? message : "unknown error";
-}
-
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /** Versions and the real port read from `GET /v2/info`; never assumed values. */
