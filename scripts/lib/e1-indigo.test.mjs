@@ -7,7 +7,7 @@
 // which runs against the real .so files.
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
@@ -135,8 +135,7 @@ test("the sidecar pins the linked Indigo version through /v2/info", () => {
     infoTests.includes('starts_with("1.49.0")'),
     "the sidecar test must assert indigo_version starts with 1.49.0",
   );
-  assert.ok(
-    existsSync(path.join(ROOT, "src-tauri", "lib", "linux-x86_64")),
-    "the native libraries directory must exist for the sidecar test",
-  );
+  // The linked-version run needs the built libraries; ci.yml builds them with
+  // `task libs` and runs the sidecar test. The quality job is a clean checkout,
+  // so this contract reads the source and never requires src-tauri/lib.
 });
