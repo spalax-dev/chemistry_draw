@@ -227,23 +227,23 @@ installed artifacts.
 9. **Render robustness remains upstream.** Repeat "Ketcher render robustness"
    above: 3.21.0 carries the ReBond guard, so the stale half-bond case must not
    flood the console even though the local patch no longer contains those hunks.
-10. **Packaged smoke — pending the user's manual pass.** Install the rebuilt
+10. **Packaged smoke — verified by the user on 2026-11-22.** Install the rebuilt
     `.deb` and AppImage and repeat steps 2-8. The NSIS installer is
     CI-deferred (there is no Windows host here) and is not part of this local
     pass. Check each item and record the result:
 
-    - [ ] **Pending.** App opens and the toolbar, backstage and tabs still work
+    - [x] **Verified by the user on 2026-11-22.** App opens and the toolbar, backstage and tabs still work
           (no 3.21 `app`-option error, canvas not wiped).
-    - [ ] **Pending.** **Settings → General Editing & Display → Language** lists
+    - [x] **Verified by the user on 2026-11-22.** **Settings → General Editing & Display → Language** lists
           English and 简体中文 (`zh-CN`); switching applies without a reload.
-    - [ ] **Pending.** Restart the packaged app: the 简体中文 choice persists
+    - [x] **Verified by the user on 2026-11-22.** Restart the packaged app: the 简体中文 choice persists
           (`ketcher-language` in `localStorage`).
-    - [ ] **Pending.** Recognize on the committed test fixture
+    - [x] **Verified by the user on 2026-11-22.** Recognize on the committed test fixture
           `src-tauri/sidecar/fixtures/caffeine.png` (24,609 B) returns the
           structure, with the poll URL keeping the real explicit port.
-    - [ ] **Pending.** `curl -s http://127.0.0.1:<port>/v2/info` reports
+    - [x] **Verified by the user on 2026-11-22.** `curl -s http://127.0.0.1:<port>/v2/info` reports
           `indigo_version` starting with `1.49.0`.
-    - [ ] **Pending.** The Linux payload still contains `imago-worker`,
+    - [x] **Verified by the user on 2026-11-22.** The Linux payload still contains `imago-worker`,
           `libimago.so` and the minimal OpenCV. The Windows payload (none of
           them) is checked by CI, not locally.
 

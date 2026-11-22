@@ -594,7 +594,7 @@
       `3.21.0` stable, shipped in `3.22.0-rc.1` (prerelease; the npm `beta` tag
       still resolves to `3.21.0-rc.3`), and that the patch is deleted when
       `3.22.0` stable ships.
-- [ ] **Pending packaged smoke (`.deb`/AppImage; NSIS is CI-deferred, not
+- [x] **Verified by the user on 2026-11-22 (`.deb`/AppImage; NSIS is CI-deferred, not
       locally verified).** The language selector works:
       **Settings → General Editing & Display → Language** lists English and
       简体中文 (`zh-CN`), switching applies without a reload, the choice persists
@@ -608,7 +608,7 @@
       no-op `ACTION`, the canvas is not wiped, and a missing store logs the
       fallback instead of fabricating server mode. The backstage, tabs, File
       menu and autosave still work.
-- [ ] **Pending packaged smoke (`.deb`/AppImage; NSIS is CI-deferred, not
+- [x] **Verified by the user on 2026-11-22 (`.deb`/AppImage; NSIS is CI-deferred, not
       locally verified).** Recognize works on Linux with the explicit-port base
       URL (`http://127.0.0.1:<port>/v2/`): the Imago poll URL
       keeps the real port, with no `127.0.0.1undefined` and no
@@ -626,8 +626,8 @@
 - [x] The Imago builder image/libs were rebuilt with the new pin and
       `node scripts/harness.mjs` is green (451 Vitest, 88 sidecar, 68
       policy/contract); the dev Recognize/Indigo flows pass. The packaged smoke
-      (`.deb`/AppImage locally; NSIS is CI-deferred) remains pending the user's
-      manual pass (`docs/verification.md` §2, E1 step 10).
+      (`.deb`/AppImage locally; NSIS is CI-deferred) was verified by the user
+      on 2026-11-22 (`docs/verification.md` §2, E1 step 10).
 
 ---
 
