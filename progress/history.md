@@ -816,3 +816,9 @@ Consolidate the project's generated artifacts under one ignored root.
 - status: stage `planning`; `--start-dev` has not been run.
 - approved by: pending user approval of the reconstructed foundation and the
   planning → development transition.
+
+## PLANNING -> DEVELOPMENT
+
+- at: 2026-11-22T00:06:46.820Z
+- approved by: Jorge
+- planning is closed: it cannot be re-entered.

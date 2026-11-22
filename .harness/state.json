@@ -1,7 +1,6 @@
 {
-  "project": "Chemistry Draw",
-  "description": "Tauri v2 + Ketcher editor with a native Indigo/ONNX sidecar",
-  "stage": "planning",
-  "startedAt": null,
-  "approvedBy": null
+  "stage": "development",
+  "startedAt": "2026-11-22T00:06:46.820Z",
+  "approvedBy": "Jorge",
+  "previousStage": "planning"
 }
