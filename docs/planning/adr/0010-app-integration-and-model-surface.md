@@ -52,7 +52,10 @@ command dispatcher.
    `autosaveStore` flow leave `App.tsx`; the per-tab `tabStore` is the only
    snapshot writer. An imported structure is serialized with `getKet` before
    its snapshot is written, so the `.ket` snapshot validator can restore it on
-   the next launch.
+   the next launch. ACT-07 then deleted the orphaned `src/autosaveStore.ts` and
+   the unused `shouldOfferRecovery` decision, so per-tab restore is the only
+   recovery path. `src/autosave.ts` keeps only the scheduler, metadata parser and
+   write-generation helpers that `tabStore.ts` and `App.tsx` consume.
 6. **Dialogs block document shortcuts.** The backstage, Models setup, Export,
    the close prompt, an error and a notice all count as an open dialog for the
    capture-phase shortcut handler. The File popup is dismissed by the first
@@ -83,11 +86,10 @@ command dispatcher.
 - **Negative:** Save/New/Export exist both in the File menu and on the toolbar;
   both call the same command, but the duplication must be reviewed if the
   toolbar is redesigned. The single-document `autosaveStore.ts` and
-  `shouldOfferRecovery` remain exported without a caller after the port and
-  need a cleanup activity.
-- **Follow-up:** ACT-06 runs the story gates and the GUI checklist. Removing the
-  unused single-document recovery module is a separate cleanup; it is not
-  deleted here because it is outside this activity's `touches`.
+  `shouldOfferRecovery` were left exported without a caller after the port.
+- **Follow-up:** ACT-07 removed the orphaned `src/autosaveStore.ts` and
+  `shouldOfferRecovery`; per-tab recovery is the only path. ACT-06 runs the story
+  gates and the GUI checklist.
 
 ## References
 

@@ -81,12 +81,12 @@ transport/  →  service/  →  ffi/
 
 Frontend layers follow the same one-way rule:
 
-| Layer                  | Contains                                                                                                                                                                              | May import from                     |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `src/ui/`              | presentational components (`Backstage`, `TabStrip`, `FileMenu`, `HomeButton`, `Dialog`, `Button`, `DocumentDialogs`, `ModelSetupDialog`, `ui/backstage/`, icon style)                 | `src/*` pure modules, design tokens |
-| `src/*.ts`             | pure helpers and thin adapters (tabs/tabStore, backstage, recent structures and details, preview cache, templates, document, autosave, routing, errors, model setup, Ketcher options) | React types, injected I/O           |
-| `src/App.tsx`          | composition: provider, event loop, dialog state, sidecar polling                                                                                                                      | all frontend modules                |
-| `src-tauri/src/lib.rs` | host lifecycle and commands                                                                                                                                                           | Tauri APIs                          |
+| Layer                  | Contains                                                                                                                                                                                                 | May import from                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `src/ui/`              | presentational components (`Backstage`, `TabStrip`, `FileMenu`, `HomeButton`, `Dialog`, `Button`, `DocumentDialogs`, `ModelSetupDialog`, `ui/backstage/`, icon style)                                    | `src/*` pure modules, design tokens |
+| `src/*.ts`             | pure helpers and thin adapters (tabs/tabStore, backstage, recent structures and details, preview cache, templates, document, autosave scheduler/metadata, routing, errors, model setup, Ketcher options) | React types, injected I/O           |
+| `src/App.tsx`          | composition: provider, event loop, dialog state, sidecar polling                                                                                                                                         | all frontend modules                |
+| `src-tauri/src/lib.rs` | host lifecycle and commands                                                                                                                                                                              | Tauri APIs                          |
 
 Rules:
 
@@ -222,6 +222,13 @@ tabs: none closes, one active dirty tab offers Save/Discard/Cancel, and more
 than one (or one inactive) offers Discard/Cancel only. These are the 1.x
 behavior adopted from `main`; the `.ket` save/export/autosave contract itself did
 not change.
+
+The single-document recovery path is gone (ADR 0010, ACT-07): `RecoveryDialog`,
+`src/autosaveStore.ts` and `shouldOfferRecovery` no longer exist, so there is no
+`recovery/autosave.ket`/`autosave.json` snapshot, no recovery prompt and no
+"newer than the original mtime" decision. `src/tabStore.ts` is the only snapshot
+writer and reader; `src/autosave.ts` keeps the debounce scheduler, the metadata
+parser and the write-generation helper that the tab store and `App.tsx` consume.
 
 ### 5.2 Recognition
 

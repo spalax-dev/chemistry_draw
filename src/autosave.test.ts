@@ -6,20 +6,9 @@ import {
   createAutosaveScheduler,
   createWriteGeneration,
   parseAutosaveMeta,
-  shouldOfferRecovery,
-  type AutosaveMeta,
 } from "./autosave";
 
 const SAVED_AT = 1_700_000_100_000;
-
-function meta(overrides: Partial<AutosaveMeta> = {}): AutosaveMeta {
-  return {
-    path: "/home/jorge/Documents/benzene.ket",
-    savedAt: SAVED_AT,
-    dirty: true,
-    ...overrides,
-  };
-}
 
 describe("autosave scheduling", () => {
   beforeEach(() => {
@@ -188,48 +177,6 @@ describe("autosave metadata", () => {
     expect(
       parseAutosaveMeta(JSON.stringify({ path: null, savedAt: SAVED_AT, dirty: "yes" })),
     ).toBeNull();
-  });
-});
-
-describe("recovery decision", () => {
-  const lastCleanSave = SAVED_AT - 60_000;
-
-  it("does not offer recovery without metadata", () => {
-    expect(shouldOfferRecovery(null, lastCleanSave)).toBe(false);
-  });
-
-  it("does not offer recovery for a clean snapshot", () => {
-    expect(shouldOfferRecovery(meta({ dirty: false }), lastCleanSave)).toBe(false);
-  });
-
-  it("does not offer recovery when the snapshot is older than the last clean save", () => {
-    expect(shouldOfferRecovery(meta({ savedAt: lastCleanSave - 1 }), lastCleanSave)).toBe(false);
-  });
-
-  it("does not offer recovery when the snapshot matches the last clean save", () => {
-    expect(shouldOfferRecovery(meta({ savedAt: lastCleanSave }), lastCleanSave)).toBe(false);
-  });
-
-  it("offers recovery when the snapshot is newer than the last clean save", () => {
-    expect(shouldOfferRecovery(meta({ savedAt: lastCleanSave + 1 }), lastCleanSave)).toBe(true);
-  });
-
-  it("always offers recovery when the original path is unknown", () => {
-    expect(shouldOfferRecovery(meta({ path: null }), lastCleanSave)).toBe(true);
-    expect(shouldOfferRecovery(meta({ path: null, savedAt: 0 }), lastCleanSave)).toBe(true);
-  });
-
-  it("offers recovery when the original file is missing or unreadable", () => {
-    // No mtime means there is no evidence of a clean save: the snapshot is the
-    // only remaining copy, so dropping it would lose the user's work.
-    expect(shouldOfferRecovery(meta({ savedAt: lastCleanSave - 60_000 }), null)).toBe(true);
-  });
-
-  it("does not offer recovery when the metadata is unreadable", () => {
-    const parsed = parseAutosaveMeta("{path:");
-
-    expect(parsed).toBeNull();
-    expect(shouldOfferRecovery(parsed, lastCleanSave)).toBe(false);
   });
 });
 

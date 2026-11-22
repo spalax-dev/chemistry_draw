@@ -13,8 +13,9 @@
  * has no recovery directory.
  *
  * The 1.x port keeps its write queue and cleared-id tombstones here instead of
- * widening `autosave.ts` (which owns the single-document snapshot): the two
- * workflows share only `createWriteGeneration` and `parseAutosaveMeta`.
+ * widening `autosave.ts`, which now provides only the scheduler, metadata parser
+ * and write-generation helpers: this module is the only snapshot writer and
+ * reader, and shares just `createWriteGeneration` and `parseAutosaveMeta`.
  */
 
 import { isTauri } from "@tauri-apps/api/core";
