@@ -26,8 +26,8 @@ diagnostics. Supported versions and the security policy are in
 Ketcher's floor), pnpm 12.21.0 (through Corepack; pnpm is the only package
 manager) and Rust stable. `.nvmrc` pins `24.14.1` (the Ketcher floor); `engines`
 and `packageManager` are declared in `package.json`, so `nvm install && nvm use`
-and `corepack enable` install the pinned toolchain. A local Node 24.13.1 is
-below the floor; upgrade first.
+and `corepack enable` install the pinned toolchain. Any Node below 24.14.1 (for
+example 24.13.1) is below the floor; upgrade first.
 
 Quick start (Linux):
 

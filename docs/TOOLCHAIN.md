@@ -30,8 +30,10 @@ ONNX/OCSR stack; see §5.
   `.nvmrc`; the explicit `nvm install 24.14.1 && nvm use` form is equivalent.
   `.nvmrc` and the `engines`/`packageManager` fields in `package.json` are the
   declarations this policy requires.
-- **Local baseline:** Node 24.13.1 is **below** the floor and is not a supported
-  development runtime; upgrade to 24.14.1 or later.
+- **Local baseline:** any Node below 24.14.1 (for example 24.13.1) is **below**
+  the floor and is not a supported development runtime; upgrade to 24.14.1 or
+  later. The accepted verification environment is Node **24.20.0**
+  (`docs/verification.md` §1.1).
 - **Builder decision.** The builder keeps `FROM debian:12-slim` and installs
   Node 24 from the NodeSource `setup_24.x` repository, then enables pnpm with
   Corepack (`corepack enable`, `corepack prepare pnpm@12.21.0 --activate`). The
@@ -196,10 +198,27 @@ They are resolved by a **targeted `cargo update`** — no `Cargo.toml` changes:
 - **Lock drift corrected.** `Cargo.lock` recorded `chemistry-draw` and
   `indigo-server` at **0.1.7** while `Cargo.toml` and the release are **0.1.8**;
   the same update corrects the lock entries.
-- **Remaining warnings, reported not failures:** `glib 0.18.5` (pinned by
-  Tauri's GTK 0.18), `proc-macro-error` (via `glib-macros`), and
-  `zbus_names`/`zvariant` (DBus plumbing). They stay listed here until a fixed
-  release is reachable; they never block the gate.
+- **Remaining warnings, reported not failures (no fix reachable on the 0.x
+  graph):**
+
+  | Package                  | Advisory          | Why it stays                                                                                               |
+  | ------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------- |
+  | `glib 0.18.5`            | RUSTSEC-2024-0429 | **unsound**; the fix is patched in `glib 0.20` but Tauri's GTK 0.18 pin holds 0.18, so no fix is reachable |
+  | `proc-macro-error`       | RUSTSEC-2024-0370 | comes through `glib-macros`                                                                                |
+  | `zbus_names`             | RUSTSEC-2026-0371 | DBus plumbing pulled in by `zbus`                                                                          |
+  | `zvariant`               | RUSTSEC-2026-0370 | DBus plumbing pulled in by `zbus`                                                                          |
+  | `chrono 0.4.45`          | RUSTSEC-2026-0543 | lock-only through `serde_with`'s optional feature; not compiled                                            |
+  | `zvariant_derive 5.12.0` | RUSTSEC-2026-0372 | unmaintained proc-macro of `zvariant`                                                                      |
+
+  They stay listed until a fixed release is reachable within the 0.x graph; none
+  blocks the gate.
+
+- **`windows-sys` resolution is not a new dependency.** The whole-graph
+  `cargo update` re-resolved 11 edges from unchanged crates (`windows-sys`
+  0.59/0.45/0.61), plus `rustix` as it moved to 1.1.6, without adding or removing
+  a `[[package]]` stanza. Each stays inside its parent's range,
+  `cargo metadata --locked` and `cargo tree --target all` pass, and the Windows CI
+  job compiles them.
 - No Rust vulnerability is allowlisted: all three are fixed by the update.
 
 ### 3.2 Dated allowlist

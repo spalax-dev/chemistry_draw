@@ -31,9 +31,10 @@ pnpm is the **only** package manager: use it for installs, scripts and audits.
 `npm install`, `npm ci` and `yarn` are not supported.
 
 Ketcher 3.18 declares `engines.node >= 24.14.1`, so 24.14.1 is the real floor
-and the repo's `.nvmrc` pins it. A local Node 24.13.1 is below it — upgrade
-before working on this branch. `engines` and `packageManager` are declared in
-`package.json`, so `nvm install && nvm use` installs the pinned 24.14.1:
+and the repo's `.nvmrc` pins it. Any Node below 24.14.1 (for example 24.13.1) is
+below it — upgrade before working on this branch; acceptance ran on 24.20.0.
+`engines` and `packageManager` are declared in `package.json`, so
+`nvm install && nvm use` installs the pinned 24.14.1:
 
 ```bash
 nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)

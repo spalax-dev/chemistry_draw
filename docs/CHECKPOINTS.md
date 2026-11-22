@@ -553,6 +553,23 @@
 
 ---
 
+## C17 — Toolchain and security baseline (0.x)
+
+- [x] Node 24.14.1+ is declared in `.nvmrc` and `engines`; pnpm 12.21 is pinned
+      by `packageManager`; the Docker builder enables Corepack.
+- [x] CI and the Docker builder use Node 24; the GitHub Actions are on the
+      current majors.
+- [x] `pnpm run audit` and `pnpm run audit:prod` report no high/critical
+      findings; the build-only allowlist is dated (`elliptic`, `glob`/`minimatch`,
+      2027-06-30).
+- [x] `cargo audit` reports no vulnerabilities; the warnings with no fix
+      reachable on the 0.x graph are tracked in `docs/TOOLCHAIN.md` §3.1.2.
+- [x] `node scripts/harness.mjs` is green (442 Vitest, 87 sidecar and 56 policy
+      tests).
+- [x] The pnpm and Rust audit gates run in the quality workflow.
+
+---
+
 **How to use this file:** a reviewer agent
 (`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C16 remain empty.
+`[x]` or `[ ]`, and rejects session close if any boxes in C1–C17 remain empty.
