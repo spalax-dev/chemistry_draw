@@ -10,12 +10,22 @@ export const tokens = {
     error: "#ff4a4a",
     /** Wash under a hovered danger button. */
     errorWash: "rgba(255,74,74,0.08)",
+    /** Valid validation badge: the palette's teal-green accent. */
+    success: "#167782",
+    /** Low-emphasis wash under a Valid badge. */
+    successWash: "rgba(22,119,130,0.08)",
+    /** Warning validation badge (amber); badges only. */
+    warning: "#b26b00",
+    /** Low-emphasis wash under a Warnings badge. */
+    warningWash: "rgba(178,107,0,0.08)",
     text: "#333",
     textSecondary: "#585858",
     muted: "#7c7c7f",
     border: "#cad3dd",
     surface: "#ffffff",
     surfaceSubtle: "#eff2f5",
+    /** Template-card preview wash; one step lighter than `surfaceSubtle`. */
+    surfacePreview: "#fafbfc",
     page: "#f5f5f5",
     /** Ketcher's `.Modal-module_modalOverlay`; translucent so the editor stays visible. */
     overlay: "rgba(94,94,94,0.2)",
@@ -41,13 +51,32 @@ export const tokens = {
     backdropRepeat: "repeat",
     backdropSize: "10px 10px",
   },
+  /** Ketcher's document tab tokens (`docs/conventions.md` §6.6). */
+  tab: {
+    active: "#ffffff",
+    regular: "#fff",
+    hover: "#00838f",
+    content: "#eff2f5",
+    border: "#cad3dd",
+    text: "#333",
+    dirty: "#167782",
+    fontSize: "12px",
+    radius: "3px",
+  },
   fontFamily: "Roboto, Helvetica, Arial, sans-serif",
   fontSize: {
     title: "14px",
     body: "12px",
   },
   zIndex: {
+    /** Popups anchored to the editor chrome, such as the File menu. */
     overlay: 1000,
+    /**
+     * The full-window backstage covers the editor; the document dialogs (Save
+     * As, Export, errors) raise themselves above it with `dialog`.
+     */
+    backstage: 1100,
+    dialog: 1200,
     loading: 9999,
   },
 } as const;

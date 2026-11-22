@@ -164,6 +164,15 @@ list; 1.x keeps the real Models dialog and toolbar entry as the model setup
 surface (ADR 0009). The backstage never mounts a second editor, never saves and
 never discards work.
 
+**Component boundaries.** The port keeps the UI presentational and the state in
+the pure modules: `src/backstage.ts`, `src/fileMenu.ts`, `src/tabs.ts`,
+`src/recent*.ts` and `src/templateLibrary.ts` own the models;
+`src/ui/Backstage.tsx`, `src/ui/TabStrip.tsx`, `src/ui/FileMenu.tsx` and
+`src/ui/backstage/` render them and report events; `src/App.tsx` owns the
+commands and the I/O. The Models pane accepts an optional `onOpenModels` handler,
+so the 1.x integration can route that rail entry to the real model dialog without
+adding a second setup surface or a fake list.
+
 **Tabs.** A tab is file state (`id`, `name`, `path`, committed `ket`, `dirty`)
 over the single editor. Switching serializes the outgoing tab with
 `ketcher.getKet()`, flushes its snapshot, then loads the incoming tab with
