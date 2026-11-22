@@ -47,10 +47,8 @@
 │   ├── recentStructures.ts       recent-structures table rows
 │   ├── previewCache.ts           Indigo SVG thumbnail cache
 │   ├── templateLibrary.ts        real Ketcher Structure Library mapping
-│   ├── templates.ts              legacy curated descriptors (fallback only)
 │   ├── document.ts               pure document state and save/export mapping
-│   ├── autosave.ts               per-tab scheduling and recovery decision
-│   ├── autosaveStore.ts          single-document snapshot I/O (legacy; no caller after ADR 0010)
+│   ├── autosave.ts               per-tab scheduling, metadata and write generation
 │   ├── saveRoute.ts              blob routing by extension
 │   ├── fileSaver.ts              file-saver alias target
 │   ├── logging.ts                console/error forwarding to the host log
@@ -207,7 +205,7 @@ transport/  →  service/  →  ffi/
 - `service/ml/` contains no `unsafe`; `ort` owns the FFI boundary.
 - `src/` pure helpers import neither Tauri nor the DOM, so Vitest can run them in
   a Node environment. Tauri calls stay in thin adapters (`App.tsx`,
-  `autosaveStore.ts`, `fileSaver.ts`).
+  `tabStore.ts`, `recentStructures.ts`, `previewCache.ts`, `fileSaver.ts`).
 - A cross-package import requires an explicit export in that package's manifest.
 
 ## 5. Generated documentation

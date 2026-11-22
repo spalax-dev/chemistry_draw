@@ -7,26 +7,23 @@
 ## C1 — Harness is Complete
 
 - [ ] Base files exist: `AGENTS.md`, `scripts/harness.mjs`,
-      `scripts/build-harness.mjs`, `scripts/lib/activity-policy.mjs`,
-      `scripts/lib/activity-policy.test.mjs`, `activities.json`,
-      `progress/current.md`.
+      `scripts/harness-lib.mjs`, `scripts/harness-lib.spec.mjs`,
+      `scripts/build_harness.mjs`, `activities.json`, `progress/current.md`;
+      the current tree is in `docs/harness/structure.md`. The v1
+      `activity-policy` scripts no longer exist.
 - [ ] Docs exist: `docs/architecture.md`, `docs/conventions.md`,
       `docs/verification.md`, `docs/testing.md`.
 - [ ] `node scripts/harness.mjs` exits with code 0.
 
 ## C2 — State is Coherent
 
-- [ ] At most one activity in `in_progress` in `activities.json`.
-- [ ] Every task declares a valid `phase` (`docs`, `test`, `implement`,
-      `review`) and phases are non-decreasing in task order.
-- [ ] Non-`docs` activities contain docs, test, implement and review phases;
-      `docs` activities contain docs + review and no test/implement tasks.
-- [ ] `review` tasks use the `reviewer` agent; docs/test/implement use
-      `implementer`.
-- [ ] Every `done` activity has all tasks done; every `in_progress` activity
-      has exactly one `in_progress` task.
-- [ ] Every `done` activity has associated passing tests (or, for docs/chore,
-      the relevant harness blocks).
+- [ ] Story, activity and task state follow the two-stage harness: one active or
+      awaiting-approval story, activities claimed before editing, disjoint batch
+      `touches`, and state written only by the orchestrator. The v1 `phase` and
+      `reviewer` rules are retired; see `docs/harness/verification.md` §4 and
+      `docs/harness/CHECKPOINTS.md` C2.
+- [ ] Every `done` activity has associated passing gates (or, for docs work, the
+      relevant harness blocks).
 - [ ] `progress/current.md` is empty or describes the active session (no
       leftovers from previous sessions).
 
@@ -86,21 +83,15 @@
       that no Imago library/worker ships, and list the Windows build commands.
 - [ ] Linux harness and packaging metadata remain green.
 
-## C7 — Docs → Test → Implement → Review
+## C7 — Document → Test → Implement
 
-- [ ] Every activity task carries a `phase` in
-      `docs | test | implement | review`.
-- [ ] Non-`docs` activities declare docs → test → implement → review in that
-      order; `docs` activities declare docs → review only.
+- [ ] Every activity starts with its documentation task, and the tests activity
+      precedes the implementation activity, per `docs/harness/development.md`
+      and `docs/harness/testing.md`.
 - [ ] New behaviour has a failing-test (RED) evidence path before its
-      implementation, per `docs/testing.md`.
-- [ ] No task is `in_progress` or `done` while an earlier task is not `done`
-      (sequential status enforcement).
-- [ ] `node --test scripts/lib/activity-policy.test.mjs` passes, including
-      missing-phase, wrong-order, docs-only, sequential-status and status
-      cases.
-- [ ] The harness block 3 runs the policy tests and rejects an invalid
-      `activities.json`.
+      implementation, per `docs/harness/testing.md`.
+- [ ] The harness gates and the story approval are the current process; the v1
+      `phase`/`activity-policy` checks are retired (`docs/harness/verification.md`).
 
 ## C8 — ONNX Foundation Contract
 
@@ -215,6 +206,12 @@
       pass, and the suite stays green without them.
 
 ## C9 — Document and Autosave Contract
+
+> **US-01 update (1.x):** the single-document Restore/Discard prompt and the
+> `recovery/autosave.*` snapshot are replaced by per-tab snapshots and silent
+> restore (ADR 0010, ACT-07). The current manual workflow is
+> `docs/harness/verification.md` §10; the recovery bullets below describe the
+> 0.x baseline.
 
 - [x] `.ket` is the only save format: Save and Save As write `.ket`, while
       Export is the only route to Molfile V2000/V3000, SMILES, InChI, SVG and
@@ -549,6 +546,7 @@
 
 ---
 
-**How to use this file:** a reviewer agent
-(`.opencode/agent/implementation-reviewer.md`) goes through each checkbox, marks
-`[x]` or `[ ]`, and rejects session close if any boxes in C1–C16 remain empty.
+**How to use this file:** go through each checkbox and mark `[x]` or `[ ]`.
+There is no reviewer agent in the two-stage harness; the user checks the
+approval boxes. Any empty box in C1–C16 blocks session close, and
+`docs/harness/CHECKPOINTS.md` holds the harness-level evaluation.
