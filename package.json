@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.8",
   "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24.14.1 <25",
+    "pnpm": ">=12.21.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -14,7 +19,7 @@
     "format:check": "prettier --check .",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check",
     "test": "vitest run",
-    "test:policy": "node --test scripts/lib/activity-policy.test.mjs"
+    "test:policy": "node --test scripts/lib/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

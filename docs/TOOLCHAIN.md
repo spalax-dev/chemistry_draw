@@ -11,28 +11,35 @@ ONNX/OCSR stack; see §5.
 
 ## 1. Supported toolchain
 
-| Component        | Supported version                                 | Where it is declared                                        |
-| ---------------- | ------------------------------------------------- | ----------------------------------------------------------- |
-| Node.js          | **24 LTS** (`>=24.14.1 <25`)                      | `.nvmrc` (`24`) and `engines` in `package.json`             |
-| pnpm             | **12.21.0** (exact)                               | `packageManager` in `package.json`, enabled by Corepack     |
-| Rust             | **stable**                                        | CI (`dtolnay/rust-toolchain@stable`) and the Docker builder |
-| Linux build base | **Debian 12** (glibc **2.36**)                    | packaging scripts and the builder image                     |
-| Builder Node     | `node:24-bookworm-slim` when a Node stage is used | builder image                                               |
-| Linux runtime    | GTK3 + **webkit2gtk 4.1**                         | Tauri v2 requires it; Debian 12 is the floor                |
-| Windows          | **x64**, WebView2, MSVC toolchain                 | Windows CI job and `scripts/fetch-windows-libs.ps1`         |
+| Component        | Supported version                                          | Where it is declared                                         |
+| ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
+| Node.js          | **24 LTS** (`>=24.14.1 <25`), local pin **24.14.1**        | `.nvmrc` (`24.14.1`), `engines`, CI `node-version: 24`       |
+| pnpm             | **12.21.0** (exact)                                        | `packageManager` in `package.json`, enabled by Corepack      |
+| Rust             | **stable**                                                 | CI (`dtolnay/rust-toolchain@stable`) and the Docker builder  |
+| Linux build base | **Debian 12** (glibc **2.36**)                             | packaging scripts and the builder image                      |
+| Builder Node     | **Debian 12 + NodeSource `setup_24.x`**; pnpm via Corepack | `scripts/Dockerfile`, Node layer after the native libs layer |
+| Linux runtime    | GTK3 + **webkit2gtk 4.1**                                  | Tauri v2 requires it; Debian 12 is the floor                 |
+| Windows          | **x64**, WebView2, MSVC toolchain                          | Windows CI job and `scripts/fetch-windows-libs.ps1`          |
 
-- Node is installed locally from `.nvmrc` (`24`). The floor is **`>=24.14.1
-<25`**, the `engines.node` range declared by Ketcher 3.18 (`ketcher-core` and
-  `ketcher-react` both require `>=24.14.1`). `.nvmrc` `24` resolves to a patch
-  that satisfies it. Nothing in the repo supports Node 20 (end of life) or
-  Node 22.
-- **Local baseline:** Node 24.13.1 is **below** the floor and is not a
-  supported development runtime; upgrade to 24.14.1 or later (`nvm install 24`
-  picks a satisfying patch).
-- `.nvmrc`, `engines` and `packageManager` do not exist yet: they land with the
-  Node/pnpm activity, so `nvm use` is not a working instruction on this branch
-  until then. The supported versions above are the target those declarations
-  will encode.
+- Node is installed locally from `.nvmrc`, which pins **`24.14.1`** — the
+  `engines.node` floor declared by Ketcher 3.18 (`ketcher-core` and
+  `ketcher-react` both require `>=24.14.1`). The supported range is
+  **`>=24.14.1 <25`**. CI (`node-version: 24`) and Docker resolve the latest
+  24.x (currently 24.22.3), which satisfies the floor.
+- `nvm install && nvm use` installs the pinned **24.14.1**, because nvm reads
+  `.nvmrc`; the explicit `nvm install 24.14.1 && nvm use` form is equivalent.
+  `.nvmrc` and the `engines`/`packageManager` fields in `package.json` are the
+  declarations this policy requires.
+- **Local baseline:** Node 24.13.1 is **below** the floor and is not a supported
+  development runtime; upgrade to 24.14.1 or later.
+- **Builder decision.** The builder keeps `FROM debian:12-slim` and installs
+  Node 24 from the NodeSource `setup_24.x` repository, then enables pnpm with
+  Corepack (`corepack enable`, `corepack prepare pnpm@12.21.0 --activate`). The
+  Node layer comes **after** the native Indigo/Imago/OpenCV layer, so changing
+  it preserves the expensive libs cache while keeping Debian 12 / glibc 2.36.
+  The official `node:24-bookworm-slim` image is only a fallback if a Node stage
+  is introduced later; the live builder stays Debian 12 + NodeSource 24.
+- Nothing in the repo supports Node 20 (end of life) or Node 22.
 - pnpm is the **only** package manager: `npm install`, `npm ci`, `npx` and
   `yarn` are not supported and must not appear in docs, scripts or CI.
   `corepack enable` installs the pinned pnpm; `packageManager` is the single
@@ -41,10 +48,9 @@ ONNX/OCSR stack; see §5.
   baseline used to validate this policy is **rustc 1.99.1**. A pinned Rust
   version would be a separate decision, because it changes the CI/Docker
   contract.
-- The Linux packages keep the Debian 12 floor (`glibc 2.36`); a Node stage used
-  for the frontend build must stay on a bookworm base (`node:24-bookworm-slim`),
-  never a newer distro, or the produced binaries stop matching the shipped
-  floor.
+- The Linux packages keep the Debian 12 floor (`glibc 2.36`). Any future Node
+  stage must stay on a bookworm base, never a newer distro, or the produced
+  binaries stop matching the shipped floor.
 
 ---
 

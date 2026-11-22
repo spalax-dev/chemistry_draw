@@ -79,12 +79,13 @@ included with Windows 10/11.
 Supported toolchain on the 0.x line: **Node 24 LTS**
 (`>=24.14.1 <25`, Ketcher's floor), **pnpm 12.21.0** through Corepack (pnpm is
 the only package manager) and **Rust stable**. Full versions, intentional pins
-and the audit policy are in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). `.nvmrc`,
-`engines` and `packageManager` land with the Node/pnpm activity, so `nvm use`
-alone does not work yet; install a satisfying patch directly.
+and the audit policy are in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). `.nvmrc` pins
+`24.14.1` (the Ketcher 3.18 floor); `engines` and `packageManager` are declared in
+`package.json`, so `nvm install && nvm use` and `corepack enable` install the
+pinned toolchain.
 
 ```bash
-nvm install 24 && nvm use   # Node 24.14.1+ (floor from Ketcher 3.18)
+nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
 corepack enable         # installs the pnpm version from packageManager
 pnpm install --frozen-lockfile
 task libs               # native Indigo/Imago libraries via Docker

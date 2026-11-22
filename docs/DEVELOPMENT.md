@@ -23,21 +23,20 @@ The supported versions, pins and audit gates are in
 
 | Tool | Version                                        |
 | ---- | ---------------------------------------------- |
-| Node | 24 LTS (`>=24.14.1 <25`), from `.nvmrc` (`24`) |
+| Node | `24.14.1` from `.nvmrc` (`>=24.14.1 <25`)      |
 | pnpm | 12.21.0, pinned by `packageManager` + Corepack |
 | Rust | stable (local baseline rustc 1.99.1)           |
 
 pnpm is the **only** package manager: use it for installs, scripts and audits.
 `npm install`, `npm ci` and `yarn` are not supported.
 
-Ketcher 3.18 declares `engines.node >= 24.14.1`, so 24.14.1 is the real floor;
-`.nvmrc` `24` resolves to a satisfying patch. A local Node 24.13.1 is below it —
-upgrade before working on this branch. `.nvmrc`, `engines` and `packageManager`
-land with the Node/pnpm activity, so `nvm use` does not work yet; install and use
-a satisfying patch directly:
+Ketcher 3.18 declares `engines.node >= 24.14.1`, so 24.14.1 is the real floor
+and the repo's `.nvmrc` pins it. A local Node 24.13.1 is below it — upgrade
+before working on this branch. `engines` and `packageManager` are declared in
+`package.json`, so `nvm install && nvm use` installs the pinned 24.14.1:
 
 ```bash
-nvm install 24 && nvm use   # Node 24.14.1+ (floor from Ketcher 3.18)
+nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
 corepack enable         # installs the pnpm version from packageManager
 pnpm install --frozen-lockfile
 ```

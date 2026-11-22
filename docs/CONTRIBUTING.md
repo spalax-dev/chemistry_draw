@@ -24,14 +24,15 @@ notes (Linux and Windows), how to build native libraries, run the app, and read
 diagnostics. Supported versions and the security policy are in
 **[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md)**: Node 24 LTS (`>=24.14.1 <25`,
 Ketcher's floor), pnpm 12.21.0 (through Corepack; pnpm is the only package
-manager) and Rust stable. `.nvmrc`, `engines` and `packageManager` land with the
-Node/pnpm activity, so `nvm use` alone does not work yet; install a satisfying
-patch directly. A local Node 24.13.1 is below the floor; upgrade first.
+manager) and Rust stable. `.nvmrc` pins `24.14.1` (the Ketcher floor); `engines`
+and `packageManager` are declared in `package.json`, so `nvm install && nvm use`
+and `corepack enable` install the pinned toolchain. A local Node 24.13.1 is
+below the floor; upgrade first.
 
 Quick start (Linux):
 
 ```bash
-nvm install 24 && nvm use   # Node 24.14.1+ (floor from Ketcher 3.18)
+nvm install && nvm use  # reads .nvmrc: Node 24.14.1 (Ketcher 3.18 floor)
 corepack enable         # installs the pnpm version from packageManager
 pnpm install --frozen-lockfile
 task libs   # builds Indigo/Imago libs via Docker; required for the sidecar
