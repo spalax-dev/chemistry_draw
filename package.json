@@ -1,7 +1,7 @@
 {
   "name": "chemistry-draw",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "pnpm@12.21.0",
   "engines": {
