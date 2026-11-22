@@ -1,13 +1,13 @@
 /**
- * Autosave scheduling and recovery decisions. Pure and injectable: the caller
- * supplies the dirty check and the write function (the real one comes from
- * Tauri), so this module imports neither Tauri nor the DOM.
+ * Autosave scheduling and the pure snapshot helpers shared with the per-tab
+ * store. Pure and injectable: the caller supplies the dirty check and the write
+ * function (the real one comes from Tauri), so this module imports neither Tauri
+ * nor the DOM.
  *
- * Snapshots live under the Tauri app data directory, never next to the user's
- * file:
- *
- *   <appDataDir>/recovery/autosave.ket    working structure
- *   <appDataDir>/recovery/autosave.json   { path, savedAt, dirty }
+ * There is no single-document recovery path. `src/tabStore.ts` owns the snapshot
+ * files under `<appDataDir>/recovery/tabs/` and is the only writer and reader;
+ * this module contributes the debounce scheduler, the metadata parser and the
+ * write-generation guard.
  */
 
 /** Debounce after the last editor change. */
@@ -16,12 +16,13 @@ export const AUTOSAVE_DEBOUNCE_MS = 2000;
 /** Slow safety-net interval; it only writes while the document is dirty. */
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
+/** The metadata base every tab snapshot commits after its `.ket` file. */
 export interface AutosaveMeta {
-  /** Path of the original file, `null` when the document was never saved. */
+  /** Path of the tab's original file, `null` when it was never saved. */
   path: string | null;
   /** Epoch milliseconds of the snapshot. */
   savedAt: number;
-  /** Whether the document had unsaved edits when snapshotted. */
+  /** Whether the tab had unsaved edits when snapshotted. */
   dirty: boolean;
 }
 
@@ -103,8 +104,10 @@ export function createAutosaveScheduler({
 }
 
 /**
- * Reads `autosave.json`. Returns `null` for missing, empty, malformed or
- * incomplete records, so a `.ket` without valid metadata is never restored.
+ * Reads a snapshot metadata record (`<id>.json` for a tab). Returns `null` for
+ * missing, empty, malformed or incomplete records, so a `.ket` without valid
+ * metadata is never restored. Extra fields, such as a tab's `name`, are ignored
+ * here and parsed by their owner.
  */
 export function parseAutosaveMeta(raw: string | null | undefined): AutosaveMeta | null {
   if (typeof raw !== "string" || raw.length === 0) return null;
@@ -130,24 +133,6 @@ export function parseAutosaveMeta(raw: string | null | undefined): AutosaveMeta 
   return { path, savedAt, dirty };
 }
 
-/**
- * Offers recovery when the snapshot has unsaved edits and is newer than the
- * last clean save of the original file (its mtime).
- *
- * A `null` mtime means the original is missing or could not be read. In that
- * case the snapshot is the only remaining copy, so it always wins: offering
- * recovery is safe, silently dropping the work is not.
- */
-export function shouldOfferRecovery(
-  meta: AutosaveMeta | null,
-  lastCleanSave: number | null,
-): boolean {
-  if (meta === null || !meta.dirty) return false;
-  if (meta.path === null) return true;
-  if (lastCleanSave === null) return true;
-  return meta.savedAt > lastCleanSave;
-}
-
 /** Token guarding one snapshot write against a later cleanup. */
 export interface WriteGeneration {
   /** Starts a write and returns the token it must present before each commit. */
@@ -159,11 +144,12 @@ export interface WriteGeneration {
 }
 
 /**
- * Monotonic counter shared by the snapshot writer and `clearSnapshot`.
+ * Monotonic counter shared by a snapshot writer and its cleanup
+ * (`clearTabSnapshot` in `tabStore.ts`).
  *
- * A write records the generation it started in; `clearSnapshot` advances it,
- * so a write that was already in flight cannot recreate `autosave.ket` or
- * `autosave.json` after the document was saved, opened or reset.
+ * A write records the generation it started in; the cleanup advances it, so a
+ * write that was already in flight cannot recreate a tab's `.ket` or `.json`
+ * after that tab was saved, closed or discarded.
  */
 export function createWriteGeneration(): WriteGeneration {
   let generation = 0;

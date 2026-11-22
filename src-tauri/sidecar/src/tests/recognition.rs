@@ -938,8 +938,11 @@ async fn caffeine_upload_recognizes_to_molfile() {
     assert_eq!(status, StatusCode::OK, "body: {body}");
     let id = upload_id(&body).to_string();
 
-    // The first recognition loads the ~316 MB OCSR pair, hence the long bound.
-    let job = poll_job(&app, &id, Duration::from_secs(90)).await;
+    // The first recognition loads the ~316 MB OCSR pair from disk, so the poll
+    // bound must outwait the production `PROCESSING_TIMEOUT` (120 s); 150 s
+    // leaves margin for a cold start on a loaded machine. This bounds how long
+    // the test waits for the worker; it does not relax any assertion.
+    let job = poll_job(&app, &id, Duration::from_secs(150)).await;
 
     assert_eq!(
         job["state"], "SUCCESS",

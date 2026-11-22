@@ -27,11 +27,9 @@
    Molecule success/rejection tests use the same gate; the job store, upload
    protocol, 404 and missing-model tests always run.
 9. Review `docs/CHECKPOINTS.md` — mark the applicable boxes.
-10. `node --test scripts/lib/activity-policy.test.mjs` — policy tests green.
-    The harness runs the same command in block 3 and then validates
-    `activities.json` with `scripts/lib/activity-policy.mjs`, including
-    sequential status (no `in_progress`/`done` task while an earlier task is not
-    `done`).
+10. Activity lifecycle, claims and `touches`: see
+    `docs/harness/verification.md`. The v1 `activity-policy` scripts and the
+    `phase`/`reviewer` task model no longer exist.
 
 The one-shot equivalent is `pnpm run check` (typecheck + ESLint + Prettier) plus
 the Rust commands above; `node scripts/harness.mjs` runs everything. `pnpm test`
@@ -958,6 +956,12 @@ Run against the desktop build (`task run`) with the developer console open.
 
 ### Documents, autosave and recovery
 
+> **US-01 update (1.x):** the single-document `autosave.ket`/`autosave.json`
+> snapshot and its Restore/Discard prompt are replaced by per-tab snapshots
+> under `recovery/tabs/` and silent restore (ADR 0010, ACT-07). The current
+> workflow is `docs/harness/verification.md` §10, "Per-tab recovery after
+> restart"; the recovery steps below describe the 0.x baseline.
+
 Run against the desktop build (`task run`), not the browser, except where the
 fallback is stated. `<appDataDir>` is `~/.local/share/dev.spalax.ChemistryDraw`
 on Linux and `%APPDATA%\dev.spalax.ChemistryDraw` on Windows.
@@ -1198,7 +1202,8 @@ present.
 
 ## 3. Reviewer checklist
 
-The reviewer agent must verify:
+Verify before closing (there is no reviewer agent in the two-stage harness; the
+gates and the story approval are described in `docs/harness/verification.md`):
 
 - [ ] Harness passes (`node scripts/harness.mjs` exits 0)
 - [ ] TypeScript clean (`pnpm exec tsc --noEmit`)
@@ -1207,10 +1212,9 @@ The reviewer agent must verify:
 - [ ] Rust formatting clean (`cargo fmt --all --check`)
 - [ ] Clippy clean (`cargo clippy --workspace --all-targets -- -D warnings`)
 - [ ] Sidecar tests green (`cargo test -p indigo-server`)
-- [ ] Activity tasks are phased docs → test → implement → review, in order, and
-      `node --test scripts/lib/activity-policy.test.mjs` passes
-- [ ] Sequential status: no task is `in_progress` or `done` while an earlier
-      task is not `done`
+- [ ] Activity order, claims, `touches` and story approval follow
+      `docs/harness/verification.md`; the v1 phases, reviewer agent and
+      `activity-policy` scripts are retired
 - [ ] New behaviour has a test that would fail without the change
 - [ ] Model delivery is verified: empty-root status, opt-in
       download/resume/cancel/verify, generated schema-1 manifest, app-data root,

@@ -38,11 +38,31 @@
   run's pending proof — and the dialog shows a short Verify note while it is
   armed on a ready, verify-capable dialog (not during a run). The download is
   opt-in and images never leave your machine.
-- **Documents are `.ket`** — Save (Ctrl+S) writes the Ketcher `.ket` format to
-  the file you chose (the native Save dialog appears the first time); **Export**
-  is the way to Molfile, SMILES, InChI, PNG and SVG. Save, New and Export live
-  in Ketcher's own toolbar, next to the conditional Models entry.
+- **Documents are `.ket`** — a **File** menu at the left of the tab strip owns
+  Open (`.ket`), Import (Molfile, SMILES, InChI, SDF, RXN), Save, Save As and
+  Export, plus a recent-documents list; **Export** is the way to Molfile, SMILES,
+  InChI, PNG and SVG.
+- **Backstage** — every launch opens on Welcome with blank canvas, import/open,
+  a random 2/4/6/8-card subset of Ketcher's real Structure Library with
+  Ketcher-rendered previews, **More templates** for the full library and a
+  **Back to editor** action for the active tab; the rail has four sections —
+  Welcome, Open, Models and About — with the recognition model setup under
+  **Models** and a **Back to editor** button at the bottom, and a home button in
+  the tab strip returns to it. Settings are Ketcher's own toolbar dialog, not a
+  backstage section. Welcome also shows a compact **Recent structures** table
+  with each document's real size and last-modified time, the Indigo validation
+  result and a cached Indigo-rendered thumbnail.
+- **Document tabs** — keep several `.ket` documents open in one window; every
+  tab keeps its own unsaved content and the set is restored on relaunch.
 - **Offline-first** — runs entirely on your machine.
+
+## Screenshots
+
+![Backstage](docs/assets/backstage.png)
+_Backstage: welcome, templates and recent structures._
+
+![Editor with two project tabs](docs/assets/editor-tabs.png)
+_The editor with two project tabs._
 
 ## Download
 

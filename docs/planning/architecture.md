@@ -5,8 +5,12 @@
 > [`docs/architecture.md`](../architecture.md) is the detailed reference and stays
 > authoritative for shipped behaviour.
 >
-> **Reconstructed from the code on 2026-11-21.** Diagrams live in
-> `docs/planning/c4/` and the flows in `docs/planning/sequences/`.
+> **Reconstructed from the code on 2026-11-21.** Updated for the US-01 port of
+> the `main` 0.1.8 backstage/file workflow (ADR 0009); the 1.x ML surface is
+> unchanged. The port lands through ACT-02–ACT-05, and the detailed
+> [`docs/architecture.md`](../architecture.md) is reconciled as each surface
+> lands. Diagrams live in `docs/planning/c4/` and the flows in
+> `docs/planning/sequences/`.
 
 ## 1. System context
 
@@ -33,13 +37,13 @@ loopback port chosen by the host on every launch.
 
 Diagram: `docs/planning/c4/container.puml`.
 
-| Container               | Technology                                                        | Responsibility                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Ketcher webview         | React 18, TypeScript, Vite 6, `ketcher-react`/`ketcher-core` 3.18 | Editor, document workflow, in-app dialogs, toolbar commands, model setup UI, error mapping                      |
-| Tauri host              | Rust, Tauri v2                                                    | Window lifecycle, free-port selection, sidecar spawn/supervision, environment, log forwarding, two IPC commands |
-| `indigo-server` sidecar | Rust, axum 0.7, tokio 1                                           | `/v2` HTTP API: Indigo operations, filter, OCSR, model delivery, Ketcher job shim, health                       |
-| Model store             | Filesystem under `<app_data>/models`                              | `manifest.json` plus the classifier, encoder, decoder and vocabulary artifacts                                  |
-| User documents          | Filesystem                                                        | `.ket` documents, exported Molfile/SMILES/InChI/SVG/PNG, autosave snapshots under `<app_data>/recovery`         |
+| Container               | Technology                                                        | Responsibility                                                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ketcher webview         | React 18, TypeScript, Vite 6, `ketcher-react`/`ketcher-core` 3.18 | Backstage, editor tabs, File menu, recent structures, document workflow, in-app dialogs, model setup UI, error mapping                                        |
+| Tauri host              | Rust, Tauri v2                                                    | Window lifecycle, free-port selection, sidecar spawn/supervision, environment, log forwarding, two IPC commands                                               |
+| `indigo-server` sidecar | Rust, axum 0.7, tokio 1                                           | `/v2` HTTP API: Indigo operations, filter, OCSR, model delivery, Ketcher job shim, health                                                                     |
+| Model store             | Filesystem under `<app_data>/models`                              | `manifest.json` plus the classifier, encoder, decoder and vocabulary artifacts                                                                                |
+| User documents          | Filesystem                                                        | `.ket` documents, exported Molfile/SMILES/InChI/SVG/PNG, per-tab recovery snapshots under `<app_data>/recovery/tabs` and previews under `<app_data>/previews` |
 
 Rules:
 
@@ -77,12 +81,12 @@ transport/  →  service/  →  ffi/
 
 Frontend layers follow the same one-way rule:
 
-| Layer                  | Contains                                                                                           | May import from                     |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `src/ui/`              | presentational components (`Dialog`, `Button`, `DocumentDialogs`, `ModelSetupDialog`, icon style)  | `src/*` pure modules, design tokens |
-| `src/*.ts`             | pure helpers and thin adapters (document, autosave, routing, errors, model setup, Ketcher options) | React types, injected I/O           |
-| `src/App.tsx`          | composition: provider, event loop, dialog state, sidecar polling                                   | all frontend modules                |
-| `src-tauri/src/lib.rs` | host lifecycle and commands                                                                        | Tauri APIs                          |
+| Layer                  | Contains                                                                                                                                                                                                 | May import from                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `src/ui/`              | presentational components (`Backstage`, `TabStrip`, `FileMenu`, `HomeButton`, `Dialog`, `Button`, `DocumentDialogs`, `ModelSetupDialog`, `ui/backstage/`, icon style)                                    | `src/*` pure modules, design tokens |
+| `src/*.ts`             | pure helpers and thin adapters (tabs/tabStore, backstage, recent structures and details, preview cache, templates, document, autosave scheduler/metadata, routing, errors, model setup, Ketcher options) | React types, injected I/O           |
+| `src/App.tsx`          | composition: provider, event loop, dialog state, sidecar polling                                                                                                                                         | all frontend modules                |
+| `src-tauri/src/lib.rs` | host lifecycle and commands                                                                                                                                                                              | Tauri APIs                          |
 
 Rules:
 
@@ -95,17 +99,27 @@ Rules:
   lives in `service/ml/`.
 - New Ketcher-boundary code stays in `src/`; a Ketcher bug that cannot be fixed
   there becomes a versioned patch under `patches/`.
+- The backstage overlays the one mounted editor; it is not a route, a second
+  window or a second Ketcher instance.
+- A tab is file state over that single editor: switching serializes, flushes and
+  reloads, and never mounts a second editor.
 
 ## 4. Data
 
 There is no database and no migration framework. All state is files:
 
-- **Documents:** one `.ket` per window, identified by its path. Save writes
-  `.ket` only; Export writes a separate file and never changes the document path
-  or format (`docs/architecture.md` §5.2–5.3).
-- **Autosave:** `<appDataDir>/recovery/autosave.ket` plus
-  `autosave.json` as the commit record. A `.ket` without matching metadata is
-  never restored (`docs/architecture.md` §5.4).
+- **Documents:** one `.ket` per tab, several tabs per window. A path belongs to
+  at most one tab. Save writes `.ket` only; Export writes a separate file and
+  never changes the tab's path or format (`docs/architecture.md` §5.2–5.3).
+- **Recovery snapshots:** `<appDataDir>/recovery/tabs/<id>.ket` plus
+  `<id>.json` as that tab's commit record, and `index.json` for the order and
+  active id. A `.ket` without matching metadata is never restored
+  (`docs/architecture.md` §5.5).
+- **Recent list:** `localStorage["chemistry-draw.recent"]`, an array of absolute
+  `.ket` paths, newest first, deduplicated and capped at 10. It is UI state, not
+  a document: removing an entry never touches a file or a tab.
+- **Previews:** `<appDataDir>/previews/<sha256(molfile)>.svg`, the Indigo render
+  used by the recent-structures thumbnails; the content hash is the key.
 - **Model store:** `<model root>/manifest.json` and the artifact directories
   named by the bundled catalog. The manifest is written last, through a
   temporary file and an atomic rename, after every artifact verifies
@@ -119,6 +133,10 @@ Schema and migration policy:
 
 - `.ket` is owned by Ketcher; this app does not version it and must not silently
   rewrite it.
+- The per-tab snapshot is app-owned JSON (`{ name, path, savedAt, dirty }`) plus
+  the KET text. A missing `name` falls back to the base name of `path`; there is
+  no index migration, because `index.json` stores only ids and the active id.
+  Unknown or corrupt snapshots are dropped, never guessed.
 - `manifest.json` keeps `schema: 1`. Unknown fields are ignored; adding a model
   key does not change the schema. A schema change is an ADR plus a loader
   change.
@@ -127,14 +145,90 @@ Schema and migration policy:
 
 ## 5. Data flows
 
-### 5.1 Drawing and file workflow
+### 5.1 Backstage, tabs and file workflow
 
 The webview mounts Ketcher with a `RemoteStructServiceProvider` pointed at
 `http://127.0.0.1:<port>/v2/`. Ketcher calls Indigo routes for conversion,
-layout, aromatization, rendering and checks. Document commands live in Ketcher's
-own toolbar as `customButtons`; Save writes `ketcher.getKet()` through Tauri's fs
-plugin, Export routes every other blob through the same save dialog, and
-autosave writes the recovery snapshot without touching the document path.
+layout, aromatization, rendering and checks. One `<Editor>` is mounted for the
+window's lifetime; the backstage and the tab strip are app chrome above it.
+
+**Backstage.** Every launch opens on the in-app **backstage** instead of the
+editor splash. It is one `role="dialog"` overlay with a top bar, a four-section
+rail (**Welcome**, **Open**, **Models**, **About**) and a **Back to editor**
+action; a home button at the left of the tab strip reopens it. Welcome offers
+Blank canvas, Import structure…, Open project…, four cards sampled from Ketcher's
+real Structure Library (with Indigo-rendered previews) and the Recent structures
+table. Open shows the same table with Remove plus the open tabs. About reads
+`package.json` and `/v2/info`. The Models rail entry never shows a fake model
+list: its button calls the App's `onOpenModels` and raises the real
+`ModelSetupDialog` above the overlay while the backstage stays behind it. 1.x
+keeps the real Models dialog and toolbar entry as the model setup surface
+(ADR 0009, ADR 0010). The backstage never mounts a second editor, never saves and
+never discards work.
+
+**Component boundaries.** The port keeps the UI presentational and the state in
+the pure modules: `src/backstage.ts`, `src/fileMenu.ts`, `src/tabs.ts`,
+`src/recent*.ts` and `src/templateLibrary.ts` own the models;
+`src/ui/Backstage.tsx`, `src/ui/TabStrip.tsx`, `src/ui/FileMenu.tsx` and
+`src/ui/backstage/` render them and report events; `src/App.tsx` owns the
+commands and the I/O. The Models pane's `onOpenModels` handler is wired in
+`App.tsx` to the real model dialog, so there is no second setup surface or fake
+list (ADR 0010).
+
+**Tabs.** A tab is file state (`id`, `name`, `path`, committed `ket`, `dirty`)
+over the single editor. Switching serializes the outgoing tab with
+`ketcher.getKet()`, flushes its snapshot, then loads the incoming tab with
+`ketcher.setMolecule()` behind a loading flag, so a programmatic load never marks
+the target dirty. `src/tabs.ts` owns the pure model; `src/tabStore.ts` owns the
+snapshot I/O. The title precedence is the base name of `path`, then `name`, then
+`Untitled`; dirty tabs show a dot in the strip and `*` in the window title. A
+`.ket` path belongs to at most one tab; Open… and a recent entry that target an
+open path activate that tab instead of creating a duplicate. An imported
+structure is serialized back to KET after `setMolecule`, so its snapshot is a
+real `.ket` document and restores on the next launch.
+
+**File menu.** All document commands live in a **File** menu at the left of the
+tab strip: New, Open… (`.ket`), Import… (`mol`, `smi`, `inchi`, `sdf`, `rxn`),
+Save, Save As…, Export… and up to 10 recent documents. Save (`Ctrl+S`) writes the
+active tab's `ketcher.getKet()` as UTF-8 `.ket`; an untitled tab falls through to
+Save As. Save As (`Ctrl+Shift+S`) adopts a chosen `.ket` path. Export writes one
+other format and never changes the tab's path or format. New (`Ctrl+N`) reuses
+an untouched empty tab or opens a new one and never prompts; Open… reuses an
+untouched empty tab or opens a new one and never prompts for a dirty tab.
+Imported structures have `path: null` and a clean dirty flag; their first Save is
+a Save As. Ketcher's native Save As is hidden because it defaults to Molfile;
+native Open stays visible as the "load into the current canvas" shortcut.
+
+**Command surface and shortcuts.** The File menu is the complete command
+surface. The 1.x top toolbar keeps Save, New, Export and Models as a second
+entry point to the same commands: the first three dispatch the active-tab
+command and Models opens the real setup dialog, so no rule is duplicated
+(ADR 0010). The app registers its document shortcuts in the capture phase so
+Ketcher never sees them: `Ctrl+S`, `Ctrl+Shift+S`, `Ctrl+O`, `Ctrl+N`, `Ctrl+W`,
+`Ctrl+T` and `Ctrl+Tab`. `Ctrl+W` closes the active tab, `Ctrl+T` is New and
+`Ctrl+Tab` cycles the strip. A matched combination is always swallowed; the
+command itself is skipped while the backstage, Models, Export, a close prompt,
+an error, a notice or a running save owns the app, and the File popup is
+dismissed first. Errors use the in-app `ErrorDialog`/`NoticeDialog`, never a
+native message box (`docs/planning/contracts.md` §5).
+
+**Save, close and recovery.** Save/Export route through the aliased `file-saver`
+and Tauri's fs plugin (`docs/planning/contracts.md` §5). Autosave writes the
+active tab's snapshot after a debounce plus a slow interval, and switching
+flushes the outgoing tab. Save/Open/New write a clean snapshot; only a tab close
+or Discard removes snapshot files. Launch restores the tab set silently and
+drops missing/corrupt snapshots. The close guard is decided from all dirty
+tabs: none closes, one active dirty tab offers Save/Discard/Cancel, and more
+than one (or one inactive) offers Discard/Cancel only. These are the 1.x
+behavior adopted from `main`; the `.ket` save/export/autosave contract itself did
+not change.
+
+The single-document recovery path is gone (ADR 0010, ACT-07): `RecoveryDialog`,
+`src/autosaveStore.ts` and `shouldOfferRecovery` no longer exist, so there is no
+`recovery/autosave.ket`/`autosave.json` snapshot, no recovery prompt and no
+"newer than the original mtime" decision. `src/tabStore.ts` is the only snapshot
+writer and reader; `src/autosave.ts` keeps the debounce scheduler, the metadata
+parser and the write-generation helper that the tab store and `App.tsx` consume.
 
 ### 5.2 Recognition
 
@@ -169,8 +263,13 @@ place, so Recognize enables without a remount or canvas loss.
 The host chooses an unused preferred port, spawns the sidecar with `INDIGO_PORT`,
 `CHEMISTRY_MODELS_DIR`, `ORT_DYLIB_PATH` and the platform library path, and
 watches stdout for `INDIGO_PORT=<actual>`; the webview polls `GET /v2/info`
-until it answers and then mounts/updates Ketcher. A stdin-EOF watchdog inside
-the sidecar kills it if the host dies without a clean shutdown.
+until it answers and then mounts/updates Ketcher. The backstage renders from the
+first frame, replacing the loading splash, while the provider resolves and the
+tab set restores underneath; readiness does not dismiss it. On a clean install
+the model status read marks the setup dialog for one auto-open after paint; the
+dialog appears above the backstage, which stays behind it, and closing it returns
+to Welcome. A stdin-EOF watchdog inside the sidecar kills it if the host dies
+without a clean shutdown.
 
 ## 6. Cross-cutting concerns
 
@@ -192,14 +291,16 @@ Architecture decisions live in `docs/planning/adr/`. This document describes the
 current state of the 1.x line; the ADRs record why it changed. The decisions that
 shape this architecture are:
 
-| ADR                                                    | Decision                                                        |
-| ------------------------------------------------------ | --------------------------------------------------------------- |
-| [0002](adr/0002-remove-imago-and-recognize-locally.md) | Remove Imago and recognize through a local ONNX pipeline        |
-| [0003](adr/0003-dynamic-onnx-runtime-loading.md)       | Load ONNX Runtime dynamically and ship the runtime, not weights |
-| [0004](adr/0004-hugging-face-model-delivery.md)        | Deliver models from Hugging Face on demand (B3)                 |
-| [0005](adr/0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm, never `node_modules`    |
-| [0006](adr/0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a calibrated parity gate         |
-| [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                   |
+| ADR                                                    | Decision                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [0002](adr/0002-remove-imago-and-recognize-locally.md) | Remove Imago and recognize through a local ONNX pipeline                  |
+| [0003](adr/0003-dynamic-onnx-runtime-loading.md)       | Load ONNX Runtime dynamically and ship the runtime, not weights           |
+| [0004](adr/0004-hugging-face-model-delivery.md)        | Deliver models from Hugging Face on demand (B3)                           |
+| [0005](adr/0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm, never `node_modules`              |
+| [0006](adr/0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a calibrated parity gate                   |
+| [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                             |
+| [0009](adr/0009-update-1x-from-main-baseline.md)       | Update 1.x from the `main` 0.1.8 baseline, keeping the 1.x ML surface     |
+| [0010](adr/0010-app-integration-and-model-surface.md)  | One command path, two entry points: workflow from `main`, Models from 1.x |
 
 If a story changes the architecture, it must update this document and add an ADR
 in the same activity.

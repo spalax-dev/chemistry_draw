@@ -1,6 +1,10 @@
 name: release
 
 on:
+  # Releases are cut only from main (the 0.x support line). develop is the 1.x
+  # integration line: it never publishes here, so no 0.x release is re-cut from
+  # it. The 1.0.0 launch version is computed by release-please from the
+  # breaking change, never hand-set.
   push:
     branches: [main]
   release:

@@ -33,7 +33,9 @@ export interface DialogProps {
 const OVERLAY: CSSProperties = {
   position: "fixed",
   inset: 0,
-  zIndex: tokens.zIndex.overlay,
+  // Dialogs stack above the backstage (and above the File popup); the token
+  // comment in `tokens.ts` is the contract.
+  zIndex: tokens.zIndex.dialog,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

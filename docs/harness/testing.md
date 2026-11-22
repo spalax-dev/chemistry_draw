@@ -138,6 +138,41 @@ shape:
 - the test fails if a required field disappears or an error shape changes;
 - generated docs are not evidence; the contract test is.
 
+### Backstage, tabs and file workflow (1.x)
+
+The US-01 port adds these colocated Vitest suites. Each owns one unit of the
+workflow adopted from `main` 0.1.8 (ADR 0009) and fails until its module exists,
+which is the story-scoped TDD order.
+
+| Suite                      | Unit under test                                                       |
+| -------------------------- | --------------------------------------------------------------------- |
+| `backstage.test.ts`        | rail sections, default Welcome, unknown-id guard, declared version    |
+| `fileMenu.test.ts`         | command order, Open versus Import, recent section, popup wiring       |
+| `recent.test.ts`           | recent-documents list and the `localStorage` adapter                  |
+| `recentDetails.test.ts`    | size/date labels, Indigo check badge, preview content hash            |
+| `recentStructures.test.ts` | Recent structures rows and their degraded placeholders                |
+| `tabs.test.ts`             | tab creation/activation/close, titles, import, close-guard matrix     |
+| `pathUniqueness.test.ts`   | `pathKey`, owner lookup, Open activation and Save As refusal          |
+| `tabStore.test.ts`         | per-tab snapshot files, index, restore dedupe and discard cleanup     |
+| `templateLibrary.test.ts`  | real Structure Library mapping, SGroup-free preview, four-card sample |
+
+Rules:
+
+- The suites stay pure or source contracts: Vitest still does not render React.
+  Structural rules (the rail is built from the model, an unknown id renders
+  Welcome, the overlay owns no editor, the popup renders the model) are asserted
+  against the component source, as §3 allows.
+- `tabStore.test.ts` replaces the Tauri fs/path adapters with an in-memory
+  filesystem so the write/clear queue and the discard index are exercised
+  without a WebView. That is a boundary fake under §5, not a mocked unit.
+- 1.x adaptations from `main`: the Models rail entry is not asserted to be an
+  empty placeholder (ACT-05 settles the real dialog route), the legacy curated
+  `src/templates.ts` pool is not a product input and is not re-tested, and the
+  tab suite does not assume `main`'s `document.ts` name parameter. Imago, OpenCV
+  and the OCSR path stay outside these suites and keep their own tests.
+- The tab strip's token and layout contract stays with the UI activity; these
+  suites cover tab semantics, not pixels.
+
 ---
 
 ## 7. Commands

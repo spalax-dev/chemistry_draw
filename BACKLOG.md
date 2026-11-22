@@ -19,7 +19,7 @@
 
 ## US-01 — Bring the backstage and file workflow into 1.x
 
-- status: pending
+- status: done
 - value: Users of the 1.x line get the welcome/backstage experience from `main` (real templates, recent structures, project opens, a File menu and editor tabs) on top of the ML/B3 toolbar, instead of a bare editor.
 - acceptance:
   - the backstage view, real templates, recent structures, project opens, File menu, tabs and close/discard flow work on the 1.x line
@@ -46,10 +46,15 @@
   - a baseline is recorded and regression thresholds are defined
   - the thresholds run in a documented gate (CI or a recorded manual run) without making normal iteration slow
   - the numbers replace the ad-hoc latency findings in the docs
+  - the first recognition's cold OCSR pair load is measured separately from warm
+    inference (observed ~92 s on the 2026-11 close machine); if it dominates, a
+    warm-up or session-reuse decision is recorded
 - open questions:
   - which machine class defines the baseline, and how is hardware variance handled?
   - are thresholds enforced in CI (cost, flakiness) or checked before a release?
   - is recognition latency measured on first use (session load) or warm only?
+  - should the OCSR pair preload at startup or on model install instead of on the
+    first Recognize?
 
 ## US-03 — Refactor the frontend and ship the small UI fixes
 

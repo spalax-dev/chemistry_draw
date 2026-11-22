@@ -5,13 +5,16 @@
 > [`docs/architecture.md`](../architecture.md) is the detailed reference; this
 > document is the human-readable contract map.
 >
-> **Reconstructed from the code and the existing docs on 2026-11-21.**
+> **Reconstructed from the code and the existing docs on 2026-11-21.** Updated
+> for the US-01 port of the `main` 0.1.8 backstage/file workflow (ADR 0009); the
+> sidecar and model contracts are unchanged.
 >
-> Sources: `docs/architecture.md` §5 (documents), §6 (API surface), §7 (ONNX and
-> models) and §8–§9 (native libraries and packaging); `docs/conventions.md`
-> §8–§12; `docs/testing.md`; `src-tauri/sidecar/src/lib.rs` and `error.rs` for the
-> routes and the error mapping. Where a document and the code disagree, the code
-> wins for facts and the user wins for intent.
+> Sources: `docs/architecture.md` §5 (backstage, tabs, documents), §6 (API
+> surface), §7 (ONNX and models) and §8–§9 (native libraries and packaging);
+> `main`'s `docs/architecture.md` §5 for the workflow contract it contributed;
+> `docs/conventions.md` §8–§12; `docs/testing.md`; `src-tauri/sidecar/src/lib.rs`
+> and `error.rs` for the routes and the error mapping. Where a document and the
+> code disagree, the code wins for facts and the user wins for intent.
 
 ## 1. Contract inventory
 
@@ -25,7 +28,10 @@
 | Sidecar ↔ Indigo           | `libindigo` / renderer         | `ffi/`                           | C ABI                                        | Indigo platform pin |
 | Sidecar ↔ ONNX Runtime     | ONNX Runtime 1.31.0            | `service/ml/` through `ort`      | Dynamic library load (`ORT_DYLIB_PATH`)      | `api-31`            |
 | Model download             | Hugging Face                   | Sidecar downloader               | HTTPS GET with `Range`                       | pinned by catalog   |
-| Document format            | Ketcher                        | User, fs plugin, autosave        | `.ket` (UTF-8 JSON)                          | Ketcher-owned       |
+| Document format            | Ketcher                        | User, fs plugin, tabs            | `.ket` (UTF-8 JSON), one per tab             | Ketcher-owned       |
+| Tab workspace              | Ketcher webview                | User; File menu; backstage       | Tab strip + one mounted editor               | 1.x                 |
+| Recovery snapshots         | Ketcher webview                | Next launch                      | `<appDataDir>/recovery/tabs/` files          | 1.x                 |
+| Recent documents list      | Ketcher webview                | File menu; backstage Open        | `localStorage` JSON array                    | —                   |
 
 A contract without a consumer is not a contract; delete it.
 
@@ -374,37 +380,103 @@ idle ──POST /download──▶ downloading ──last artifact──▶ veri
 - v1 has **no rollback**: a failed update can leave a mix of old and new
   artifacts until the next repair run.
 
-## 5. Document and format rules
+## 5. Document, tab and format rules
 
-The document contract lives in `docs/architecture.md` §5.2–5.5 and
-`docs/planning/sequences/`; the rules that must not be broken are:
+The workflow contract lives in `docs/architecture.md` §5 and
+`docs/planning/sequences/`; this is the part adopted from `main` 0.1.8 under
+ADR 0009. The rules that must not be broken are:
 
-| Command | Shortcut       | Writes                        | Changes path                    | Changes format |
-| ------- | -------------- | ----------------------------- | ------------------------------- | -------------- |
-| Save    | `Ctrl+S`       | `.ket` to `path` (or Save As) | on first save                   | no             |
-| Save As | `Ctrl+Shift+S` | `.ket` to the chosen path     | yes                             | no             |
-| Export  | —              | one other format to a file    | **no**                          | **no**         |
-| New     | `Ctrl+N`       | nothing                       | set to `null`                   | stays `ket`    |
-| Open    | `Ctrl+O`       | nothing                       | `.ket` path; `null` for imports | stays `ket`    |
+| Command | Shortcut       | Target        | Writes                                         | Changes path                | Changes format |
+| ------- | -------------- | ------------- | ---------------------------------------------- | --------------------------- | -------------- |
+| Save    | `Ctrl+S`       | active tab    | `.ket` to `path` (or Save As) + clean snapshot | on first save               | no             |
+| Save As | `Ctrl+Shift+S` | active tab    | `.ket` to the chosen path + clean snapshot     | yes                         | no             |
+| Export  | —              | active tab    | one other format to a file                     | **no**                      | **no**         |
+| New     | `Ctrl+N`       | reused or new | the target tab's clean snapshot                | `null` on a new/reused tab  | stays `ket`    |
+| Open…   | `Ctrl+O`       | reused or new | the tab's clean snapshot                       | the `.ket` path             | stays `ket`    |
+| Import… | —              | reused or new | the tab's clean snapshot                       | `null` (imported structure) | stays `ket`    |
 
-- `.ket` is the only document format. Export is the sole route to Molfile
-  V2000/V3000, SMILES, InChI, SVG and PNG.
+- `.ket` is the only document format and it is unchanged by the 1.x update.
+  Export is the sole route to Molfile V2000/V3000, SMILES, InChI, SVG and PNG.
 - Opening a `.mol`, `.smi`, `.sdf`, `.rxn` or other structure format imports it
-  through `ketcher.setMolecule`; the document has no backing path and is dirty.
+  through `ketcher.setMolecule`; the tab keeps the source base name, has no
+  backing path (`path: null`) and starts **clean**. Its first Save is a Save As
+  prefilled `<name>.ket`. Open… accepts `.ket` only and adopts the path. The
+  imported structure is serialized back to KET for its snapshot, so it restores
+  on the next launch.
 - Export images use `ketcher.generateImage(ket, { outputFormat })`;
   `exportImage` is not used because Ketcher 3.18 supports only SVG there.
-- The window title is the base name without `.ket` (`benzene`) or `Untitled`,
-  plus `*` while dirty (`benzene*`).
-- Autosave: `<appDataDir>/recovery/autosave.ket` plus `autosave.json` written
-  last. Autosave never clears `dirty`, never touches `path`, and never writes
-  while clean. Save/New/Open clear the snapshot, metadata first.
-- Recovery is offered when metadata exists, `dirty` is true and `savedAt` is
-  newer than the last clean save; a missing or unreadable original file always
-  counts as newer.
-- The close guard offers Save / Discard / Cancel; Save As cancellation aborts the
-  close; `window.destroy()` bypasses the guard.
+- The window title and dialog copy use the active tab's title: the base name
+  without `.ket` (`benzene`), then `name`, then `Untitled`, plus `*` while dirty
+  (`benzene*`). The strip paints a dot instead of the asterisk.
+- **One editor, many tabs.** A tab is file state (`id`, `name`, `path`, committed
+  `ket`, `dirty`) over the single mounted editor. Switching serializes the
+  outgoing tab (`getKet`), flushes its snapshot, sets a loading flag, loads the
+  incoming tab (`setMolecule`) and clears the flag. Change events during the
+  load are ignored. A load never mounts a second editor, a per-tab toolbar or a
+  second canvas.
+- **A path belongs to at most one tab.** `pathKey` normalizes separators and a
+  trailing separator; Windows drive-letter paths compare case-insensitively,
+  POSIX paths case-sensitively. Open… and a recent entry that hit an open path
+  activate that tab and show the **Already open** notice; Save As refuses a path
+  owned by another tab. No file is read or written on a refusal.
+- **Recovery snapshots are per tab:** `<appDataDir>/recovery/tabs/<id>.ket`
+  (structure), `<id>.json` (`{ name, path, savedAt, dirty }`, written last) and
+  `index.json` (`{ order, activeId }`, written last after structural changes).
+  A `.ket` without matching metadata is never restored.
+- Autosave schedules only the active tab (about 2 s debounce plus a 30 s
+  interval), never while clean, never clears `dirty` and never touches `path`.
+  A tab switch flushes the outgoing tab immediately. Save/Open/New rewrite the
+  target tab's snapshot with `dirty: false` so the set restores; only a tab
+  close or Discard clears snapshot files, metadata first.
+- Launch restores the tab set silently: content, names, paths, order, dirty
+  flags and the active id come back as they were. A missing, unreadable or
+  invalid snapshot drops that tab; with no surviving tab launch yields one
+  empty tab. A missing original file is not an error and the first Save recreates
+  it. There is no recovery prompt and no index migration.
+- **Close guard:** no dirty tab → close. Exactly one dirty active tab → Save /
+  Discard / Cancel. Exactly one dirty inactive tab, or more than one dirty tab →
+  Discard / Cancel only. Discard stops autosave, deletes the dirty snapshots,
+  rewrites `index.json` with the survivors and destroys the window; clean tabs
+  keep restoring. Save As cancellation aborts the close. `window.destroy()`
+  bypasses the guard. A single tab's X/middle click closes a clean tab directly
+  or prompts for that tab; closing the last tab leaves one fresh empty tab.
+- **Backstage:** a full-window in-app overlay above the strip and Ketcher, not a
+  route or a second window. Every launch opens on **Welcome**; a home button
+  reopens it and the rail's **Back to editor** or `Escape` closes it. Opening or
+  closing it never saves, activates a tab or calls `setMolecule`. Rail sections:
+  - **Welcome** — Blank canvas, Import structure…, Open project…, four random
+    cards from Ketcher's real Structure Library with Indigo-rendered previews,
+    More templates, and the Recent structures table.
+  - **Open** — the same Recent structures table with Remove, then the open tabs.
+  - **Models** — 1.x keeps the real Models dialog and toolbar entry as the model
+    setup surface; the rail button calls the App's `onOpenModels` and raises the
+    real dialog above the overlay, and it never renders a fake model list or a
+    mock counter.
+  - **About** — app/Ketcher/React versions, Indigo version and sidecar port,
+    platform, runtime and license links.
+- **File menu:** New, Open…, Import…, Save, Save As…, Export… and up to 10
+  recent documents. Ketcher's native Save As is hidden (it defaults to Molfile);
+  native Open stays visible as "load into the current canvas". The app's
+  document shortcuts are capture-phase and stop Ketcher from seeing them:
+  `Ctrl+S`, `Ctrl+Shift+S`, `Ctrl+O`, `Ctrl+N`, `Ctrl+W`, `Ctrl+T` and
+  `Ctrl+Tab`. `Ctrl+W` closes the active tab and `Ctrl+Tab` cycles the strip.
+  A matched combination is always swallowed; its command is skipped while a
+  dialog, the backstage, the Models setup or a running save owns the app.
+- **Command surface:** the File menu is complete. The 1.x toolbar keeps Save,
+  New, Export and Models as a second entry point to the same tab-aware commands;
+  Models opens the real setup dialog. Errors use the in-app `ErrorDialog` and
+  `NoticeDialog`, never a native message box.
+- **Recent documents:** `localStorage["chemistry-draw.recent"]`, absolute `.ket`
+  paths, newest first, deduplicated and capped at 10. Recorded on a successful
+  Open…, Save and Save As; a missing entry is pruned with an in-app error and
+  never creates a tab. Unavailable or full storage degrades to an in-memory list
+  for the session (or no list when unavailable).
 - The aliased `file-saver` routes a `.ket` blob to document save and every other
-  extension to the export dialog, leaving `path` and `format` untouched.
+  extension to the export dialog, leaving the tab's `path` and `format`
+  untouched.
+- **Browser fallback** (`pnpm dev` without Tauri): tabs live in memory, with no
+  autosave, restore or close guard; Open/Import cannot pick a file; Save/Export
+  download; the recent list still uses `localStorage`.
 
 ## 6. Host contracts
 
@@ -423,11 +495,11 @@ These are the only custom commands. Everything else goes through plugins.
 webview may do. It grants `core:default`, window title/destroy, opener, dialog,
 fs, log, the sidecar shell execute/spawn/kill/stdin and these fs scopes:
 
-| Scope         | Grants                                | Why                                                        |
-| ------------- | ------------------------------------- | ---------------------------------------------------------- |
-| `$APPDATA/**` | the app data directory                | Autosave and recovery paths are written without a dialog   |
-| `$HOME/**`    | the user's home directory recursively | Reopened and restored documents are saved without a dialog |
-| runtime       | one picked file/directory             | Dialog `open`/`save` grants that path for the session      |
+| Scope         | Grants                                | Why                                                                                            |
+| ------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `$APPDATA/**` | the app data directory                | Per-tab snapshots (`recovery/tabs/`) and previews are written without a dialog                 |
+| `$HOME/**`    | the user's home directory recursively | A document reopened in a later session, or restored from a snapshot, is saved without a dialog |
+| runtime       | one picked file/directory             | Dialog `open`/`save` grants that path for the session                                          |
 
 The fs commands are listed explicitly (`readTextFile`, `writeTextFile`,
 `readFile`, `writeFile`, `mkdir`, `rename`, `remove`, `stat`, `exists`). Scope
@@ -469,17 +541,26 @@ Indigo when no model or runtime is installed.
 - A contract change updates this document **and** the detailed section in
   `docs/architecture.md`, plus the contract tests and manual checks.
 - Ketcher compatibility is version-bound: a Ketcher upgrade must re-check the
-  `imago/uploads` protocol, the option-store adapter, the toolbar hooks and the
-  patch contract before the dependency moves.
+  `imago/uploads` protocol, the option-store adapter, the toolbar hooks, the tab
+  switching API (`getKet`/`setMolecule`/`changeEvent`), the template providers
+  and the patch contract before the dependency moves.
+- The backstage/tab workflow is a 1.x UI contract. New UI must keep the real
+  Models dialog reachable and must not expose two command surfaces for the same
+  file action: the File menu owns New/Open/Import/Save/Save As/Export.
 
 ## 8. Ownership and review
 
 - **Sidecar API and model contracts:** owned by the 1.x integration line; a
   change is reviewed against the webview consumer (`src/modelSetup.ts`,
   `src/App.tsx`) and the tests in `src-tauri/sidecar/src/tests/`.
-- **Document contract:** owned by the frontend; a change is reviewed against
-  `src/document.ts`, `src/saveRoute.ts`, `src/autosave.ts` and their Vitest
-  suites.
+- **Document and tab contract:** owned by the frontend; a change is reviewed
+  against `src/document.ts`, `src/tabs.ts`, `src/tabStore.ts`,
+  `src/saveRoute.ts`, `src/autosave.ts` and their Vitest suites.
+- **Backstage and File menu contract:** owned by the frontend; a change is
+  reviewed against `src/backstage.ts`, `src/fileMenu.ts`, `src/recent.ts`,
+  `src/recentStructures.ts`, `src/ui/Backstage.tsx`, `src/ui/TabStrip.tsx`,
+  `src/ui/FileMenu.tsx` and their Vitest suites, with the ML toolbar/Models
+  entry still reachable.
 - **Host process contract:** owned by the Tauri host; a change is reviewed
   against `src-tauri/src/lib.rs` and the packaged clean-install check.
 - **Ketcher patch:** owned by whoever bumps Ketcher; each hunk cites its upstream
@@ -496,3 +577,7 @@ Indigo when no model or runtime is installed.
 - The confidence threshold `0.901` is provisional. Calibrating it on real
   Chemistry Draw inputs is a model-quality decision, not a code tweak, and needs
   the measured evidence plus a docs/manifest update.
+- The backstage **Models** rail entry and the 1.x Models toolbar dialog are the
+  same capability. Which surface opens the real dialog (or whether the rail entry
+  is kept at all) is settled by the ACT-05 App/toolbar integration; the rail must
+  not ship the placeholder list or a mock counter in the meantime.

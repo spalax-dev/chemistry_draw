@@ -3,28 +3,17 @@ import "./overrides.css";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Editor } from "ketcher-react";
-import {
-  RemoteStructServiceProvider,
-  type Ketcher,
-  type StructService,
-  type StructServiceOptions,
-} from "ketcher-core";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { type CheckTypes, type Ketcher } from "ketcher-core";
+import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import packageJson from "../package.json";
 import {
   applyExport,
-  applySaved,
   closeAfterSave,
-  decideCloseGuard,
-  documentName,
-  documentTitle,
   exportFileName,
-  markDirty,
-  newDocument,
-  openDocument,
   saveAsTarget,
   saveRequest,
   type CloseChoice,
@@ -32,14 +21,39 @@ import {
   type ExportFormat,
   type SaveOutcome,
 } from "./document";
-import { createAutosaveScheduler, shouldOfferRecovery } from "./autosave";
+import { createAutosaveScheduler, type AutosaveScheduler } from "./autosave";
 import {
-  clearSnapshot,
-  inspectOriginal,
-  readSnapshot,
-  writeSnapshot,
-  type Snapshot,
-} from "./autosaveStore";
+  activateTab,
+  activeTab,
+  addTab,
+  ALREADY_OPEN_MESSAGE,
+  canSaveToPath,
+  closeTab,
+  commitEditor,
+  createTab,
+  decideTabsCloseGuard,
+  dirtyTabs,
+  emptyTabSet,
+  EMPTY_KET,
+  importedTab,
+  isEmptyCanvasKet,
+  isUntouchedTab,
+  newDocumentTarget,
+  pathBaseName,
+  resolveOpenTarget,
+  tabDisplayName,
+  tabTitle,
+  updateTab,
+  type TabSet,
+  type TabState,
+} from "./tabs";
+import {
+  clearDirtyTabSnapshots,
+  clearTabSnapshot,
+  readTabSet,
+  writeTabIndex,
+  writeTabSnapshot,
+} from "./tabStore";
 import {
   hasFileSaverHandler,
   registerFileSaver,
@@ -49,166 +63,142 @@ import {
 } from "./fileSaver";
 import { routeSavedBlob } from "./saveRoute";
 import { describeError, errorMessage, isModelUnavailable } from "./recognizeErrors";
-import { applyKetcherAppOptions, findKetcherRoot } from "./ketcherOptions";
 import {
-  cancelModelDownload,
-  fetchModelsStatus,
-  modelInstallHealthy,
-  modelsControlVisible,
-  setupView,
-  startModelDownload,
-  verifyModels,
-  type ModelsStatus,
-  type VerifyReport,
-} from "./modelSetup";
-import { CloseGuardDialog, ErrorDialog, ExportDialog, RecoveryDialog } from "./ui/DocumentDialogs";
-import { ModelSetupDialog } from "./ui/ModelSetupDialog";
+  cancelActiveTool,
+  openStructureLibrary,
+  resolveApiBase,
+  StaleSafeStructServiceProvider,
+  useLibraryTemplates,
+  type IndigoInfo,
+} from "./ketcherOptions";
+import { CloseGuardDialog, ErrorDialog, ExportDialog, NoticeDialog } from "./ui/DocumentDialogs";
+import { ModelSetupDialog, useModelSetup } from "./ui/ModelSetupDialog";
+import { Backstage } from "./ui/Backstage";
+import { FileMenu } from "./ui/FileMenu";
+import { TabStrip } from "./ui/TabStrip";
 import { EDITOR_BUTTONS } from "./ui/editorButtons";
-import { tokens } from "./ui/tokens";
 import { CUSTOM_BUTTONS, TOOLBAR_ICON_STYLES } from "./ui/toolbarIcons";
+import { addRecent, loadRecent, removeRecent, saveRecent } from "./recent";
+import { loadRecentStructures, type RecentRow } from "./recentStructures";
+import { previewKetWithoutSgroups, type LibraryTemplate } from "./templateLibrary";
+import type { FileMenuId } from "./fileMenu";
 
-/** Minimal valid `.ket` document: an empty canvas. */
-const EMPTY_STRUCTURE = '{"root":{"nodes":[]}}';
-
-/** What a dirty-document prompt is protecting. */
-type PromptIntent = "close" | "replace";
-
-/** Result of asking the user about unsaved changes. */
-type GuardVerdict = "clean" | "saved" | "discard" | "abort";
-
-interface RecoveryOffer {
-  snapshot: Snapshot;
-  /** Extra dialog copy, e.g. when the original file disappeared. */
-  note: string | null;
+/** The Save / Export helpers work on a document view of the active tab. */
+function documentView(tab: TabState): DocumentState {
+  return { path: tab.path, format: "ket", dirty: tab.dirty };
 }
 
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+/** Default Save As name: the current path, the imported source name, else `untitled`. */
+function saveDefaultPath(tab: TabState, extension: string): string {
+  return tab.path ?? `${tab.name ?? "untitled"}${extension}`;
 }
 
-/**
- * Resolve the Indigo API base URL.
- *
- * The sidecar reports the port it actually bound to, which may not be the
- * preferred one if that port was already in use. It also starts asynchronously,
- * so we poll until /v2/info answers.
- */
-async function resolveApiBase(): Promise<string> {
-  const deadline = Date.now() + 20_000;
-  let port = 9321;
-
-  while (Date.now() < deadline) {
-    try {
-      port = await invoke<number>("indigo_port");
-    } catch {
-      // Not running under Tauri (plain browser): keep the default.
-    }
-
-    try {
-      const res = await fetchWithTimeout(`http://127.0.0.1:${port}/v2/info`, 1_000);
-      if (res.ok) return `http://127.0.0.1:${port}/v2/`;
-    } catch {
-      // Sidecar not ready yet.
-    }
-
-    await new Promise((r) => setTimeout(r, 300));
-  }
-
-  // Give up and let Ketcher surface the connection error.
-  return `http://127.0.0.1:${port}/v2/`;
+interface WindowClosePrompt {
+  kind: "window";
+  documentName: string;
+  dirtyCount: number;
+  allowSave: boolean;
 }
 
-/**
- * Struct service provider that discards stale recognition results.
- *
- * Ketcher's Recognize dialog dispatches `setStruct` from every `recognize`
- * promise it starts. Changing the image while a recognition is still running
- * lets the older promise resolve after the newer one, overwriting the fresh
- * preview (or clearing it with an outdated error). Each call takes a monotonic
- * token and only the latest token may settle; stale promises stay pending
- * forever so the Ketcher thunk never dispatches an outdated result. The result
- * also gets a unique molfile title so Ketcher's title-keyed preview cache does
- * not replay an earlier structure.
- */
-class StaleSafeStructServiceProvider extends RemoteStructServiceProvider {
-  private recognizeToken = 0;
-
-  override createStructService(options: StructServiceOptions): StructService {
-    const service = super.createStructService(options);
-    const recognize = service.recognize.bind(service);
-
-    service.recognize = (blob: Blob, version: string) => {
-      const token = ++this.recognizeToken;
-      return recognize(blob, version).then(
-        (result) => {
-          if (token !== this.recognizeToken) return new Promise<never>(() => {});
-          // Ketcher's StructRender caches rendered SVG by the molfile title.
-          // The sidecar writes an empty title for every structure, so a second
-          // recognition of a different molecule would replay the first cached
-          // preview. A unique title keeps the cache key distinct; the title is
-          // cosmetic and does not change the atoms or bonds.
-          const title = `Recognized structure ${token}`;
-          return { ...result, struct: result.struct.replace(/^[^\n]*/, title) };
-        },
-        (error: unknown) =>
-          token === this.recognizeToken ? Promise.reject(error) : new Promise<never>(() => {}),
-      );
-    };
-
-    return service;
-  }
+interface TabClosePrompt {
+  kind: "tab";
+  documentName: string;
 }
+
+type ClosePrompt = WindowClosePrompt | TabClosePrompt;
+
+/** Check types the Recent structures validation asks Indigo for. */
+const RECENT_CHECK_TYPES: CheckTypes[] = [
+  "valence",
+  "radicals",
+  "pseudoatoms",
+  "stereo",
+  "query",
+  "overlapping_atoms",
+  "overlapping_bonds",
+  "rgroups",
+  "chiral",
+  "3d",
+];
 
 function App() {
   const lastError = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const [ready, setReady] = useState(false);
-  const [provider, setProvider] = useState<RemoteStructServiceProvider | null>(null);
+  const [provider, setProvider] = useState<StaleSafeStructServiceProvider | null>(null);
+  /** The backstage is the start surface, so every launch begins here. */
+  const [backstageOpen, setBackstageOpen] = useState(true);
+  const [indigoInfo, setIndigoInfo] = useState<IndigoInfo>({ version: null, port: null });
+  /** The resolved sidecar base (`http://127.0.0.1:<port>/v2/`), null until ready. */
   const [apiBase, setApiBase] = useState<string | null>(null);
 
   const ketcherRef = useRef<Ketcher | null>(null);
-  const [doc, setDocState] = useState<DocumentState>(newDocument);
-  const docRef = useRef(doc);
 
-  const [modelsOpen, setModelsOpen] = useState(false);
-  const [modelStatus, setModelStatus] = useState<ModelsStatus | null>(null);
-  const [modelVerify, setModelVerify] = useState<VerifyReport | null>(null);
-  const [modelAttention, setModelAttention] = useState(false);
-  const [modelError, setModelError] = useState<string | null>(null);
-  const [modelBusy, setModelBusy] = useState(false);
+  const [tabSet, setTabSetState] = useState<TabSet>(() => emptyTabSet("tab-1"));
+  const tabsRef = useRef(tabSet);
+  const nextTabIdRef = useRef(1);
+  /** Started before the editor initializes, resolved once it is ready. */
+  const [restorePromise] = useState(() => readTabSet());
 
-  const apiBaseRef = useRef<string | null>(null);
-  const modelsOpenRef = useRef(false);
-  const modelsAutoOpenedRef = useRef(false);
-  const modelsAutoOpenPendingRef = useRef(false);
-  const modelsStartupRef = useRef(false);
-  const modelAbortRef = useRef<AbortController | null>(null);
-  const modelBusyRef = useRef(false);
-  // True while a download-style run was accepted but has not yet been observed
-  // healthy: only a later status read may treat that run's completion as proof.
-  const modelHealthProofRef = useRef(false);
-  const imagoVersionsRef = useRef<string[] | null>(null);
+  /** Remembered `.ket` paths, newest first. */
+  const [recent, setRecent] = useState<string[]>(() => loadRecent());
+  const recentRef = useRef<string[]>(recent);
+  /** Welcome's Recent structures rows and their in-flight flag. */
+  const [recentRows, setRecentRows] = useState<RecentRow[]>([]);
+  const [recentRowsLoading, setRecentRowsLoading] = useState(false);
 
-  const [recovery, setRecovery] = useState<RecoveryOffer | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
-  const [closePrompt, setClosePrompt] = useState(false);
-  const [promptIntent, setPromptIntent] = useState<PromptIntent>("close");
+  const [closePrompt, setClosePrompt] = useState<ClosePrompt | null>(null);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
+  /** Already-open notice; the caller supplies title and message. */
+  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
 
   const closeChoiceRef = useRef<((choice: CloseChoice) => void) | null>(null);
   const dialogOpenRef = useRef(false);
   const busyRef = useRef(false);
   const closingRef = useRef(false);
+  /** The File popup is open; keyboard shortcuts close it like a dialog. */
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const fileMenuOpenRef = useRef(false);
+  /** True while a programmatic `setMolecule` runs; change events are ignored. */
+  const loadingRef = useRef(false);
+  const schedulerRef = useRef<AutosaveScheduler | null>(null);
+
+  const apiBaseRef = useRef<string | null>(null);
+
+  // Model setup is owned by its controller hook so the dialog, its fetch/poll
+  // loop and the Recognize capability sync stay together. The backstage Models
+  // rail and the toolbar entry both call `openModels`.
+  const {
+    modelsOpen,
+    modelStatus,
+    modelVerify,
+    modelAttention,
+    modelError,
+    modelBusy,
+    modelsVisible,
+    openModels,
+    closeModels,
+    refreshModelStatus,
+    handleModelPrimary,
+    cancelModels,
+    verifyModelFiles,
+    reportModelUnavailable,
+  } = useModelSetup({
+    ready,
+    apiBase,
+    apiBaseRef,
+    ketcherRef,
+    errorOpen: error !== null,
+  });
+
+  // The real Structure Library load is deferred until Ketcher is ready and
+  // retried when an empty build coincides with a later backstage open.
+  const { templates } = useLibraryTemplates(ready, backstageOpen);
 
   /** Updates both the rendered state and the value event handlers read. */
-  const setDoc = useCallback((next: DocumentState) => {
-    docRef.current = next;
-    setDocState(next);
+  const setTabs = useCallback((next: TabSet) => {
+    tabsRef.current = next;
+    setTabSetState(next);
   }, []);
 
   const showError = useCallback(
@@ -216,272 +206,61 @@ function App() {
     [],
   );
 
-  /**
-   * Copies the sidecar's advertised `imago_versions` into Ketcher's option
-   * store. The store update does not remount the editor or call
-   * `setMolecule`, so the canvas, selection and undo history survive; the
-   * no-op action inside the adapter refreshes the Recognize control state.
-   */
-  const applyImagoVersions = useCallback((versions: string[]) => {
-    const ketcher = ketcherRef.current;
-    if (!ketcher) return;
-
-    const previous = imagoVersionsRef.current;
-    if (
-      previous !== null &&
-      previous.length === versions.length &&
-      previous.every((value, index) => value === versions[index])
-    ) {
-      return;
-    }
-
-    const container = findKetcherRoot(ketcher);
-    if (!applyKetcherAppOptions(container, { server: true, imagoVersions: versions })) {
-      console.warn(
-        "[chemistry-draw] could not update the Ketcher option store; " +
-          "the Recognize control may need a restart.",
-      );
-      return;
-    }
-
-    imagoVersionsRef.current = [...versions];
+  /** Applies a recent-list change, persists it, and repaints the menu. */
+  const updateRecent = useCallback((transform: (list: string[]) => string[]) => {
+    const next = transform(recentRef.current);
+    recentRef.current = next;
+    saveRecent(next);
+    setRecent(next);
   }, []);
 
-  /** Reads `GET /v2/info` and applies the capability list in place. */
-  const syncImagoVersions = useCallback(
-    async (base: string) => {
-      try {
-        const infoUrl = `${base.endsWith("/") ? base : `${base}/`}info`;
-        const response = await fetchWithTimeout(infoUrl, 3_000);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const allocateTabId = useCallback(() => `tab-${nextTabIdRef.current++}`, []);
 
-        const body: unknown = await response.json();
-        const raw =
-          typeof body === "object" && body !== null && "imago_versions" in body
-            ? (body as { imago_versions?: unknown }).imago_versions
-            : undefined;
-        const versions = Array.isArray(raw)
-          ? raw.filter((value): value is string => typeof value === "string")
-          : [];
-        applyImagoVersions(versions);
-      } catch (error) {
-        console.warn("[chemistry-draw] could not refresh the recognition capability:", error);
-      }
-    },
-    [applyImagoVersions],
-  );
-
-  /**
-   * Reads `GET /v2/models`. Only one request is in flight: a new read aborts
-   * the previous one, and a response that arrives after close is discarded.
-   */
-  const refreshModels = useCallback(
-    async (
-      options: { silent?: boolean; requireOpen?: boolean } = {},
-    ): Promise<ModelsStatus | null> => {
-      const base = apiBaseRef.current;
-      if (base === null) return null;
-
-      modelAbortRef.current?.abort();
-      const controller = new AbortController();
-      modelAbortRef.current = controller;
-      try {
-        const next = await fetchModelsStatus(
-          base,
-          (input, init) => fetch(input, init),
-          controller.signal,
-        );
-        if (controller.signal.aborted) return null;
-        if (options.requireOpen && !modelsOpenRef.current) return null;
-
-        setModelStatus(next);
-        setModelError(null);
-        // A completed download-style run is proof of health only when a status
-        // read observes the result. An ordinary read with no accepted run in
-        // flight never clears the recognition-attention override.
-        if (modelHealthProofRef.current && modelInstallHealthy(next)) {
-          modelHealthProofRef.current = false;
-          setModelAttention(false);
-        }
-        return next;
-      } catch (error) {
-        if (controller.signal.aborted) return null;
-        if (options.requireOpen && !modelsOpenRef.current) return null;
-        if (options.silent) {
-          console.warn("[chemistry-draw] could not read the model status:", error);
-        } else {
-          setModelError(errorMessage(error));
-        }
-        return null;
-      } finally {
-        if (modelAbortRef.current === controller) modelAbortRef.current = null;
-      }
-    },
-    [],
-  );
-
-  const openModels = useCallback(() => {
-    modelsOpenRef.current = true;
-    setModelsOpen(true);
-    setModelError(null);
-    void refreshModels({ requireOpen: true });
-  }, [refreshModels]);
-
-  const closeModels = useCallback(() => {
-    modelsOpenRef.current = false;
-    setModelsOpen(false);
-    modelAbortRef.current?.abort();
+  /** Keeps the rendered File menu and the shortcut handler in sync. */
+  const handleFileMenuOpenChange = useCallback((open: boolean) => {
+    fileMenuOpenRef.current = open;
+    setFileMenuOpen(open);
   }, []);
 
-  /**
-   * Runs a status-returning action and re-fetches after a failure (e.g. 409).
-   *
-   * A download-style action clears the last verify report when it starts and
-   * when it succeeds: the report is stale from that point on, and keeping it
-   * would leave `setupView` on `repair`/Repair after a successful Repair.
-   */
-  const runModelAction = useCallback(
-    async (
-      action: (base: string) => Promise<ModelsStatus>,
-      options: { clearVerify?: boolean } = {},
-    ) => {
-      const base = apiBaseRef.current;
-      if (base === null || modelBusyRef.current) return;
-
-      modelBusyRef.current = true;
-      modelAbortRef.current?.abort();
-      setModelBusy(true);
-      setModelError(null);
-      if (options.clearVerify) setModelVerify(null);
-      try {
-        const next = await action(base);
-        setModelStatus(next);
-        if (options.clearVerify) {
-          setModelVerify(null);
-          // An accepted start (202) is not proof of health: the worker may
-          // still fail before or during the run. Keep the attention override
-          // and let a status read of the completed, healthy install clear it.
-          // A response that is already healthy (a 200 no-op re-hash) is proof,
-          // so clear the override immediately.
-          if (modelInstallHealthy(next)) {
-            modelHealthProofRef.current = false;
-            setModelAttention(false);
-          } else {
-            modelHealthProofRef.current = true;
-          }
-        }
-      } catch (error) {
-        const message = errorMessage(error);
-        setModelError(message);
-        await refreshModels({ silent: true, requireOpen: true });
-        // The re-fetch must not wipe the action's own note.
-        setModelError(message);
-      } finally {
-        modelBusyRef.current = false;
-        setModelBusy(false);
-      }
-    },
-    [refreshModels],
-  );
-
-  const downloadModels = useCallback(() => {
-    void runModelAction((base) => startModelDownload(base), { clearVerify: true });
-  }, [runModelAction]);
-
-  const cancelModels = useCallback(() => {
-    void runModelAction((base) => cancelModelDownload(base));
-  }, [runModelAction]);
-
-  const verifyModelFiles = useCallback(async () => {
-    const base = apiBaseRef.current;
-    if (base === null || modelBusyRef.current) return;
-
-    modelBusyRef.current = true;
-    modelAbortRef.current?.abort();
-    setModelBusy(true);
-    setModelError(null);
-    try {
-      const report = await verifyModels(base);
-      setModelVerify(report);
-      if (report.ok) {
-        modelHealthProofRef.current = false;
-        setModelAttention(false);
-      }
-      await refreshModels({ silent: true, requireOpen: true });
-    } catch (error) {
-      const message = errorMessage(error);
-      setModelError(message);
-      await refreshModels({ silent: true, requireOpen: true });
-      setModelError(message);
-    } finally {
-      modelBusyRef.current = false;
-      setModelBusy(false);
-    }
-  }, [refreshModels]);
-
-  const handleModelPrimary = useCallback(() => {
-    if (modelStatus === null) {
-      void refreshModels({ requireOpen: true });
-      return;
-    }
-
-    const view = setupView(modelStatus, modelVerify);
-    if (view.primary === "verify") void verifyModelFiles();
-    else if (view.primary === "download") downloadModels();
-  }, [downloadModels, modelStatus, modelVerify, refreshModels, verifyModelFiles]);
-
-  const refreshModelStatus = useCallback(() => {
-    void refreshModels({ requireOpen: true });
-  }, [refreshModels]);
-
-  const modelDownloadState = modelStatus?.download.state ?? null;
-  const modelReady = modelStatus?.ready ?? null;
-  const modelsVisible = modelsControlVisible(modelStatus, modelVerify, modelAttention);
-
-  // One status read after the editor is ready and the API base resolved.
+  // The backstage counts as a dialog: a document shortcut never fires behind it.
+  const dialogsOpen =
+    backstageOpen ||
+    modelsOpen ||
+    exportOpen ||
+    closePrompt !== null ||
+    error !== null ||
+    notice !== null;
   useEffect(() => {
-    if (!ready || apiBase === null || modelsStartupRef.current) return;
-    modelsStartupRef.current = true;
-    void refreshModels({ silent: true }).then((status) => {
-      if (status !== null && !status.ready) modelsAutoOpenPendingRef.current = true;
+    dialogOpenRef.current = dialogsOpen;
+  }, [dialogsOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    resolveApiBase().then(({ apiBase: base, info }) => {
+      if (cancelled) return;
+      console.info("[chemistry-draw] Indigo API:", base);
+      apiBaseRef.current = base;
+      setApiBase(base);
+      setProvider(new StaleSafeStructServiceProvider(base));
+      setIndigoInfo(info);
     });
-  }, [ready, apiBase, refreshModels]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Auto-open exactly once, after a recovery prompt (or error dialog) is gone.
-  // Deferred one tick so the editor paints first and the open is not a
-  // synchronous cascading render from the effect body.
-  useEffect(() => {
-    if (!modelsAutoOpenPendingRef.current || modelsAutoOpenedRef.current) return;
-    if (recovery !== null || error !== null) return;
+  const handleInit = useCallback((ketcher: Ketcher) => {
+    ketcherRef.current = ketcher;
+    const currentOptions = ketcher.editor.options();
+    ketcher.editor.options({
+      ...currentOptions,
+      app: { ...currentOptions.app, server: true },
+    });
+    setReady(true);
+  }, []);
 
-    const timer = setTimeout(() => {
-      if (modelsAutoOpenedRef.current || !modelsAutoOpenPendingRef.current) return;
-      modelsAutoOpenedRef.current = true;
-      modelsAutoOpenPendingRef.current = false;
-      openModels();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [modelStatus, recovery, error, openModels]);
-
-  // Poll while the dialog is open and a run is active; closing stops the timer.
-  useEffect(() => {
-    if (!modelsOpen) return;
-    if (modelDownloadState !== "downloading" && modelDownloadState !== "verifying") return;
-
-    const timer = setInterval(() => {
-      // An action request owns the status while it runs; a poll that started
-      // then could overwrite its result with an older snapshot.
-      if (!modelBusyRef.current) void refreshModels({ requireOpen: true });
-    }, 500);
-    return () => clearInterval(timer);
-  }, [modelsOpen, modelDownloadState, refreshModels]);
-
-  // The Models control is a conditional toolbar entry: Ketcher renders each
-  // `customButtons` entry as `<img alt={title}>` inside its own `<button>`, and
-  // React owns that toolbar. Hiding the wrapper button in place keeps the
-  // registered button and its `CUSTOM_BUTTON_PRESSED` event intact while the
-  // install is healthy. The toolbar can paint a tick after `onInit`, so a short
-  // bounded retry waits for the node; a missing node is logged, never fatal.
+  // Hide the Models toolbar wrapper in place (keeping its event intact) on a
+  // healthy install; a short bounded retry covers the post-init paint.
   useEffect(() => {
     if (!ready) return;
 
@@ -514,49 +293,48 @@ function App() {
     };
   }, [ready, modelsVisible]);
 
-  // Ready flips the Recognize capability without remounting the editor; a
-  // non-ready status clears it. Opening the dialog on a ready install retries a
-  // transient `/v2/info` failure.
+  /** Builds Welcome's Recent structures rows while the backstage is open. */
   useEffect(() => {
-    if (!ready || apiBase === null || modelReady === null) return;
-    if (!modelReady) {
-      applyImagoVersions([]);
+    if (!backstageOpen) return;
+
+    const ketcher = ketcherRef.current;
+    if (!isTauri() || !ready || apiBase === null || !ketcher) {
+      setRecentRows([]);
+      setRecentRowsLoading(false);
       return;
     }
-    void syncImagoVersions(apiBase);
-  }, [ready, apiBase, modelReady, modelsOpen, applyImagoVersions, syncImagoVersions]);
 
-  useEffect(() => () => modelAbortRef.current?.abort(), []);
-
-  // Keep the keydown handler aware of the dialogs without re-subscribing.
-  const dialogsOpen =
-    recovery !== null || exportOpen || closePrompt || error !== null || modelsOpen;
-  useEffect(() => {
-    dialogOpenRef.current = dialogsOpen;
-  }, [dialogsOpen]);
-
-  useEffect(() => {
     let cancelled = false;
-    resolveApiBase().then((base) => {
-      if (cancelled) return;
-      console.info("[chemistry-draw] Indigo API:", base);
-      apiBaseRef.current = base;
-      setApiBase(base);
-      setProvider(new StaleSafeStructServiceProvider(base));
-    });
+    setRecentRowsLoading(true);
+
+    void loadRecentStructures(recent, {
+      apiBase,
+      check: (molfile) =>
+        ketcher.structService.check({ struct: molfile, types: RECENT_CHECK_TYPES }),
+    })
+      .then((rows) => {
+        if (!cancelled) setRecentRows(rows);
+      })
+      .catch((error) => {
+        console.warn("[chemistry-draw] could not load the recent structures:", error);
+        if (!cancelled) setRecentRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentRowsLoading(false);
+      });
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [backstageOpen, recent, ready, apiBase]);
 
-  const handleInit = useCallback((ketcher: Ketcher) => {
-    ketcherRef.current = ketcher;
-    const currentOptions = ketcher.editor.options();
-    ketcher.editor.options({
-      ...currentOptions,
-      app: { ...currentOptions.app, server: true },
-    });
-    setReady(true);
+  /** Renders one entry's SGroup-free copy to a preview URL; insertion keeps the original. */
+  const renderTemplatePreview = useCallback(async (ket: string): Promise<string> => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher) throw new Error("The editor is not ready to render a template preview.");
+    const previewKet = previewKetWithoutSgroups(ket);
+    const image = await ketcher.generateImage(previewKet, { outputFormat: "svg" });
+    return URL.createObjectURL(image);
   }, []);
 
   const handleError = useCallback(
@@ -566,101 +344,153 @@ function App() {
       const now = Date.now();
       if (msg === lastError.current.msg && now - lastError.current.at < 5000) return;
       lastError.current = { msg, at: now };
-      const { title, message } = describeError(raw);
-      showError(message, title);
+      const described = describeError(raw);
+      showError(described.message, described.title);
       // A corrupt-but-present artifact keeps `ready: true` (a status read never
       // hashes), so recognition is the only signal that the install needs a
       // repair. Force the Models control until health is proven.
-      if (isModelUnavailable(raw)) {
-        // Invalidate a proof armed by an earlier run *before* the silent read:
-        // that run may have completed while the dialog was closed, so a healthy
-        // status now cannot clear the failure observed here.
-        modelHealthProofRef.current = false;
-        setModelAttention(true);
-        void refreshModels({ silent: true });
-      }
+      if (isModelUnavailable(raw)) reportModelUnavailable();
     },
-    [refreshModels, showError],
+    [reportModelUnavailable, showError],
   );
 
-  // Window title mirrors the document name plus the dirty marker.
+  // Window title mirrors the active tab and keeps `tabTitle`'s dirty marker.
   useEffect(() => {
     if (!isTauri()) return;
     getCurrentWindow()
-      .setTitle(documentTitle(doc))
+      .setTitle(tabTitle(activeTab(tabSet)))
       .catch((error) => console.warn("[chemistry-draw] could not set the window title:", error));
-  }, [doc]);
+  }, [tabSet]);
 
-  /** Snapshot cleanup must never fail the command that already succeeded. */
-  const clearSnapshotSafely = useCallback(async () => {
+  /** Loads a tab's content into the one editor without marking it dirty. */
+  const loadTabIntoEditor = useCallback(async (tab: TabState) => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher) return;
+
+    loadingRef.current = true;
     try {
-      await clearSnapshot();
-    } catch (error) {
-      console.warn("[chemistry-draw] could not delete the recovery snapshot:", error);
+      await ketcher.setMolecule(tab.ket.trim().length > 0 ? tab.ket : EMPTY_KET);
+    } finally {
+      loadingRef.current = false;
     }
   }, []);
 
-  /**
-   * Routes a blob Ketcher asked to save through the aliased `file-saver`.
-   * `.ket` writes the document (asking for a destination only when it has no
-   * path); every other format is an export that leaves the document untouched.
-   */
-  const saveRoutedBlob = useCallback(
-    async (blob: Blob, filename: string): Promise<void> => {
-      const route = routeSavedBlob(filename, docRef.current, {
-        desktop: isTauri(),
-        hasHandler: hasFileSaverHandler(),
-      });
+  const restartScheduler = useCallback(() => {
+    const scheduler = schedulerRef.current;
+    if (scheduler === null) return;
+    scheduler.stop();
+    scheduler.start();
+  }, []);
 
-      switch (route.kind) {
-        case "document-save": {
-          let path = route.path;
-          if (path === null) {
-            const chosen = await saveDialog({
-              title: "Save structure",
-              defaultPath: route.defaultName,
-              filters: [{ name: "Ketcher files", extensions: ["ket"] }],
-            });
-            if (chosen === null) return;
-            path = saveAsTarget(chosen);
-          }
+  /** Writes the active tab's snapshot unless a command or load owns the editor. */
+  const flushActiveTab = useCallback(async () => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher) return;
 
-          await writeTextFileAt(path, await blob.text());
-          setDoc(applySaved(docRef.current, path));
-          await clearSnapshotSafely();
-          return;
-        }
-        case "export-save":
-        case "download":
-          await saveBlobAs(blob, route.defaultName);
-          return;
+    // A prompt, save/switch or load owns the editor; a debounce must not write.
+    if (closingRef.current || busyRef.current || loadingRef.current) return;
+
+    const outgoing = activeTab(tabsRef.current);
+    if (!outgoing.dirty) return;
+
+    try {
+      const ket = await ketcher.getKet();
+      // The guard is re-checked after every await: a close may have started
+      // while the editor serialized.
+      if (closingRef.current || busyRef.current || loadingRef.current) return;
+      if (tabsRef.current.activeId !== outgoing.id) return;
+
+      // A Save may have completed while the editor serialized: that tab is
+      // clean now and the pending autosave must not dirty it again.
+      const current = tabsRef.current.tabs.find((tab) => tab.id === outgoing.id);
+      if (!current || !current.dirty) return;
+
+      const next = commitEditor(tabsRef.current, outgoing.id, ket);
+      setTabs(next);
+
+      const written = next.tabs.find((tab) => tab.id === outgoing.id);
+      if (!written) return;
+      await writeTabSnapshot(written, Date.now());
+      // Do not let a flush that started before a Discard republish the index
+      // after the survivors were fixed.
+      if (closingRef.current || busyRef.current || loadingRef.current) return;
+      await writeTabIndex(
+        next.tabs.map((tab) => tab.id),
+        next.activeId,
+      );
+    } catch (error) {
+      console.warn("[chemistry-draw] autosave failed:", error);
+    }
+  }, [setTabs]);
+
+  /** Serializes, flushes and activates another tab; a load never dirties it. */
+  const activateTabById = useCallback(
+    async (id: string) => {
+      const ketcher = ketcherRef.current;
+      if (!ketcher || busyRef.current) return;
+      if (tabsRef.current.activeId === id) return;
+
+      const target = tabsRef.current.tabs.find((tab) => tab.id === id);
+      if (!target) return;
+
+      // An armed template tool must not follow the pointer onto the tab that is
+      // about to be loaded.
+      cancelActiveTool(ketcher);
+
+      busyRef.current = true;
+      try {
+        const outgoing = activeTab(tabsRef.current);
+        const ket = await ketcher.getKet();
+
+        const committed = updateTab(tabsRef.current, outgoing.id, { ket });
+        setTabs(committed);
+
+        const outgoingTab = committed.tabs.find((tab) => tab.id === outgoing.id);
+        if (outgoingTab) await writeTabSnapshot(outgoingTab, Date.now());
+
+        await loadTabIntoEditor(target);
+
+        const next = activateTab(tabsRef.current, id);
+        setTabs(next);
+        await writeTabIndex(
+          next.tabs.map((tab) => tab.id),
+          next.activeId,
+        );
+        restartScheduler();
+      } catch (error) {
+        loadingRef.current = false;
+        showError(`Could not switch document: ${errorMessage(error)}`);
+      } finally {
+        busyRef.current = false;
       }
     },
-    [clearSnapshotSafely, setDoc],
+    [loadTabIntoEditor, restartScheduler, setTabs, showError],
   );
 
-  const saveDocument = useCallback(
+  /** Saves the active tab; Save As asks for a destination. */
+  const saveActiveTab = useCallback(
     async (mode: "save" | "save-as"): Promise<SaveOutcome> => {
       const ketcher = ketcherRef.current;
       if (!ketcher || busyRef.current) return "cancelled";
 
       busyRef.current = true;
       try {
-        const request = saveRequest(docRef.current);
+        const tab = activeTab(tabsRef.current);
+        const request = saveRequest(documentView(tab));
         const ket = await ketcher.getKet();
 
         if (!isTauri()) {
           // Browser fallback: download, and a download has no writable path.
           await saveBlobAs(new Blob([ket], { type: "application/json" }), request.path);
-          setDoc({ ...docRef.current, dirty: false });
+          setTabs(updateTab(tabsRef.current, tab.id, { ket, dirty: false }));
           return "saved";
         }
 
-        let path = docRef.current.path;
+        let path = tab.path;
         if (mode === "save-as" || path === null) {
           const chosen = await saveDialog({
             title: mode === "save-as" ? "Save structure as" : "Save structure",
-            defaultPath: request.path,
+            defaultPath: saveDefaultPath(tab, request.extension),
             filters: [
               {
                 name: "Ketcher files",
@@ -672,9 +502,20 @@ function App() {
           path = saveAsTarget(chosen);
         }
 
+        // A path owned by another tab is refused before the write; the active
+        // tab's own path still saves.
+        if (!canSaveToPath(tabsRef.current, path, tab.id)) {
+          setNotice({ title: "Already open", message: ALREADY_OPEN_MESSAGE });
+          return "cancelled";
+        }
+
         await writeTextFileAt(path, ket);
-        setDoc(applySaved(docRef.current, path));
-        await clearSnapshotSafely();
+        updateRecent((list) => addRecent(list, path));
+
+        const next = updateTab(tabsRef.current, tab.id, { path, ket, dirty: false });
+        setTabs(next);
+        const saved = next.tabs.find((entry) => entry.id === tab.id);
+        if (saved) await writeTabSnapshot(saved, Date.now());
         return "saved";
       } catch (error) {
         showError(
@@ -685,97 +526,433 @@ function App() {
         busyRef.current = false;
       }
     },
-    [clearSnapshotSafely, setDoc, showError],
+    [setTabs, showError, updateRecent],
+  );
+
+  /** Routes a Ketcher save blob: `.ket` writes the tab, anything else exports. */
+  const saveRoutedBlob = useCallback(
+    async (blob: Blob, filename: string): Promise<void> => {
+      const tab = activeTab(tabsRef.current);
+      const route = routeSavedBlob(filename, documentView(tab), {
+        desktop: isTauri(),
+        hasHandler: hasFileSaverHandler(),
+      });
+
+      switch (route.kind) {
+        case "document-save": {
+          // Dormant while native Save As is hidden: the app's Save path
+          // enforces `canSaveToPath`, and this branch only runs when Ketcher's
+          // own save handler is reachable.
+          let path = route.path;
+          if (path === null) {
+            const chosen = await saveDialog({
+              title: "Save structure",
+              defaultPath: route.defaultName,
+              filters: [{ name: "Ketcher files", extensions: ["ket"] }],
+            });
+            if (chosen === null) return;
+            path = saveAsTarget(chosen);
+          }
+
+          const text = await blob.text();
+          await writeTextFileAt(path, text);
+          updateRecent((list) => addRecent(list, path));
+
+          const next = updateTab(tabsRef.current, tab.id, { path, ket: text, dirty: false });
+          setTabs(next);
+          const saved = next.tabs.find((entry) => entry.id === tab.id);
+          if (saved) await writeTabSnapshot(saved, Date.now());
+          return;
+        }
+        case "export-save":
+        case "download":
+          await saveBlobAs(blob, route.defaultName);
+          return;
+      }
+    },
+    [setTabs, updateRecent],
   );
 
   const askCloseChoice = useCallback(
-    (intent: PromptIntent): Promise<CloseChoice> =>
+    (prompt: ClosePrompt): Promise<CloseChoice> =>
       new Promise((resolve) => {
         closeChoiceRef.current = resolve;
-        setPromptIntent(intent);
-        setClosePrompt(true);
+        setClosePrompt(prompt);
       }),
     [],
   );
 
   const answerCloseChoice = useCallback((choice: CloseChoice) => {
-    setClosePrompt(false);
+    setClosePrompt(null);
     const resolve = closeChoiceRef.current;
     closeChoiceRef.current = null;
     resolve?.(choice);
   }, []);
 
-  /**
-   * The single Save / Discard / Cancel state machine. Every command that would
-   * drop unsaved edits (close, New, Open) goes through it; none re-implements
-   * the decision.
-   */
-  const confirmDirty = useCallback(
-    async (intent: PromptIntent): Promise<GuardVerdict> => {
-      if (!docRef.current.dirty) return "clean";
-
-      const choice = await askCloseChoice(intent);
-      const decision = decideCloseGuard(docRef.current, choice);
-
-      if (decision.action === "stay") return "abort";
-      if (decision.action === "discard") return "discard";
-
-      const outcome = await saveDocument(decision.action === "save" ? "save" : "save-as");
-      return closeAfterSave(outcome) === "close" ? "saved" : "abort";
-    },
-    [askCloseChoice, saveDocument],
-  );
-
-  /** Asks before replacing the current document; `false` aborts the command. */
-  const confirmReplace = useCallback(
-    async (): Promise<boolean> => (await confirmDirty("replace")) !== "abort",
-    [confirmDirty],
-  );
-
+  /** New reuses an untouched empty tab; any document or edit opens a new one. */
   const startNewDocument = useCallback(async () => {
     const ketcher = ketcherRef.current;
     if (!ketcher || busyRef.current) return;
-    if (!(await confirmReplace())) return;
 
+    busyRef.current = true;
     try {
-      await ketcher.setMolecule(EMPTY_STRUCTURE);
-      setDoc(newDocument());
-      await clearSnapshotSafely();
-    } catch (error) {
-      showError(`Could not start a new document: ${errorMessage(error)}`);
-    }
-  }, [clearSnapshotSafely, confirmReplace, setDoc, showError]);
+      const outgoing = activeTab(tabsRef.current);
+      const target = newDocumentTarget(tabsRef.current);
 
-  const openDocumentFromDisk = useCallback(async () => {
+      if (target.kind === "reuse") {
+        // The reused tab is empty by definition; reload only if the canvas
+        // still carries a structure, behind the loading flag.
+        if (!isEmptyCanvasKet(await ketcher.getKet())) {
+          loadingRef.current = true;
+          try {
+            await ketcher.setMolecule(EMPTY_KET);
+          } finally {
+            loadingRef.current = false;
+          }
+        }
+
+        const next = updateTab(tabsRef.current, target.tabId, {
+          path: null,
+          name: null,
+          dirty: false,
+          ket: EMPTY_KET,
+        });
+        setTabs(next);
+
+        const reused = next.tabs.find((tab) => tab.id === target.tabId);
+        if (reused) await writeTabSnapshot(reused, Date.now());
+        await writeTabIndex(
+          next.tabs.map((entry) => entry.id),
+          next.activeId,
+        );
+        restartScheduler();
+        return;
+      }
+
+      const ket = await ketcher.getKet();
+      const committed = updateTab(tabsRef.current, outgoing.id, { ket });
+      setTabs(committed);
+
+      const outgoingTab = committed.tabs.find((tab) => tab.id === outgoing.id);
+      if (outgoingTab) await writeTabSnapshot(outgoingTab, Date.now());
+
+      const tab = createTab(allocateTabId());
+      await loadTabIntoEditor(tab);
+      const next = addTab(tabsRef.current, tab);
+      setTabs(next);
+
+      await writeTabSnapshot(tab, Date.now());
+      await writeTabIndex(
+        next.tabs.map((entry) => entry.id),
+        next.activeId,
+      );
+      restartScheduler();
+    } catch (error) {
+      loadingRef.current = false;
+      showError(`Could not start a new document: ${errorMessage(error)}`);
+    } finally {
+      busyRef.current = false;
+    }
+  }, [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError]);
+
+  /**
+   * Shared Open plumbing: flush the outgoing tab, reuse an untouched tab or add
+   * one, load cleanly and snapshot. Imports are serialized to KET to restore.
+   */
+  const openFileIntoTab = useCallback(
+    async (chosen: string, build: (id: string, text: string) => TabState): Promise<boolean> => {
+      const ketcher = ketcherRef.current;
+      if (!ketcher || busyRef.current) return false;
+
+      busyRef.current = true;
+      try {
+        const outgoing = activeTab(tabsRef.current);
+        const outgoingKet = await ketcher.getKet();
+        const committed = updateTab(tabsRef.current, outgoing.id, { ket: outgoingKet });
+        setTabs(committed);
+
+        const outgoingTab = committed.tabs.find((tab) => tab.id === outgoing.id);
+        if (outgoingTab) await writeTabSnapshot(outgoingTab, Date.now());
+
+        const text = await readTextFile(chosen);
+        const reuse = outgoingTab !== undefined && isUntouchedTab(outgoingTab);
+        const targetId = reuse ? outgoing.id : allocateTabId();
+        let target = build(targetId, text);
+
+        await loadTabIntoEditor(target);
+        if (target.path === null) {
+          // Ketcher may normalize the imported format; keep the canonical KET
+          // so the snapshot validator accepts it on the next launch. The
+          // loading flag stays up through serialization so a late change event
+          // cannot dirty the outgoing tab.
+          loadingRef.current = true;
+          try {
+            target = { ...target, ket: await ketcher.getKet() };
+          } finally {
+            loadingRef.current = false;
+          }
+        }
+
+        const next = reuse
+          ? updateTab(tabsRef.current, targetId, {
+              path: target.path,
+              name: target.name,
+              ket: target.ket,
+              dirty: target.dirty,
+            })
+          : addTab(tabsRef.current, target);
+        setTabs(next);
+
+        const opened = next.tabs.find((tab) => tab.id === targetId);
+        if (opened) await writeTabSnapshot(opened, Date.now());
+        await writeTabIndex(
+          next.tabs.map((entry) => entry.id),
+          next.activeId,
+        );
+        restartScheduler();
+        return true;
+      } catch (error) {
+        loadingRef.current = false;
+        showError(`Could not open ${chosen}: ${errorMessage(error)}`);
+        return false;
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError],
+  );
+
+  /** Opens a `.ket` project; an already-open path activates its tab and notices. */
+  const openProject = useCallback(
+    async (path: string): Promise<boolean> => {
+      const found = resolveOpenTarget(tabsRef.current, path);
+      if (found.kind === "activate") {
+        if (tabsRef.current.activeId !== found.tabId) await activateTabById(found.tabId);
+        setNotice({ title: "Already open", message: ALREADY_OPEN_MESSAGE });
+        return true;
+      }
+
+      const opened = await openFileIntoTab(path, (id, text) =>
+        createTab(id, {
+          path,
+          name: pathBaseName(path),
+          ket: text,
+          dirty: false,
+        }),
+      );
+      // A remembered entry moves to the front when reopened.
+      if (opened) updateRecent((list) => addRecent(list, path));
+      return opened;
+    },
+    [activateTabById, openFileIntoTab, updateRecent],
+  );
+
+  /**
+   * Any other structure is imported clean: its content equals the source file,
+   * so no `.ket` path backs it until the first Save As.
+   */
+  const importStructure = useCallback(
+    (path: string) =>
+      openFileIntoTab(path, (id, text) => importedTab(id, text, pathBaseName(path))),
+    [openFileIntoTab],
+  );
+
+  /** File → Open…: `.ket` files only, routed through `openProject`. */
+  const openKetFile = useCallback(async () => {
     const ketcher = ketcherRef.current;
     if (!ketcher || busyRef.current) return;
 
     try {
       const chosen = await openDialog({
-        title: "Open structure",
+        title: "Open",
         multiple: false,
-        filters: [
-          { name: "Ketcher files", extensions: ["ket"] },
-          { name: "Structures", extensions: ["mol", "smi", "inchi", "sdf", "rxn"] },
-        ],
+        filters: [{ name: "Ketcher files", extensions: ["ket"] }],
       });
       if (typeof chosen !== "string") return;
-      if (!(await confirmReplace())) return;
 
-      const text = await readTextFile(chosen);
-      await ketcher.setMolecule(text);
-
-      if (/\.ket$/i.test(chosen)) {
-        setDoc(openDocument(chosen));
-      } else {
-        // Other formats are imported through Ketcher: no `.ket` file backs them.
-        setDoc(markDirty(newDocument()));
-      }
-      await clearSnapshotSafely();
+      await openProject(chosen);
     } catch (error) {
       showError(`Could not open the file: ${errorMessage(error)}`);
     }
-  }, [clearSnapshotSafely, confirmReplace, setDoc, showError]);
+  }, [openProject, showError]);
+
+  /** File → Import…: structure formats, routed through `importStructure`. */
+  const importStructureFile = useCallback(async () => {
+    const ketcher = ketcherRef.current;
+    if (!ketcher || busyRef.current) return;
+
+    try {
+      const chosen = await openDialog({
+        title: "Import",
+        multiple: false,
+        filters: [{ name: "Structures", extensions: ["mol", "smi", "inchi", "sdf", "rxn"] }],
+      });
+      if (typeof chosen !== "string") return;
+
+      await importStructure(chosen);
+    } catch (error) {
+      showError(`Could not import the file: ${errorMessage(error)}`);
+    }
+  }, [importStructure, showError]);
+
+  /** A recent entry opens through Open; a missing file is pruned. */
+  const openRecentDocument = useCallback(
+    async (path: string) => {
+      if (busyRef.current) return;
+      const opened = await openProject(path);
+      if (!opened) updateRecent((list) => removeRecent(list, path));
+    },
+    [openProject, updateRecent],
+  );
+
+  const openBackstage = useCallback(() => {
+    // A template armed in the Structure Library must not follow the pointer
+    // over the backstage.
+    cancelActiveTool(ketcherRef.current);
+    setBackstageOpen(true);
+  }, []);
+  const closeBackstage = useCallback(() => setBackstageOpen(false), []);
+
+  /** Backstage commands reuse the File menu handlers and close the overlay first. */
+  const handleBackstageNew = useCallback(() => {
+    setBackstageOpen(false);
+    void startNewDocument();
+  }, [startNewDocument]);
+
+  const handleBackstageOpen = useCallback(() => {
+    setBackstageOpen(false);
+    void openKetFile();
+  }, [openKetFile]);
+
+  const handleBackstageImport = useCallback(() => {
+    setBackstageOpen(false);
+    void importStructureFile();
+  }, [importStructureFile]);
+
+  const handleBackstageOpenRecent = useCallback(
+    (path: string) => {
+      setBackstageOpen(false);
+      void openRecentDocument(path);
+    },
+    [openRecentDocument],
+  );
+
+  const handleBackstageRemoveRecent = useCallback(
+    (path: string) => updateRecent((list) => removeRecent(list, path)),
+    [updateRecent],
+  );
+
+  const handleBackstageSwitchTab = useCallback(
+    (id: string) => {
+      setBackstageOpen(false);
+      void activateTabById(id);
+    },
+    [activateTabById],
+  );
+
+  /** Closes the overlay, then opens Ketcher's real Structure Library. */
+  const handleMoreTemplates = useCallback(() => {
+    setBackstageOpen(false);
+    requestAnimationFrame(() => {
+      if (!openStructureLibrary(ketcherRef.current)) {
+        showError("Could not open the structure library.");
+      }
+    });
+  }, [showError]);
+
+  /** Inserts a template into a new dirty tab; the backstage closes on success. */
+  const insertTemplate = useCallback(
+    async (template: LibraryTemplate) => {
+      const ketcher = ketcherRef.current;
+      if (!ketcher || busyRef.current) return;
+
+      busyRef.current = true;
+      let editorReplaced = false;
+      try {
+        const outgoing = activeTab(tabsRef.current);
+        const outgoingKet = await ketcher.getKet();
+        const committed = updateTab(tabsRef.current, outgoing.id, { ket: outgoingKet });
+        setTabs(committed);
+
+        const outgoingTab = committed.tabs.find((tab) => tab.id === outgoing.id);
+        if (outgoingTab) await writeTabSnapshot(outgoingTab, Date.now());
+
+        const id = allocateTabId();
+        let ket: string;
+        loadingRef.current = true;
+        try {
+          // From here the canvas no longer shows the active tab, so a failure
+          // (even one thrown by `setMolecule` itself) must restore it.
+          editorReplaced = true;
+          await ketcher.setMolecule(template.ket);
+          ket = await ketcher.getKet();
+        } finally {
+          loadingRef.current = false;
+        }
+
+        const tab = createTab(id, {
+          ket,
+          path: null,
+          name: template.name,
+          dirty: true,
+        });
+        const next = addTab(tabsRef.current, tab);
+        setTabs(next);
+
+        await writeTabSnapshot(tab, Date.now());
+        await writeTabIndex(
+          next.tabs.map((entry) => entry.id),
+          next.activeId,
+        );
+        restartScheduler();
+        setBackstageOpen(false);
+      } catch (error) {
+        loadingRef.current = false;
+        // The canvas may already hold the template while `tabs` still points at
+        // the previous document: put the active tab back before reporting.
+        if (editorReplaced) {
+          try {
+            await loadTabIntoEditor(activeTab(tabsRef.current));
+          } catch (restoreError) {
+            console.error("[chemistry-draw] could not restore the editor:", restoreError);
+          }
+        }
+        showError(`Could not insert ${template.name}: ${errorMessage(error)}`);
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [allocateTabId, loadTabIntoEditor, restartScheduler, setTabs, showError],
+  );
+
+  /** Dispatches a File menu item id to the command it runs. */
+  const handleFileAction = useCallback(
+    (id: FileMenuId) => {
+      if (dialogOpenRef.current || busyRef.current) return;
+
+      switch (id) {
+        case "new":
+          void startNewDocument();
+          return;
+        case "open":
+          void openKetFile();
+          return;
+        case "import":
+          void importStructureFile();
+          return;
+        case "save":
+          void saveActiveTab("save");
+          return;
+        case "save-as":
+          void saveActiveTab("save-as");
+          return;
+        case "export":
+          setExportOpen(true);
+          return;
+      }
+    },
+    [importStructureFile, openKetFile, saveActiveTab, startNewDocument],
+  );
 
   const exportDocument = useCallback(
     async (format: ExportFormat) => {
@@ -784,11 +961,14 @@ function App() {
       if (!ketcher) return;
 
       try {
-        // Export is a separate file: the document path, format and dirty flag
-        // are unchanged.
-        const { state, request } = applyExport(docRef.current, format);
-        setDoc(state);
-        const name = exportFileName(state.path, request.extension);
+        // Export is a separate file: the tab's path, format and dirty flag are
+        // unchanged.
+        const tab = activeTab(tabsRef.current);
+        const { request } = applyExport(documentView(tab), format);
+        const name =
+          tab.path !== null
+            ? exportFileName(tab.path, request.extension)
+            : `${tab.name ?? "untitled"}${request.extension}`;
 
         switch (request.source) {
           case "getMolfile": {
@@ -823,58 +1003,8 @@ function App() {
         );
       }
     },
-    [setDoc, showError],
+    [showError],
   );
-
-  const offerRecovery = useCallback(async () => {
-    if (!isTauri()) return;
-    try {
-      const snapshot = await readSnapshot();
-      if (snapshot === null) return;
-
-      const original = await inspectOriginal(snapshot.meta.path);
-      if (!shouldOfferRecovery(snapshot.meta, original.mtime)) return;
-
-      const note =
-        original.missing && snapshot.meta.path !== null
-          ? `The original file (${snapshot.meta.path}) is no longer on disk. Restore keeps that path, so Save recreates it.`
-          : null;
-      setRecovery({ snapshot, note });
-    } catch (error) {
-      console.warn("[chemistry-draw] could not read the autosave snapshot:", error);
-    }
-  }, []);
-
-  const restoreSnapshot = useCallback(async () => {
-    const offer = recovery;
-    setRecovery(null);
-    const ketcher = ketcherRef.current;
-    if (offer === null || !ketcher) return;
-
-    const { snapshot } = offer;
-    try {
-      await ketcher.setMolecule(snapshot.ket);
-      const base = snapshot.meta.path === null ? newDocument() : openDocument(snapshot.meta.path);
-      // Recovered work is unsaved: keep it dirty so Save persists it.
-      setDoc(markDirty(base));
-    } catch (error) {
-      showError(`Could not restore the recovered structure: ${errorMessage(error)}`);
-    }
-  }, [recovery, setDoc, showError]);
-
-  const discardSnapshot = useCallback(async () => {
-    setRecovery(null);
-    await clearSnapshotSafely();
-    const ketcher = ketcherRef.current;
-    if (!ketcher) return;
-
-    try {
-      await ketcher.setMolecule(EMPTY_STRUCTURE);
-      setDoc(newDocument());
-    } catch (error) {
-      showError(`Could not reset the editor: ${errorMessage(error)}`);
-    }
-  }, [clearSnapshotSafely, setDoc, showError]);
 
   const destroyWindow = useCallback(async () => {
     try {
@@ -884,26 +1014,245 @@ function App() {
     }
   }, [showError]);
 
+  /** The window close matrix: Save only for one active dirty tab, else Discard/Cancel. */
   const handleCloseRequest = useCallback(
     async (event: { preventDefault: () => void }) => {
-      if (!docRef.current.dirty) return;
+      const set = tabsRef.current;
+      const dirty = dirtyTabs(set);
+      if (dirty.length === 0) return;
 
       event.preventDefault();
       // A second close request while the prompt or a save is running is ignored.
       if (closingRef.current || busyRef.current) return;
 
       closingRef.current = true;
+      let stoppedScheduler = false;
       try {
-        const verdict = await confirmDirty("close");
-        if (verdict === "abort") return;
-        if (verdict === "discard") await clearSnapshotSafely();
-        await destroyWindow();
+        const allowSave = dirty.length === 1 && dirty[0].id === set.activeId;
+        const named = allowSave ? activeTab(set) : dirty[0];
+        const choice = await askCloseChoice({
+          kind: "window",
+          documentName: tabDisplayName(named),
+          dirtyCount: dirty.length,
+          allowSave,
+        });
+
+        const decision = decideTabsCloseGuard(tabsRef.current, choice);
+        if (decision.action === "stay") return;
+        if (decision.action === "discard") {
+          // Freeze autosave before the cleanup: the scheduler is stopped and
+          // `busyRef` turns every later flush away, so nothing re-writes the
+          // snapshots and index that Discard is about to remove.
+          busyRef.current = true;
+          schedulerRef.current?.stop();
+          stoppedScheduler = true;
+
+          // Discard drops only the dirty documents: their snapshots go and the
+          // index keeps the clean tabs, which still restore on next launch.
+          const discarded = dirtyTabs(tabsRef.current).map((tab) => tab.id);
+          const survivors = tabsRef.current.tabs.filter((tab) => !tab.dirty);
+          await clearDirtyTabSnapshots(
+            discarded,
+            survivors.map((tab) => tab.id),
+            tabsRef.current.activeId,
+          );
+          await destroyWindow();
+          return;
+        }
+        if (decision.action === "save") {
+          const outcome = await saveActiveTab("save");
+          if (closeAfterSave(outcome) === "close") await destroyWindow();
+        }
       } finally {
         closingRef.current = false;
+        // The window normally dies after a success; if it survives (destroy
+        // failed) or the close was cancelled before Discard, autosave resumes.
+        if (stoppedScheduler) {
+          busyRef.current = false;
+          schedulerRef.current?.start();
+        }
       }
     },
-    [clearSnapshotSafely, confirmDirty, destroyWindow],
+    [askCloseChoice, destroyWindow, saveActiveTab],
   );
+
+  /** Closes one tab, prompting for that tab when it is dirty. */
+  const closeTabById = useCallback(
+    async (id: string) => {
+      const tab = tabsRef.current.tabs.find((entry) => entry.id === id);
+      if (!tab || busyRef.current) return;
+
+      if (tab.dirty) {
+        if (tabsRef.current.activeId !== id) await activateTabById(id);
+        if (tabsRef.current.activeId !== id) return;
+
+        const choice = await askCloseChoice({
+          kind: "tab",
+          documentName: tabDisplayName(tab),
+        });
+        if (choice === "cancel") return;
+        if (choice === "save") {
+          const outcome = await saveActiveTab("save");
+          if (closeAfterSave(outcome) !== "close") return;
+        }
+      }
+
+      busyRef.current = true;
+      try {
+        const wasActive = tabsRef.current.activeId === id;
+        const next = closeTab(tabsRef.current, id, allocateTabId());
+        setTabs(next);
+
+        await clearTabSnapshot(id);
+        await writeTabIndex(
+          next.tabs.map((entry) => entry.id),
+          next.activeId,
+        );
+
+        if (wasActive) await loadTabIntoEditor(activeTab(next));
+        restartScheduler();
+      } catch (error) {
+        loadingRef.current = false;
+        showError(`Could not close the document: ${errorMessage(error)}`);
+      } finally {
+        busyRef.current = false;
+      }
+    },
+    [
+      activateTabById,
+      allocateTabId,
+      askCloseChoice,
+      loadTabIntoEditor,
+      restartScheduler,
+      saveActiveTab,
+      setTabs,
+      showError,
+    ],
+  );
+
+  /** Cycles to the next (or previous) tab in strip order. */
+  const cycleTabs = useCallback(
+    (direction: 1 | -1) => {
+      const set = tabsRef.current;
+      if (set.tabs.length < 2) return;
+
+      const index = set.tabs.findIndex((tab) => tab.id === set.activeId);
+      const next = set.tabs[(index + direction + set.tabs.length) % set.tabs.length];
+      void activateTabById(next.id);
+    },
+    [activateTabById],
+  );
+
+  // Restore the tab set silently once the editor exists, then show its content.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    // Also swallow any change event the editor emits while it settles, so a
+    // fresh empty tab is not dirtied before the restore lands.
+    loadingRef.current = true;
+
+    void (async () => {
+      try {
+        const restored = await restorePromise.catch(() => null);
+        if (cancelled) return;
+
+        const set: TabSet = restored ?? emptyTabSet(allocateTabId());
+
+        let highest = nextTabIdRef.current - 1;
+        for (const tab of set.tabs) {
+          const match = /^tab-(\d+)$/.exec(tab.id);
+          if (match) highest = Math.max(highest, Number(match[1]));
+        }
+        nextTabIdRef.current = highest + 1;
+
+        setTabs(set);
+
+        // A snapshot can pass the validator and still fail to load (a `.ket`
+        // dialog, a structure the server rejects). Drop that tab and keep the
+        // app usable with the remaining tabs, or one empty tab.
+        try {
+          await loadTabIntoEditor(activeTab(set));
+        } catch (error) {
+          console.warn("[chemistry-draw] could not restore the active tab:", error);
+          if (cancelled) return;
+
+          const droppedId = set.activeId;
+          const fallback = closeTab(set, droppedId, allocateTabId());
+          setTabs(fallback);
+          try {
+            await loadTabIntoEditor(activeTab(fallback));
+          } catch (inner) {
+            console.warn("[chemistry-draw] could not load the fallback tab:", inner);
+          }
+          await clearTabSnapshot(droppedId).catch(() => undefined);
+          setTabs(tabsRef.current);
+        }
+
+        await writeTabIndex(
+          tabsRef.current.tabs.map((tab) => tab.id),
+          tabsRef.current.activeId,
+        ).catch((error) => console.warn("[chemistry-draw] could not write the tab index:", error));
+      } finally {
+        if (!cancelled) {
+          loadingRef.current = false;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      loadingRef.current = false;
+    };
+  }, [ready, restorePromise, allocateTabId, loadTabIntoEditor, setTabs]);
+
+  // Editor wiring: dirty tracking, per-tab autosave and the close guard.
+  useEffect(() => {
+    if (!ready) return;
+    const ketcher = ketcherRef.current;
+    if (!ketcher) return;
+
+    const desktop = isTauri();
+    const scheduler = desktop
+      ? createAutosaveScheduler({
+          isDirty: () => activeTab(tabsRef.current).dirty,
+          write: () => void flushActiveTab(),
+        })
+      : null;
+    schedulerRef.current = scheduler;
+
+    const onChange = () => {
+      // A programmatic load is not a user edit: never dirty the incoming tab.
+      if (loadingRef.current) return;
+      scheduler?.notifyChange();
+
+      const tab = activeTab(tabsRef.current);
+      if (!tab.dirty) setTabs(updateTab(tabsRef.current, tab.id, { dirty: true }));
+    };
+
+    ketcher.changeEvent.add(onChange);
+    scheduler?.start();
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    if (desktop) {
+      void getCurrentWindow()
+        .onCloseRequested(handleCloseRequest)
+        .then((stop) => {
+          if (cancelled) stop();
+          else unlisten = stop;
+        })
+        .catch((error) => console.warn("[chemistry-draw] close guard unavailable:", error));
+    }
+
+    return () => {
+      cancelled = true;
+      scheduler?.stop();
+      schedulerRef.current = null;
+      ketcher.changeEvent.remove(onChange);
+      unlisten?.();
+    };
+  }, [ready, handleCloseRequest, flushActiveTab, setTabs]);
 
   // Ketcher's native Save As and image save call the aliased `file-saver`;
   // this handler routes the blob once the editor is ready.
@@ -921,63 +1270,10 @@ function App() {
     return () => resetFileSaver();
   }, [ready, saveRoutedBlob, showError]);
 
-  // Editor wiring: dirty tracking, autosave, recovery and the close guard.
-  useEffect(() => {
-    if (!ready) return;
-    const ketcher = ketcherRef.current;
-    if (!ketcher) return;
-
-    const desktop = isTauri();
-    const scheduler = desktop
-      ? createAutosaveScheduler({
-          isDirty: () => docRef.current.dirty,
-          write: () => {
-            const editor = ketcherRef.current;
-            if (!editor) return;
-            const { path } = docRef.current;
-            void editor
-              .getKet()
-              .then((ket) => writeSnapshot({ ket, path, savedAt: Date.now() }))
-              .catch((error) => console.warn("[chemistry-draw] autosave failed:", error));
-          },
-        })
-      : null;
-
-    const onChange = () => {
-      scheduler?.notifyChange();
-      if (!docRef.current.dirty) setDoc(markDirty(docRef.current));
-    };
-
-    ketcher.changeEvent.add(onChange);
-    scheduler?.start();
-
-    let cancelled = false;
-    let unlisten: (() => void) | null = null;
-    let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    if (desktop) {
-      void getCurrentWindow()
-        .onCloseRequested(handleCloseRequest)
-        .then((stop) => {
-          if (cancelled) stop();
-          else unlisten = stop;
-        })
-        .catch((error) => console.warn("[chemistry-draw] close guard unavailable:", error));
-      // Deferred so the prompt appears after the editor has painted.
-      recoveryTimer = setTimeout(() => void offerRecovery(), 0);
-    }
-
-    return () => {
-      cancelled = true;
-      if (recoveryTimer !== null) clearTimeout(recoveryTimer);
-      scheduler?.stop();
-      ketcher.changeEvent.remove(onChange);
-      unlisten?.();
-    };
-  }, [ready, handleCloseRequest, offerRecovery, setDoc]);
-
   // Ketcher's top-toolbar buttons emit `CUSTOM_BUTTON_PRESSED` with the button
-  // id; this listener is the single dispatcher for them (§5.7).
+  // id; this listener is the single dispatcher for them. The document commands
+  // are the same tab-aware commands as the File menu, and Models stays the real
+  // model-setup entry.
   useEffect(() => {
     if (!ready) return;
     const ketcher = ketcherRef.current;
@@ -989,7 +1285,7 @@ function App() {
 
       switch (id) {
         case "chemistry-draw:save":
-          void saveDocument("save");
+          void saveActiveTab("save");
           return;
         case "chemistry-draw:new":
           void startNewDocument();
@@ -1009,15 +1305,10 @@ function App() {
     return () => {
       ketcher.eventBus.off("CUSTOM_BUTTON_PRESSED", onCustomButton);
     };
-  }, [ready, saveDocument, startNewDocument, openModels]);
+  }, [ready, saveActiveTab, startNewDocument, openModels]);
 
-  // Document shortcuts. Ketcher binds its hotkeys on the editor container in the
-  // bubble phase (`initKeydownListener`, `ketcher-react/dist/index.js`), so this
-  // listener runs in the capture phase and stops the event before Ketcher sees
-  // it: `preventDefault()` alone would leave its native Save As dialog opening
-  // (§5.7). A matched combination is always swallowed, even while a dialog is
-  // open or a save is running, so a repeated shortcut never falls through to
-  // Ketcher. Only the command itself is skipped then.
+  // Capture phase beats Ketcher's bubble-phase hotkeys: a matched combination is
+  // always swallowed, and its command is skipped while a dialog or save owns us.
   useEffect(() => {
     if (!ready) return;
 
@@ -1025,6 +1316,37 @@ function App() {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
 
       const key = event.key.toLowerCase();
+
+      // The File popup behaves like a dialog for the shortcut guard: a matched
+      // combination closes it and is consumed without running its command.
+      const dismissFileMenu = (): boolean => {
+        if (!fileMenuOpenRef.current) return false;
+        fileMenuOpenRef.current = false;
+        setFileMenuOpen(false);
+        return true;
+      };
+
+      // Tab shortcuts never close the window while a dialog is open, but a
+      // matched combination is consumed first so Ketcher cannot see it.
+      if (key === "w" || key === "t") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (dismissFileMenu() || dialogOpenRef.current || busyRef.current) return;
+
+        if (key === "w") void closeTabById(tabsRef.current.activeId);
+        else void startNewDocument();
+        return;
+      }
+
+      if (key === "tab") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (dismissFileMenu() || dialogOpenRef.current || busyRef.current) return;
+
+        cycleTabs(event.shiftKey ? -1 : 1);
+        return;
+      }
+
       if (key !== "s" && key !== "o" && key !== "n") return;
       // Only Save As accepts Shift.
       if (event.shiftKey && key !== "s") return;
@@ -1032,46 +1354,79 @@ function App() {
       event.preventDefault();
       event.stopPropagation();
 
-      if (dialogOpenRef.current || busyRef.current) return;
+      if (dismissFileMenu() || dialogOpenRef.current || busyRef.current) return;
 
-      if (key === "s") void saveDocument(event.shiftKey ? "save-as" : "save");
-      else if (key === "o") void openDocumentFromDisk();
+      if (key === "s") void saveActiveTab(event.shiftKey ? "save-as" : "save");
+      else if (key === "o") void openKetFile();
       else void startNewDocument();
     };
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [ready, saveDocument, openDocumentFromDisk, startNewDocument]);
+  }, [ready, saveActiveTab, openKetFile, startNewDocument, closeTabById, cycleTabs]);
 
   return (
     <>
       <style>{TOOLBAR_ICON_STYLES}</style>
-      {(!provider || !ready) && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: tokens.zIndex.loading,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: tokens.fontFamily,
-            color: tokens.color.muted,
-            fontSize: "14px",
-            background: tokens.color.surface,
-          }}
-        >
-          Loading chemistry editor...
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          overflow: "hidden",
+        }}
+      >
+        <TabStrip
+          onOpenBackstage={openBackstage}
+          leading={
+            <FileMenu
+              recent={recent}
+              open={fileMenuOpen}
+              onOpenChange={handleFileMenuOpenChange}
+              onAction={handleFileAction}
+              onOpenRecent={(path) => void openRecentDocument(path)}
+            />
+          }
+          tabSet={tabSet}
+          onActivate={(id) => void activateTabById(id)}
+          onClose={(id) => void closeTabById(id)}
+          onNew={() => void startNewDocument()}
+        />
+        <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+          {provider && (
+            <Editor
+              staticResourcesUrl={"."}
+              structServiceProvider={provider}
+              buttons={EDITOR_BUTTONS}
+              errorHandler={handleError}
+              onInit={handleInit}
+              customButtons={CUSTOM_BUTTONS}
+            />
+          )}
         </div>
-      )}
-      {provider && (
-        <Editor
-          staticResourcesUrl={"."}
-          structServiceProvider={provider}
-          buttons={EDITOR_BUTTONS}
-          errorHandler={handleError}
-          onInit={handleInit}
-          customButtons={CUSTOM_BUTTONS}
+      </div>
+      {backstageOpen && (
+        <Backstage
+          onClose={closeBackstage}
+          onNew={handleBackstageNew}
+          onImport={handleBackstageImport}
+          onOpen={handleBackstageOpen}
+          onTemplate={(template) => void insertTemplate(template)}
+          onMoreTemplates={handleMoreTemplates}
+          onOpenModels={openModels}
+          templates={templates ?? []}
+          templatesLoading={templates === null}
+          renderPreview={renderTemplatePreview}
+          editorReady={ready}
+          recentStructures={recentRows}
+          recentStructuresLoading={recentRowsLoading}
+          onOpenRecent={handleBackstageOpenRecent}
+          onRemoveRecent={handleBackstageRemoveRecent}
+          tabs={tabSet}
+          onSwitchTab={handleBackstageSwitchTab}
+          indigoVersion={indigoInfo.version}
+          indigoPort={indigoInfo.port}
+          appVersion={packageJson.version}
         />
       )}
       {modelsOpen && (
@@ -1094,23 +1449,23 @@ function App() {
           onCancel={() => setExportOpen(false)}
         />
       )}
-      {recovery !== null && (
-        <RecoveryDialog
-          documentName={documentName(recovery.snapshot.meta.path)}
-          note={recovery.note}
-          onRestore={() => void restoreSnapshot()}
-          onDiscard={() => void discardSnapshot()}
-        />
-      )}
-      {closePrompt && (
+      {closePrompt !== null && (
         <CloseGuardDialog
-          documentName={documentName(doc.path)}
-          intent={promptIntent}
+          documentName={closePrompt.documentName}
+          dirtyCount={closePrompt.kind === "window" ? closePrompt.dirtyCount : 1}
+          allowSave={closePrompt.kind === "window" ? closePrompt.allowSave : true}
           onChoice={answerCloseChoice}
         />
       )}
       {error !== null && (
         <ErrorDialog title={error.title} message={error.message} onClose={() => setError(null)} />
+      )}
+      {notice !== null && (
+        <NoticeDialog
+          title={notice.title}
+          message={notice.message}
+          onClose={() => setNotice(null)}
+        />
       )}
     </>
   );

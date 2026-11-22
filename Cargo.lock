@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "chemistry-draw"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "log",
  "serde",
@@ -1907,7 +1907,7 @@ dependencies = [
 
 [[package]]
 name = "indigo-server"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "axum",

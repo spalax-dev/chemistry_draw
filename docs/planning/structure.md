@@ -3,8 +3,9 @@
 > The physical shape of the repository. A new top-level folder is an architecture
 > change, not a convenience.
 >
-> **Reconstructed from the working tree on 2026-11-21** (branch `develop`). Paths
-> are relative to the repository root.
+> **Reconstructed from the working tree on 2026-11-21** (branch `develop`).
+> Updated with the US-01 backstage/file-workflow and 0.1.8 baseline targets
+> (ADR 0009). Paths are relative to the repository root.
 
 ## 1. Tree
 
@@ -35,19 +36,33 @@
 ├── public/
 │   └── raphael.min.js
 ├── src/                          frontend source and colocated tests
-│   ├── App.tsx                   composition: provider, dialogs, polling
+│   ├── App.tsx                   composition: startup, backstage, tabs, file commands, dialogs
 │   ├── main.tsx
+│   ├── backstage.ts              backstage section model and default
+│   ├── tabs.ts                   pure tab model, titles, close-guard decisions
+│   ├── tabStore.ts               per-tab snapshot and index I/O
+│   ├── fileMenu.ts               pure File menu item model
+│   ├── recent.ts                 recent-documents list (localStorage)
+│   ├── recentDetails.ts          size, date, validation and preview keys
+│   ├── recentStructures.ts       recent-structures table rows
+│   ├── previewCache.ts           Indigo SVG thumbnail cache
+│   ├── templateLibrary.ts        real Ketcher Structure Library mapping
 │   ├── document.ts               pure document state and save/export mapping
-│   ├── autosave.ts               scheduling and recovery decision
-│   ├── autosaveStore.ts          app-data snapshot I/O
+│   ├── autosave.ts               per-tab scheduling, metadata and write generation
 │   ├── saveRoute.ts              blob routing by extension
 │   ├── fileSaver.ts              file-saver alias target
 │   ├── logging.ts                console/error forwarding to the host log
 │   ├── recognizeErrors.ts        recognition error unwrapping and copy
 │   ├── modelSetup.ts             model status, actions and HTTP adapters
-│   ├── ketcherOptions.ts         in-place Ketcher option-store adapter
+│   ├── ketcherOptions.ts         Ketcher runtime seams: provider, API base, library, options
 │   ├── overrides.css             hides Ketcher's unused version label
 │   ├── ui/                       presentational components and tokens
+│   │   ├── Backstage.tsx         backstage overlay, rail and sections
+│   │   ├── TabStrip.tsx          tabs, File button slot, home button, close
+│   │   ├── FileMenu.tsx          File popup, recent section and keyboard
+│   │   ├── HomeButton.tsx        strip button that opens the backstage
+│   │   ├── backstage/            Welcome/Open/Models/About sections, cards, table
+│   │   └── ...                   Dialog, Button, DocumentDialogs, ModelSetupDialog (+ hook)
 │   └── *.test.ts                 Vitest suites, next to their module
 ├── src-tauri/
 │   ├── src/
@@ -89,6 +104,7 @@
 │   ├── CONTRIBUTING.md
 │   ├── CHECKPOINTS.md
 │   ├── KETCHER-BUG-parametrizeUrl.md
+│   ├── assets/                   backstage.png and editor-tabs.png (0.1.8 baseline)
 │   ├── benchmarks/               model parity and OCSR tail reports
 │   ├── harness/                  the harness contract: stage, gates, docblock baseline
 │   └── planning/                 this foundation (hand written)
@@ -97,9 +113,9 @@
 │       ├── stack.md
 │       ├── structure.md
 │       ├── contracts.md
-│       ├── c4/
-│       ├── sequences/
-│       └── adr/
+│       ├── c4/                   context, container, component
+│       ├── sequences/            recognition, model setup, backstage/file workflow
+│       └── adr/                  decisions 0001-0009
 ├── scripts/                      harness, packaging, native-lib tooling
 │   ├── harness.mjs / harness-lib.mjs / build_harness.mjs
 │   ├── docsgen.sh                TypeDoc + rustdoc
@@ -137,8 +153,26 @@
 | `src-tauri/sidecar/src/tests/`      | sidecar integration tests, one module per domain                         | fixtures outside `fixtures/`                     |
 | `scripts/`                          | harness, packaging, native-lib tooling, Node contract tests              | product logic, inline CI-only scripts            |
 | `docs/planning/`                    | foundation documents and diagrams (hand written)                         | feature changelogs, generated output             |
+| `docs/assets/`                      | backstage and editor screenshots used by the README                      | generated or benchmark output                    |
 | `docs/benchmarks/`                  | measured model reports and their protocols                               | generated benchmark JSON (lives under `build/`)  |
 | `patches/`                          | one Ketcher patch per package version                                    | edits under `node_modules/`                      |
+
+### 2.1 Build and release layout
+
+The 0.1.8 baseline and the 1.x line share one generated-artifact layout:
+
+| Path               | Holds                                                                | Tracked |
+| ------------------ | -------------------------------------------------------------------- | ------- |
+| `build/`           | `packages`, `appimage` scratch, `verify` extraction and `libs` build | no      |
+| `target/`          | Cargo output                                                         | no      |
+| `dist/`            | Vite output                                                          | no      |
+| `src-tauri/lib/`   | Native Indigo/ONNX Runtime payload, generated by `task libs`         | no      |
+| `models/`, `.ort/` | Downloaded models and the developer ONNX Runtime                     | no      |
+
+Consolidating `target/` and `dist/` under `build/` is still the Phase 2/E4
+option, not part of this layout. Releases are GitHub Releases driven by
+release-please from Conventional Commits; the 1.x launch is 1.0.0 regardless of
+the 0.1.8 input (ADR 0009).
 
 ## 3. Naming
 
@@ -171,7 +205,7 @@ transport/  →  service/  →  ffi/
 - `service/ml/` contains no `unsafe`; `ort` owns the FFI boundary.
 - `src/` pure helpers import neither Tauri nor the DOM, so Vitest can run them in
   a Node environment. Tauri calls stay in thin adapters (`App.tsx`,
-  `autosaveStore.ts`, `fileSaver.ts`).
+  `tabStore.ts`, `recentStructures.ts`, `previewCache.ts`, `fileSaver.ts`).
 - A cross-package import requires an explicit export in that package's manifest.
 
 ## 5. Generated documentation

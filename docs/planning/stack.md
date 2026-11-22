@@ -105,8 +105,10 @@ produces artifacts; a release publishes the same installers CI validated.
   repository or the app.
 - Every failure has a support signal: `GET /v2/health`, `GET /v2/models`, and the
   rotating log file. Panics are logged with their location.
-- A release is gated on Phase D and Phase E of `docs/ROADMAP.md`; the rebuilt
-  0.1.7 artifacts are internal verification builds, not a release.
+- A release is gated on Phase D and Phase E of `docs/ROADMAP.md`. The 0.1.8
+  artifacts are the 0.x baseline users run, not a 1.x release; US-01 adopts the
+  same release-please/SemVer policy on the 1.x line and the launch stays 1.0.0
+  (ADR 0009).
 
 ## 7. Deliberate omissions
 
@@ -140,10 +142,11 @@ produces artifacts; a release publishes the same installers CI validated.
   provisional. Rebranding is **US-05, part of 1.x**, sequenced after the
   functional product and before launch. It is independent of model delivery, and
   any app-data/path move is a separate packaging decision.
-- **Line unification** — at the official launch the 1.x line updates from
-  `main` (0.1.8 baseline, backstage, layout and release policy) and cuts 1.0.0.
-  The detailed migration and user/app-data consequences need a launch ADR, not a
-  silent merge.
+- **Line retirement** — US-01 already ports `main`'s 0.1.8 baseline, backstage,
+  layout and release policy into 1.x under ADR 0009, without Imago and without
+  re-cutting 0.x. What remains for the launch is retiring the 0.x line and the
+  user/app-data migration consequences; that is a separate launch decision, not
+  a silent merge, and the launch stays 1.0.0.
 
 ## 9. Reverse ADRs for baked-in choices
 
