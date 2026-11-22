@@ -65,5 +65,13 @@ jobs:
       - name: Rust formatting
         run: cargo fmt --all --check
 
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Rust security audit
+        run: cargo audit
+
       - name: ShellCheck
         run: shellcheck --severity=warning scripts/*.sh

@@ -119,23 +119,26 @@ Rules:
 
 ### 3.1 Gates that must be clean
 
-| Gate                   | Command                                                        | Requirement                                         |
-| ---------------------- | -------------------------------------------------------------- | --------------------------------------------------- |
-| Dependency audit (all) | `pnpm run audit` = `pnpm audit --audit-level=high`             | No **high** or **critical** findings (dev included) |
-| Production audit       | `pnpm run audit:prod` = `pnpm audit --prod --audit-level=high` | No **high** or **critical** runtime findings        |
-| Rust advisory audit    | `cargo audit`                                                  | No **vulnerabilities** reported by RustSec          |
+| Gate                   | Command                                                              | Requirement                                         |
+| ---------------------- | -------------------------------------------------------------------- | --------------------------------------------------- |
+| Dependency audit (all) | `pnpm run audit` = `pnpm audit --audit-level=high`                   | No **high** or **critical** findings (dev included) |
+| Production audit       | `pnpm run audit:prod` = `pnpm audit --prod --audit-level=high`       | No **high** or **critical** runtime findings        |
+| Rust advisory audit    | `cargo audit` (CI: `taiki-e/install-action@v2`, `tool: cargo-audit`) | No **vulnerabilities** reported by RustSec          |
 
 - `pnpm run audit` and `pnpm run audit:prod` run in the quality workflow after
   `pnpm install`; a high/critical finding fails it. `cargo audit` is the Rust
-  gate (activity 4).
+  gate and runs in the same workflow, installed with
+  `taiki-e/install-action@v2` (`tool: cargo-audit`) so it uses a prebuilt
+  binary instead of compiling it.
 - Any high or critical advisory fails the change and is fixed — by upgrading,
   overriding through `overrides` in `pnpm-workspace.yaml`, patching through
   `patchedDependencies`, or replacing the dependency. It is **never**
   allowlisted.
-- `cargo audit` unmaintained/unsound warnings that have **no available fix** do
-  not fail the build, but they are reported in the activity and tracked here
-  (or in the activity record) until a fixed release exists. A vulnerability
-  (RUSTSEC advisory with a patched version) is not in that exemption.
+- `cargo audit` exits **non-zero only on vulnerabilities**. Unmaintained/unsound
+  warnings that have **no available fix** do not fail the build: they are
+  reported in the activity and tracked in §3.1.2. `--deny warnings` is **not**
+  the gate. A vulnerability (a RUSTSEC advisory with a patched version) is not
+  in that exemption.
 - `npm audit` is not used: it reports against `package-lock.json` and ignores
   the pnpm graph. Use the pnpm commands above.
 
@@ -170,6 +173,34 @@ pnpm gates:
 - Related pins, unchanged: **React 18.3.1 exact** (Ketcher 3.18 peer
   `^18.2.0 || ^19.0.0`; no React 19), `@types/node` `^24.19.2` (matches Node 24),
   and **TypeScript 5.9**.
+
+#### 3.1.2 Rust advisories and their resolution (activity 4)
+
+The RustSec baseline before activity 4 had **3 vulnerabilities**:
+
+| Advisory                  | Path                     | Package                             |
+| ------------------------- | ------------------------ | ----------------------------------- |
+| RUSTSEC-2026-0194 / -0195 | `plist → tauri-utils`    | `quick-xml 0.39.4` (two advisories) |
+| RUSTSEC-2026-0592         | `schemars → tauri-build` | `url 2.5.8`                         |
+
+They are resolved by a **targeted `cargo update`** — no `Cargo.toml` changes:
+
+| Change                                    | Why                             |
+| ----------------------------------------- | ------------------------------- |
+| `plist 1.10.4` → pulls `quick-xml 0.42.0` | fixes RUSTSEC-2026-0194 / -0195 |
+| `url 2.5.9`                               | fixes RUSTSEC-2026-0592         |
+| `anyhow 1.0.104`, `tokio 1.54.1`          | unsoundness fixes               |
+| `rustix 1.1.6`, `event-listener 5.4.2`    | unsoundness fixes               |
+| `async-executor 1.14.1`                   | replaces a yanked release       |
+
+- **Lock drift corrected.** `Cargo.lock` recorded `chemistry-draw` and
+  `indigo-server` at **0.1.7** while `Cargo.toml` and the release are **0.1.8**;
+  the same update corrects the lock entries.
+- **Remaining warnings, reported not failures:** `glib 0.18.5` (pinned by
+  Tauri's GTK 0.18), `proc-macro-error` (via `glib-macros`), and
+  `zbus_names`/`zvariant` (DBus plumbing). They stay listed here until a fixed
+  release is reachable; they never block the gate.
+- No Rust vulnerability is allowlisted: all three are fixed by the update.
 
 ### 3.2 Dated allowlist
 
@@ -237,7 +268,7 @@ pnpm install --frozen-lockfile  # reproducible install; fails on lockfile drift
 pnpm run audit                       # = pnpm audit --audit-level=high
 pnpm run audit:prod                  # = pnpm audit --prod --audit-level=high
 cargo install cargo-audit --locked   # one-time; provides the cargo audit command
-cargo audit
+cargo audit                          # Rust gate; fails only on vulnerabilities, warnings tracked (§3.1.2)
 
 # Verification gate
 node scripts/harness.mjs        # full run: required before a change is ready

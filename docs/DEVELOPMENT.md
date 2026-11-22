@@ -47,9 +47,13 @@ Before opening a change, run the audit gates and the full harness:
 pnpm run audit                       # full graph; fails on high/critical
 pnpm run audit:prod                  # production graph; fails on high/critical
 cargo install cargo-audit --locked   # one-time
-cargo audit
+cargo audit                          # Rust gate: fails only on vulnerabilities; warnings are tracked
 node scripts/harness.mjs
 ```
+
+`cargo audit` reports unmaintained/unsound warnings that have no fix without
+failing (`--deny warnings` is not the gate); the Rust baseline is in
+[docs/TOOLCHAIN.md](TOOLCHAIN.md) §3.1.2.
 
 `node scripts/harness.mjs --fast` is for local iteration (skips the frontend
 build, uses `cargo check`, skips sidecar tests); the full run is required before

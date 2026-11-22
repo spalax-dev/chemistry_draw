@@ -45,12 +45,14 @@ Dependency and toolchain checks:
 pnpm run audit                       # full graph; fails on high/critical
 pnpm run audit:prod                  # production graph; fails on high/critical
 cargo install cargo-audit --locked   # one-time
-cargo audit
+cargo audit                          # Rust gate: fails only on vulnerabilities; warnings are tracked
 ```
 
 High or critical findings must be fixed; only **dev or build-only** low/moderate
 findings with no compatible in-range fix can be allowlisted, with an expiry date,
-as described in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) §3.
+as described in [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) §3. `cargo audit` fails
+only on vulnerabilities; unfixable unmaintained/unsound warnings are reported and
+tracked (§3.1.2).
 
 ## Project workflow
 
