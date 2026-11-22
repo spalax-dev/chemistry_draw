@@ -12,7 +12,8 @@
     Imago is intentionally absent: the Windows build has no OCR support.
 
     Requires dumpbin.exe and lib.exe from a Visual Studio x64 developer
-    environment. In CI, ilammy/msvc-dev-cmd sets that up.
+    environment. In CI, the windows-build action loads vcvars64.bat and exports
+    that environment.
 
 .PARAMETER OutDir
     Destination directory. Defaults to src-tauri/lib/windows-x86_64 relative
@@ -63,8 +64,8 @@ function Get-MsvcTool {
     if (-not $command) {
         throw @"
 Could not find '$Name' on PATH.
-Run this script from a Visual Studio x64 developer shell (or let CI run
-ilammy/msvc-dev-cmd first) so dumpbin.exe and lib.exe are available.
+Run this script from a Visual Studio x64 developer shell (or let CI load
+vcvars64.bat first) so dumpbin.exe and lib.exe are available.
 "@
     }
     return $command.Source

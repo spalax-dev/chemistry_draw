@@ -281,8 +281,8 @@ pnpm tauri build --bundles nsis
 SHA-256, extracts only the runtime DLLs into
 `src-tauri/lib/windows-x86_64/` (gitignored) and generates
 `indigo.lib` / `indigo-renderer.lib` from the exported `indigo*` C symbols.
-CI runs it under `ilammy/msvc-dev-cmd@v1`; packaging the installers is part of
-the Windows CI job.
+CI loads the MSVC environment from `vcvars64.bat`; packaging the installers is
+part of the Windows CI job.
 
 ## Supported distros
 

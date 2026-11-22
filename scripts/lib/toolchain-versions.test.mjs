@@ -157,6 +157,28 @@ test("workflows and composite actions use the supported action versions", () => 
   assert.deepEqual(problems, [], "stale GitHub Action majors:\n" + problems.join("\n"));
 });
 
+test("the Windows build loads the MSVC environment without a Node 20 action", () => {
+  const action = read(".github/actions/windows-build/action.yml");
+
+  assert.doesNotMatch(
+    action,
+    /uses:\s*ilammy\/msvc-dev-cmd/,
+    "the Windows build must not use the Node 20 ilammy/msvc-dev-cmd action",
+  );
+  assert.match(
+    action,
+    /vcvars64\.bat/,
+    "the Windows build must load vcvars64.bat for the MSVC x64 environment",
+  );
+  assert.match(
+    action,
+    /GITHUB_ENV/,
+    "the Windows build must export the MSVC environment to later steps",
+  );
+  assert.match(action, /where\.exe dumpbin\.exe/, "the setup must verify dumpbin.exe");
+  assert.match(action, /where\.exe lib\.exe/, "the setup must verify lib.exe");
+});
+
 test("every CI Node and pnpm setup uses Node 24 and pnpm 12.21.0", () => {
   const files = githubYamlFiles();
   const problems = [];
