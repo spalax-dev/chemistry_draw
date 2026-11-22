@@ -554,3 +554,30 @@ re-review.
   Node 24.22.3 + pnpm 12.21.0. Local shell Node 24.13.1 is below the floor;
   acceptance used 24.20.0.
 - no code/config skipped; no `.so`, `target/`, `dist/` or generated docs tracked.
+
+## 2026-11-22 — E1: Ketcher 3.21.0 and Indigo 1.49.0 (main)
+
+- branch `e1-ketcher-3.21`, based on `main` `e9eae6d`; commits `3676505`,
+  `49e920a`, `4551e1f`, `623d98e`, `4b56c2f`; not merged, pushed or tagged.
+- toolchain: Node **24.20.0** (Ketcher 3.21 `engines`), pnpm 12.21, React
+  18.3.1 exact.
+- Ketcher: `ketcher-core` **3.21.0** exact; `ketcher-react` from the committed
+  multi-language tarball; the pnpm-only regeneration script; the narrowed
+  two-hunk `parametrizeUrl` patch (3.18 patch removed; 3.22.0-rc.1 has the
+  upstream fix).
+- app: server mode through the option store (`applyKetcherAppOptions`,
+  `APP_OPTIONS`/`UPDATE`/`ACTION`), `render.clientArea` fallback chain, the
+  language selector from the multi-language bundle.
+- Indigo: **1.49.0** Linux tag and Windows ZIP/SHA; the builder/libs were
+  rebuilt; `/v2/info` reports `1.49.0.0-g92d2821`.
+- gates: full harness 14/14, 451 Vitest, 88 sidecar, 68 policy/contract;
+  `pnpm audit` 0 high/critical; `cargo audit` 0 vulnerabilities.
+- packages at `build/packages/`: `.deb` 31,845,808 B, `.rpm` 31,853,324 B,
+  AppImage 20,994,552 B; payload has `indigo-server`, `imago-worker`,
+  `libimago.so`, Indigo 1.49 and OpenCV 4.6; no ONNX/models. The user verified
+  the language selector/persistence and Recognize on 2026-11-22.
+- backlog added: **US-L10N** (localize the app chrome, last), **BUG-E1-H**
+  (Add/Remove Explicit Hydrogens: the sidecar lacks
+  `POST /v2/indigo/convert_explicit_hydrogens`), **DOC-E1-STEREO**
+  (stereochemistry guide/test).
+- pending: merge to `main` (user approval); NSIS is CI-deferred.
