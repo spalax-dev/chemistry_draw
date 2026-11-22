@@ -1,6 +1,6 @@
 # Ketcher bug: `parametrizeUrl` consumes the URL port
 
-Status: **fixed upstream after 3.21.0**, not in 3.21.0. PR #12552 was merged on
+Status: **fixed upstream (not in 3.21.0)**. PR #12552 was merged on
 **2026-11-02** and shipped in **3.22.0-rc.1** (a prerelease published
 2026-11-12); `3.21.0` (latest stable, published 2026-11-18) still has the bug.
 The npm `beta` dist-tag currently resolves to `3.21.0-rc.3`, not to
@@ -113,7 +113,7 @@ and `remoteStructService.modern.js`.
 
 ## Fix
 
-Upstream (Ketcher team landed this with a failing test first):
+Our patch (same behaviour as upstream):
 
 ```diff
  function parametrizeUrl(url, params) {
@@ -202,7 +202,7 @@ does not contain it:
 | ------------------------------- | ---------- | ----------- |
 | 3.21.0 (`latest`)               | 2026-11-18 | **no**      |
 | 3.22.0-rc.1 (prerelease)        | 2026-11-12 | yes         |
-| 3.21.0-rc.3 (`beta` tag)        | —          | no          |
+| 3.21.0-rc.3 (`beta` tag)        | 2026-11-16 | no          |
 | 3.20.0 (`latest` before 3.21.0) | 2026-11-17 | no          |
 | 3.18.0                          | 2026-09-02 | no          |
 

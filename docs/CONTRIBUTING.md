@@ -42,11 +42,13 @@ task run
 `ketcher-react` comes from the committed multi-language tarball, so a fresh
 checkout needs only `pnpm install`. Regenerating it is pnpm-only and requires
 Node 24.20+: `scripts/build-ketcher-react.sh` clones `v3.21.0` into a throwaway
-`build/ketcher-src`, installs it with pnpm
+`build/ketcher-src`, writes a temporary `pnpm-workspace.yaml` there
+(`packages: ["packages/*"]`), installs with pnpm
 (`--ignore-scripts --no-frozen-lockfile`), sets
 `KETCHER_MULTI_LANGUAGE_BUILD=true`, runs `i18n:generate` and the Rollup build
 through `pnpm --filter ketcher-react`, guards `zh-CN`, and packs the tarball
-into `vendor/ketcher-react/` — no `npm`, `npx` or `yarn`.
+into `vendor/ketcher-react/` — no `npm`, `npx` or `yarn`. The full mechanism is
+in `docs/TOOLCHAIN.md` §2.2.
 
 Dependency and toolchain checks:
 

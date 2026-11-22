@@ -45,6 +45,7 @@ interface FiberLike {
 /** The runtime shape of the mounted editor that the adapter reads. */
 interface MountedEditor {
   canvas?: Element | null;
+  render?: { clientArea?: Element | null } | null;
 }
 
 function isKetcherStore(value: unknown): value is KetcherStore {
@@ -118,11 +119,12 @@ function storeFromRoot(node: Element): KetcherStore | null {
 export function findKetcherRoot(ketcher: Ketcher | null): Element | null {
   if (typeof document === "undefined") return null;
 
-  // `Ketcher.editor` is typed as the legacy Editor interface, but the runtime
-  // object is a `CoreEditor` that carries the mounted canvas.
+  // Ketcher 3.21's `ketcher.editor` is the micromolecules editor, which keeps
+  // its client area in `render.clientArea`; the `CoreEditor` alternative
+  // carries `canvas`. Accept either and fall back to the single editor root.
   const editor = ketcher === null ? null : (ketcher.editor as unknown as MountedEditor);
-  const canvas = editor?.canvas ?? null;
-  const root = canvas === null ? null : canvas.closest(KETCHER_ROOT_SELECTOR);
+  const clientArea = editor?.render?.clientArea ?? editor?.canvas ?? null;
+  const root = clientArea === null ? null : clientArea.closest(KETCHER_ROOT_SELECTOR);
   return root ?? document.querySelector(KETCHER_ROOT_SELECTOR);
 }
 
@@ -131,6 +133,48 @@ export function findKetcherStore(ketcher: Ketcher | null): KetcherStore | null {
   const root = findKetcherRoot(ketcher);
   if (root === null) return null;
   return storeFromRoot(root);
+}
+
+/**
+ * Merges app-level options into Ketcher's option store and refreshes the
+ * derived state. Ketcher 3.21 keeps `app` in the Redux store (not in
+ * `editor.options()`), so this dispatches the same `APP_OPTIONS` + `UPDATE`
+ * pair its own `checkServer` thunk uses, then a no-op `ACTION` so the toolbar
+ * action state (for example the Recognize `disabled` flag) is recomputed.
+ *
+ * Returns `false` without dispatching when the store is missing, or when a
+ * dispatch throws, so the caller can report that the capability was not
+ * applied instead of assuming server mode is on.
+ */
+export function applyAppOptionsToStore(
+  store: KetcherStore | null,
+  app: Record<string, unknown>,
+): boolean {
+  if (store === null) return false;
+
+  try {
+    store.dispatch({ type: "APP_OPTIONS", data: { ...app } });
+    store.dispatch({ type: "UPDATE" });
+    // A no-op action recomputes `actionState` without changing the active tool
+    // or the struct, so the canvas, selection and undo history survive.
+    store.dispatch({ type: "ACTION", action: () => undefined });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Applies app-level options to the mounted editor's store through the same
+ * adapter the backstage uses. Returns `false` when the editor's React root or
+ * Redux store cannot be resolved.
+ */
+export function applyKetcherAppOptions(
+  ketcher: Ketcher | null,
+  app: Record<string, unknown>,
+): boolean {
+  const store = findKetcherStore(ketcher);
+  return applyAppOptionsToStore(store, app);
 }
 
 /**

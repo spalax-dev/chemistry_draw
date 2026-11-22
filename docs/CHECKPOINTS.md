@@ -576,10 +576,12 @@
       `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`, built from the
       `v3.21.0` tag with `KETCHER_MULTI_LANGUAGE_BUILD=true`, not the
       English-only npm bundle. Regeneration goes through
-      `scripts/build-ketcher-react.sh` in a throwaway `build/ketcher-src`
-      (pnpm install `--ignore-scripts --no-frozen-lockfile`, `i18n:generate` and
-      Rollup via `pnpm --filter ketcher-react`, `pnpm pack` into
-      `vendor/ketcher-react/`), needs Node 24.20+, and uses no npm/npx.
+      `scripts/build-ketcher-react.sh` in a throwaway `build/ketcher-src` with a
+      temporary `pnpm-workspace.yaml` (`packages: ["packages/*"]`); it installs
+      with `--ignore-scripts --no-frozen-lockfile`, runs `i18n:generate` and
+      Rollup via `pnpm --filter ketcher-react`, and `pnpm pack`s into
+      `vendor/ketcher-react/`. Needs Node 24.20+, uses no npm/npx, and the
+      detailed mechanism is in `docs/TOOLCHAIN.md` §2.2.
 - [ ] `pnpm-workspace.yaml` registers `ketcher-core@3.21.0` and
       `patches/ketcher-core@3.21.0.patch`; the patch contains only the two
       `parametrizeUrl` hunks. No 3.18 patch or `ketcher-core@3.18.0` entry
