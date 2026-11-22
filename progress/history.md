@@ -533,8 +533,8 @@ re-review.
 
 ## 2026-11-22 — US-10: toolchain and security baseline (main)
 
-- branch `us-10-toolchain-security`, based on `main` `4e6de73`; not merged,
-  pushed or tagged.
+- branch `us-10-toolchain-security`, based on `main` `4e6de73`; merged into
+  `main` at `615b693` (no push or tag).
 - activities (docs -> test -> implement -> review): `4a38562` toolchain policy,
   `5c02e20` Node 24/pnpm 12/Actions, `5bc7196` npm security, `1b2914a` Rust
   security, `c4954fd` AbortSignal.timeout, `112ea85` verification evidence.
