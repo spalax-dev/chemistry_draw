@@ -262,16 +262,20 @@ still runs.
 ## E — Complete release integration (no release until this lands)
 
 **Status: planned (2026-11-19).** Phase E collects the work that must land
-before the next release. The current `0.1.7` builds are **internal verification
-artifacts, not a release**: do not bump the version, tag, or publish until
-every E item and the Phase D live review are complete.
+before the next release. The `0.1.7` builds were internal verification
+artifacts; `0.1.8` is the released 0.x baseline. The 1.x line tracks that
+baseline (version carriers, screenshots, README and release layout) but does
+not publish it: do not tag or release until every E item and the Phase D live
+review are complete.
 
 **Ordering.** E1 first (the new Ketcher/Indigo line), then the `main` sync
 (E2/E4), then validation/performance (E3/E5), then the product finish
-(E6/E7). As of 2026-11-19, `main` carries the backstage/file-workflow line
-(16 commits not on `develop`) and `develop` carries the ML/B3/parity line
-(24 commits not on `main`). `develop` is the integration branch; the `main`
-changes are dragged in at E2/E4, not merged ad hoc.
+(E6/E7). As of 2026-11-21, `main` carries the released `0.1.8` and the
+backstage/file-workflow line (21 commits not on `develop`), while `develop`
+carries the ML/B3/parity line (35 commits not on `main`). `develop` is the
+integration branch; the `main` changes are dragged in at E2/E4, not merged ad
+hoc, and the `0.1.8` baseline itself is already reconciled into the version
+files without importing Imago code.
 
 ### E1 — Ketcher and Indigo to the latest stable release
 
@@ -344,9 +348,11 @@ errors consistent with the new copy.
 - **Upcoming:** E1 (Ketcher/Indigo + patch removal), E2 if the current workflow
   is removed, and E6 (identity/app-data) are breaking. Use `feat!`/`fix!` or a
   `BREAKING CHANGE:` footer per `docs/commit-policy.md`; release-please bumps
-  the minor while pre-1.0 (`bump-minor-pre-major`).
-- **Gate:** no version bump, tag or release until D and E1-E7 are complete. The
-  rebuilt 0.1.7 packages are internal verification artifacts only.
+  the minor while pre-1.0 because `bump-minor-pre-major` is `false`.
+- **Gate:** no tag or release until D and E1-E7 are complete. The version
+  carriers track the released `0.1.8` baseline; the launch remains `1.0.0` and
+  release-please computes it from the breaking change. No 0.x release is re-cut
+  from `develop`.
 
 ---
 

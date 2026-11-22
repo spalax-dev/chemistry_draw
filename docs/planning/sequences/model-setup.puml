@@ -16,6 +16,12 @@ app -> api: GET /v2/info
 api --> app: imago_versions: [] (capability not advertised)
 app -> dialog: auto-open once because the install is not ready
 app -> app: show the Models toolbar entry (setup needs attention)
+note right of app
+  The backstage may be showing at launch. The real
+  Models toolbar entry and dialog remain the setup
+  surface; the backstage Models rail entry routes to
+  it or is omitted, never a fake model list (ADR 0009).
+end note
 user -> dialog: read the intro and the two model families
 user -> dialog: Later
 

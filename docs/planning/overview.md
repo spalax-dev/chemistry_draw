@@ -79,19 +79,21 @@ The foundation is successful when:
 Chemistry Draw maintains two lines. They are both real, they are not the same
 product generation, and they must not be cross-merged by accident.
 
-| Line      | Version | Role                                               | Content                                                                                                                 |
-| --------- | ------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `main`    | 0.x     | Maintenance/support for the builds users run today | Backstage/file workflow, tabs, the E1 Ketcher/Indigo/language upgrade, releases                                         |
-| `develop` | 1.x     | Integration line for the next generation           | Imago-free native Indigo sidecar, B1 ONNX filter, B2 OCSR, B3 model delivery, Phase D parity work, NuGet runtime source |
+| Line      | Version | Role                                               | Content                                                                                                                                                                                         |
+| --------- | ------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main`    | 0.x     | Maintenance/support for the builds users run today | Backstage/file workflow, tabs, the E1 Ketcher/Indigo/language upgrade, releases                                                                                                                 |
+| `develop` | 1.x     | Integration line for the next generation           | Imago-free native Indigo sidecar, B1 ONNX filter, B2 OCSR, B3 model delivery, Phase D parity work, NuGet runtime source; the backstage/file workflow, tabs and 0.1.8 baseline arrive with US-01 |
 
 Rules:
 
 - Base a branch on its target line and merge it back to that line. E1 is
   `main`-only. A fix that both lines need is cherry-picked, not cross-merged.
-- At the official launch the **1.x line updates from `main`** — the 0.1.8
-  baseline, backstage/file workflow, build layout and release policy — and cuts
-  1.0.0. The detailed unification ADR is written at launch, not by a background
-  merge before it.
+- The **1.x line updates from `main` in US-01** (ADR 0009): the 0.1.8 baseline,
+  backstage/file workflow, build layout, screenshots and release policy are
+  ported deliberately, while the 1.x ML/ONNX/OCSR surface is kept and Imago
+  product code is not imported. This is not a cross-merge and it re-cuts no 0.x
+  release; the launch stays **1.0.0**. Retiring the 0.x line remains a separate
+  launch decision.
 
 This foundation models the 1.x line only. The 0.x line is recorded so the
 boundary is explicit, not so its architecture is documented here.
@@ -122,6 +124,8 @@ boundary is explicit, not so its architecture is documented here.
   packaging decision.
 - macOS is **out of scope** (no package or CI); Android is a possible future
   target, not planned.
-- At the official launch the 1.x line **updates from `main`** (0.1.8 baseline,
-  backstage, layout and release policy), **US-05 rebrands the completed product**,
-  and then cuts 1.0.0; the detailed unification ADR belongs to that launch.
+- **US-01 settles the update from `main`**: the 0.1.8 baseline, backstage/file
+  workflow, layout and release policy land on 1.x under ADR 0009, without Imago
+  and without re-cutting 0.x. The remaining launch question is **when and how to
+  retire the 0.x line**, not what 1.x inherits; **US-05 rebrands the completed
+  product** and the launch stays 1.0.0.

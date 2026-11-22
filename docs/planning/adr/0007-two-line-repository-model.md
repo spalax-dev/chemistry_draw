@@ -63,11 +63,13 @@ Maintain the two lines explicitly.
 - **Negative:** fixes can be needed twice; contributors must know which line they
   are on; the foundation, the backlog and the release gate must name the target
   line for every story; there is no single "current product" branch until launch.
-- **Follow-up:** every story names its target line. At the official launch the
-  1.x line updates from `main` (0.1.8 baseline, backstage, layout and release
-  policy) and cuts 1.0.0 with a launch ADR; it is not a background merge. E1's
-  parked work on `wip/e1-develop-based` and `phase-e1-ketcher-indigo` is not
-  adopted until US-07, which redoes the upgrade on `develop`.
+- **Follow-up:** every story names its target line. US-01 performs the 1.x
+  update from `main` (the 0.1.8 baseline, backstage/file workflow, layout and
+  release policy) as a deliberate port under ADR 0009; it is not a background
+  merge and it does not import Imago. The launch remains 1.0.0, and retiring the
+  0.x line is still a separate launch decision. E1's parked work on
+  `wip/e1-develop-based` and `phase-e1-ketcher-indigo` is not adopted until
+  US-07, which redoes the upgrade on `develop`.
 
 ## References
 

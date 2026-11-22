@@ -26,6 +26,7 @@
 | [0006](0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a parity gate | accepted | 2026-11-21 |
 | [0007](0007-two-line-repository-model.md)          | Maintain two repository lines                | accepted | 2026-11-21 |
 | [0008](0008-adopt-two-stage-harness.md)            | Adopt the two-stage harness                  | accepted | 2026-11-21 |
+| [0009](0009-update-1x-from-main-baseline.md)       | Update 1.x from the main 0.1.8 baseline      | accepted | 2026-11-21 |
 
 ADRs 0002–0007 were reconstructed from the code, the manifests and the existing
 documentation on 2026-11-21. Their dates record the reconstruction, not the

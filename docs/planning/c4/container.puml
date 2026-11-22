@@ -6,13 +6,13 @@ title Chemistry Draw (1.x line) — Containers
 Person(user, "Chemist, teacher or student", "Uses the editor, documents and recognition")
 
 System_Boundary(app, "Chemistry Draw desktop application") {
-  Container(webview, "Ketcher webview", "React 18, TypeScript, Vite 6, ketcher-react / ketcher-core 3.18", "Editor, document workflow, in-app dialogs, toolbar commands, model setup UI, error mapping")
+  Container(webview, "Ketcher webview", "React 18, TypeScript, Vite 6, ketcher-react / ketcher-core 3.18", "Backstage, editor tabs, File menu, recent structures, document workflow, in-app dialogs, model setup UI, error mapping")
 
   Container(host, "Tauri host", "Rust, Tauri v2", "Window lifecycle, free-port selection, sidecar spawn/supervision, environment, log forwarding, indigo_port and log_dir commands")
 
   Container(sidecar, "indigo-server sidecar", "Rust, axum 0.7, tokio 1", "HTTP /v2 API: Indigo operations, ONNX filter, OCSR, model delivery, Ketcher job shim, health")
 
-  ContainerDb(documents, "User documents", "Filesystem", ".ket documents, exported Molfile/SMILES/InChI/SVG/PNG, autosave snapshots under <app_data>/recovery")
+  ContainerDb(documents, "User documents", "Filesystem", ".ket documents (one per tab), exported Molfile/SMILES/InChI/SVG/PNG, per-tab snapshots under <app_data>/recovery/tabs and previews under <app_data>/previews")
 
   ContainerDb(models, "Model store", "Filesystem under <app_data>/models", "manifest.json plus classifier, encoder, decoder and vocabulary artifacts")
 }
@@ -26,12 +26,18 @@ Container_Ext(huggingface, "Hugging Face model repository", "HTTPS object host",
 Rel(user, webview, "Draws, saves, exports and recognizes")
 Rel(webview, host, "Invokes commands and uses plugins", "Tauri IPC")
 Rel(webview, sidecar, "Calls the Indigo, filter, OCSR and model routes", "HTTP 127.0.0.1:<port>/v2")
-Rel(webview, documents, "Reads and writes documents and autosave", "Tauri fs plugin")
+Rel(webview, documents, "Reads and writes .ket documents, per-tab snapshots and previews", "Tauri fs plugin")
 Rel(host, sidecar, "Spawns, configures, logs and stops", "Process, environment, stdio")
 Rel(sidecar, indigo, "Calls", "C FFI")
 Rel(sidecar, onnx_runtime, "Loads at runtime", "dlopen / LoadLibrary")
 Rel(sidecar, models, "Reads and writes artifacts and manifest")
 Rel(sidecar, huggingface, "Fetches artifacts with resume", "HTTPS GET Range")
+
+note right of webview
+  The backstage overlays the single mounted editor.
+  Tabs are file state over that editor; the Models
+  dialog remains the real model setup surface.
+end note
 
 LAYOUT_WITH_LEGEND()
 

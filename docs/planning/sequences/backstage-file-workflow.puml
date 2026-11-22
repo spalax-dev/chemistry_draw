@@ -1,0 +1,99 @@
+@startuml
+title Backstage and document tabs — launch → open → switch → save → close
+
+actor "User" as user
+participant "App.tsx" as app
+participant "Backstage\n(ui/Backstage)" as backstage
+participant "TabStrip / FileMenu" as strip
+participant "tabStore\n(recovery/tabs)" as store
+participant "Ketcher\n(single editor)" as ketcher
+participant "Tauri fs plugin" as fs
+participant "localStorage" as ls
+
+== Launch ==
+app -> app: render the backstage from the first frame
+app -> store: readTabSet() -> index.json, each tab's .json and .ket
+store --> app: tabs, names, paths, dirty flags, activeId
+app -> ketcher: mount the one editor and restore the active tab
+note right of app
+  Readiness never dismisses the backstage.
+  A missing or corrupt snapshot drops that tab.
+end note
+
+== Start a document from Welcome ==
+user -> backstage: choose Blank canvas / a template / Open… / Import…
+alt Blank canvas
+  app -> app: reuse an untouched tab, otherwise create one
+  app -> ketcher: load the empty structure (loading flag set)
+else Template card
+  app -> app: create a new tab with path = null, dirty = true
+  app -> ketcher: setMolecule(entry.ket) behind the loading flag
+else Open… (.ket)
+  app -> app: guard path uniqueness; activate an existing tab instead
+  app -> fs: readTextFile(path)
+  fs --> app: .ket text
+  app -> ketcher: setMolecule(text) behind the loading flag
+  app -> app: tab = { path, name: base(path), dirty: false }
+  app -> ls: record the recent path
+else Import… (mol/smi/inchi/sdf/rxn)
+  app -> fs: readTextFile(path)
+  fs --> app: structure text
+  app -> ketcher: setMolecule(text) behind the loading flag
+  app -> app: tab = { path: null, name: base(file), dirty: false }
+end
+app -> store: write the target tab's clean snapshot and index.json
+app -> backstage: close the overlay
+backstage --> user: the editor keeps the active tab and canvas
+
+== Switch tabs (one editor) ==
+user -> strip: choose another tab
+strip -> app: activateTabById(id)
+app -> ketcher: getKet() for the outgoing tab
+app -> store: flush the outgoing tab snapshot (metadata last)
+app -> ketcher: setMolecule(incoming.ket) behind the loading flag
+note right of ketcher
+  Change events during the load are ignored,
+  so the incoming tab stays clean.
+end note
+
+== Save / Export ==
+user -> strip: File → Save (Ctrl+S) or Save As… (Ctrl+Shift+S)
+strip -> app: run the command on the active tab
+alt untitled tab
+  app -> fs: show the save dialog prefilled <name>.ket
+  fs --> app: chosen .ket path
+end
+app -> ketcher: getKet()
+app -> fs: write the .ket text
+app -> app: dirty = false; adopt the path on Save As
+app -> store: rewrite the tab's clean snapshot
+app -> ls: record the recent path
+note right of app
+  Export never touches path or format;
+  it writes a separate Molfile/SMILES/InChI/SVG/PNG file.
+end note
+
+== Close ==
+user -> app: close the window or one tab
+alt no dirty tab
+  app -> ketcher: allow the close
+else one dirty active tab
+  app -> user: Save / Discard / Cancel
+  user -> app: Save As cancelled
+  app --> user: abort the close
+else one dirty inactive tab, or several dirty tabs
+  app -> user: Discard / Cancel only
+end
+opt Discard
+  app -> store: delete the dirty tabs' snapshots and rewrite index.json
+  app -> ketcher: window.destroy()
+end
+
+== Model setup is not replaced ==
+note right of app
+  The real Models toolbar entry and dialog remain the model setup
+  surface. The backstage Models rail entry must route to it or be
+  omitted; it never shows a fake model list (ADR 0009).
+end note
+
+@enduml

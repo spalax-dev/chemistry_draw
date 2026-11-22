@@ -67,7 +67,7 @@ layer. Example for _"As a user I want to save the document as `.ket`"_:
 | contract       | document model, save/export rules, title/dirty contract |
 | tests          | save routing, close guard, recovery decisions (RED)     |
 | implementation | document state, Tauri dialog/FS wiring, toolbar actions |
-| integration    | recovery/autosave, docsgen, manual GUI checklist        |
+| integration    | per-tab recovery, docsgen, manual GUI checklist         |
 
 Rules:
 
