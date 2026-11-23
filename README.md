@@ -14,7 +14,12 @@
   <a href="LICENSE">License</a>
 </p>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/spalax-dev/chemistry_draw/releases"><img src="https://img.shields.io/github/v/release/spalax-dev/chemistry_draw?label=latest%20release&amp;color=blue" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-blue.svg" alt="Platforms: Linux and Windows">
+  <img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status: beta">
+</p>
 
 > **Community project.** Chemistry Draw is an unofficial desktop packaging of
 > [Ketcher](https://github.com/epam/ketcher) (© EPAM Systems, Apache 2.0). It
