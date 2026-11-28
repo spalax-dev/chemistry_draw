@@ -27,7 +27,7 @@ jobs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag: ${{ steps.rp.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: rp
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -49,7 +49,7 @@ jobs:
       )
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         # The builder image compiles Indigo; the default runner disk is not enough.
@@ -59,10 +59,10 @@ jobs:
           df -h /
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build builder image (cached)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: scripts/Dockerfile
@@ -101,7 +101,7 @@ jobs:
         if: |
           github.event_name == 'release' ||
           needs.release-please.outputs.release_created == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name || needs.release-please.outputs.tag }}
           fail_on_unmatched_files: false
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload workflow artifacts (manual runs)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chemistry-draw-packages
           path: build/packages/*
@@ -131,7 +131,7 @@ jobs:
       )
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build Windows installer
         uses: ./.github/actions/windows-build
@@ -140,7 +140,7 @@ jobs:
         if: |
           github.event_name == 'release' ||
           needs.release-please.outputs.release_created == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name || needs.release-please.outputs.tag }}
           fail_on_unmatched_files: true
@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload workflow artifact (manual runs)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chemistry-draw-windows-nsis
           path: target/release/bundle/nsis/*.exe

@@ -141,3 +141,43 @@ test("the capability grants only the file-picker dialogs", () => {
     "native message dialogs are not part of the UI contract",
   );
 });
+
+// GitHub Actions execute on the runner's Node (24 today). Every action we use
+// must ship a node24 runtime; `ilammy/msvc-dev-cmd` is archived on node20 and
+// was replaced by the inline vcvars64 step (port of main's ab525a3).
+const MIN_ACTION_MAJOR = {
+  "actions/cache": 6,
+  "actions/checkout": 7,
+  "actions/setup-node": 7,
+  "actions/upload-artifact": 7,
+  "docker/build-push-action": 7,
+  "docker/setup-buildx-action": 4,
+  "googleapis/release-please-action": 5,
+  "pnpm/action-setup": 6,
+  "softprops/action-gh-release": 3,
+  "Swatinem/rust-cache": 2,
+};
+
+test("every action ref ships a Node 24 runtime", () => {
+  for (const file of githubFiles()) {
+    for (const node of walk(parse(read(file)))) {
+      if (typeof node.uses !== "string") continue;
+
+      const [repo, ref] = node.uses.split("@");
+      assert.notEqual(
+        repo,
+        "ilammy/msvc-dev-cmd",
+        `${file} must not use ilammy/msvc-dev-cmd: it declares node20; use the vcvars64 step`,
+      );
+
+      const minimum = MIN_ACTION_MAJOR[repo];
+      if (minimum === undefined) continue;
+
+      const major = Number(/^v(\d+)/.exec(ref ?? "")?.[1]);
+      assert.ok(
+        Number.isFinite(major) && major >= minimum,
+        `${file}: ${node.uses} must be v${minimum} or newer (node24 runtime)`,
+      );
+    }
+  }
+});

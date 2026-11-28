@@ -19,23 +19,59 @@ runs:
 
     # Node is read from `.nvmrc` (24.20.0), the single source of truth.
     - name: Use Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
 
     # No `version` input: pnpm comes from `packageManager` in package.json.
     - name: Install pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v6
 
     - name: Install frontend dependencies
       shell: pwsh
       run: pnpm install --frozen-lockfile
 
     - name: Set up MSVC x64 developer environment
-      # Provides dumpbin.exe/lib.exe and the MSVC linker.
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
+      # Replaces ilammy/msvc-dev-cmd, which still declares node20. Loads
+      # vcvars64.bat and exports its environment to the following steps;
+      # dumpbin.exe/lib.exe and the MSVC linker come from it.
+      shell: pwsh
+      run: |
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        if (-not (Test-Path $vswhere)) {
+          throw "vswhere.exe was not found at $vswhere"
+        }
+        $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if (-not $install) {
+          throw "Visual Studio with the MSVC x64 toolchain was not found"
+        }
+        $vcvars = Join-Path $install "VC\Auxiliary\Build\vcvars64.bat"
+        if (-not (Test-Path $vcvars)) {
+          throw "vcvars64.bat was not found at $vcvars"
+        }
+
+        $script = Join-Path $env:RUNNER_TEMP "msvc-env.bat"
+        @("call `"$vcvars`" >nul", "set") | Set-Content -Path $script -Encoding ascii
+
+        $keep = @(
+          "PATH", "INCLUDE", "LIB", "LIBPATH",
+          "VSINSTALLDIR", "VCINSTALLDIR", "WindowsSdkDir", "WindowsSDKVersion",
+          "UCRTVersion", "UniversalCRTSdkDir",
+          "VSCMD_ARG_TGT_ARCH", "VSCMD_ARG_HOST_ARCH"
+        )
+        foreach ($line in (cmd /c "`"$script`"")) {
+          if ($line -match '^([^=]+)=(.*)$' -and $keep -contains $Matches[1]) {
+            $name = $Matches[1]
+            $value = $Matches[2]
+            Set-Item -Path "Env:$name" -Value $value
+            "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+        }
+
+        where.exe dumpbin.exe | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "dumpbin.exe was not found after vcvars64.bat" }
+        where.exe lib.exe | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "lib.exe was not found after vcvars64.bat" }
 
     - name: Fetch Windows Indigo runtime
       shell: pwsh

@@ -14,13 +14,13 @@ runs:
 
     # Node is read from `.nvmrc` (24.20.0), the single source of truth.
     - name: Use Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
 
     # No `version` input: pnpm comes from `packageManager` in package.json.
     - name: Install pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v6
 
     - name: Rust cache
       uses: Swatinem/rust-cache@v2
@@ -28,7 +28,7 @@ runs:
         workspaces: src-tauri -> target
 
     - name: pnpm cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.local/share/pnpm/store
         key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
