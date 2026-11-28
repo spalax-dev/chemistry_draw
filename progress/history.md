@@ -895,3 +895,35 @@ Consolidate the project's generated artifacts under one ignored root.
   owner confirmed the equivalent flows on `main` and accepted the dev-line
   result without a separate packaged run.
 - approval: Jorge, 2026-11-28T15:06:03.284Z.
+
+## US-10 — Fix packaging and tooling drift
+
+- approved by: Jorge at 2026-11-28T15:58:07.546Z
+
+### US-10 close evidence
+
+- branch: `us-10-tooling-drift`, based on `develop` (`ba17335`); merged only after
+  approval.
+- commits: `6b39de5`, `5c95ed9`, `7779bfd`. Net diff vs `develop`: 17 files,
+  +425 / -39.
+- toolchain: `.github/actions/setup` and `windows-build` now read Node from
+  `node-version-file: .nvmrc` (24.20.0) and pnpm from `packageManager`
+  (12.21.0); `quality.yml` follows the same rule and no longer pins a floating
+  `24`; `scripts/Dockerfile` keeps Node 24 and installs `pnpm@12.21.0` exactly.
+- coverage: `ci.yml` now triggers on `main` and `develop` for both `push` and
+  `pull_request`, so the 1.x line gets the build/test suite.
+- capability: `dialog:default` and `dialog:allow-message` removed; the set is
+  `dialog:allow-open` + `dialog:allow-save` only. Removing `dialog:default`
+  matters because it grants `allow-message` implicitly.
+- decisions: ADR 0012 (single toolchain source of truth); the capability
+  decision is an application of ADR 0010, recorded in `docs/conventions.md` §6
+  and `docs/architecture.md`.
+- gates: `--story US-10` green (format, lint, type, structure, docs, test,
+  build, docsgen, docblocks); the new `scripts/lib/toolchain-alignment.test.mjs`
+  is 7/7 and the full contract suite is 131/131.
+- pending/manual: the first real `develop` CI run (observable only after the
+  push) and the packaged clean-install smoke are recorded as pending in
+  `docs/verification.md`.
+- branch model: merged into `develop` only. `main` was not touched, pushed or
+  merged with this line.
+- approval: Jorge, 2026-11-28T15:58:07.544Z.

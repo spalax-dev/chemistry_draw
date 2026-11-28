@@ -1,6 +1,8 @@
 name: Build Windows installer
 description: >-
-  Build and validate the Windows x86_64 sidecar and NSIS installer.
+  Build and validate the Windows x86_64 sidecar and NSIS installer. Node comes
+  from `node-version-file: .nvmrc` and pnpm from the `packageManager` field in
+  `package.json`; these two declarations are the only toolchain source of truth.
 
 runs:
   using: composite
@@ -15,15 +17,15 @@ runs:
       with:
         key: windows-msvc
 
+    # Node is read from `.nvmrc` (24.20.0), the single source of truth.
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
 
+    # No `version` input: pnpm comes from `packageManager` in package.json.
     - name: Install pnpm
       uses: pnpm/action-setup@v4
-      with:
-        version: "11"
 
     - name: Install frontend dependencies
       shell: pwsh

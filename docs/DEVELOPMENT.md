@@ -16,6 +16,29 @@ Every change follows **docs → test → implement → review**:
 `phase` order in `activities.json` with `scripts/lib/activity-policy.mjs`.
 Docs-only activities (`type: "docs"`) run docs → review and skip test/implement.
 
+## Toolchain versions (single source of truth)
+
+Node.js and pnpm have exactly one source of truth for local development, CI,
+the composite actions and the Docker builder:
+
+| Tool    | Source                             | Value     |
+| ------- | ---------------------------------- | --------- |
+| Node.js | `.nvmrc` (`engines.node` is `<25`) | `24.20.0` |
+| pnpm    | `package.json` `packageManager`    | `12.21.0` |
+
+Rules:
+
+- Every workflow and composite action resolves Node from `.nvmrc`
+  (`actions/setup-node` with `node-version-file`) and pnpm from `packageManager`
+  (Corepack or `pnpm/action-setup` reading the field).
+- The `chemistry-builder` image used by `task libs` and `task packages` installs
+  the same Node 24 major and the exact pnpm `12.21.0` from `packageManager`; it
+  does not float either version.
+- Do not hardcode another Node major, a floating `24`, or an unversioned
+  `npm install -g pnpm` in a workflow, a composite action or the Dockerfile. A
+  toolchain change updates `.nvmrc`/`packageManager` and the files that read
+  them together (ADR 0012).
+
 ## Branch model (mandatory)
 
 Chemistry Draw has two maintained lines; choose the target line before creating
@@ -312,7 +335,8 @@ Prerequisites:
 
 - Visual Studio Build Tools with **Desktop development with C++** (MSVC x64 +
   Windows SDK)
-- Rust stable MSVC toolchain, Node.js ≥ 24.20.0, pnpm (through Corepack) and PowerShell 5.1+
+- Rust stable MSVC toolchain, Node.js from `.nvmrc` (`24.20.0`) and pnpm from
+  `packageManager` (`12.21.0`, through Corepack), plus PowerShell 5.1+
 - WebView2 Runtime (included in Windows 11; the installer embeds the
   bootstrapper for Windows 10)
 

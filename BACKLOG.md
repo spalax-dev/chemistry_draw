@@ -165,15 +165,17 @@
 
 ## US-10 — Fix packaging and tooling drift
 
-- status: pending
-- value: The packaged frontend and the tested frontend use the same Node/toolchain, and the Tauri capability set matches the in-app dialog policy.
+- status: done
+- value: The packaged frontend and the tested frontend use the same Node/toolchain, the 1.x line is actually tested by CI, and the Tauri capability set matches the in-app dialog policy.
 - acceptance:
-  - the packaging Dockerfile uses the same supported Node major as CI/docs (22), or the difference is justified and tested
-  - the unused `dialog:allow-message` capability is removed or its need is documented against the in-app dialog rule
+  - every workflow and composite action reads Node from `.nvmrc` (24.20.0) and pnpm from `packageManager` (12.21.0); none pins a different Node or pnpm major
+  - `ci.yml` runs the build/test suite on `develop` pushes and pull requests, not only `main`
+  - the builder image installs Node 24 and pins pnpm 12.21.0 (no floating `npm install -g pnpm`)
+  - `dialog:allow-message` is removed; the capability set matches the in-app dialog policy
   - the package/clean-install gates are green after the change
 - open questions:
-  - does the builder image need a Node pin bump, or only the Dockerfile install step?
-  - is `dialog:allow-message` ever needed for a native flow?
+  - resolved: the builder image pins both Node and pnpm; CI and the composite actions read `.nvmrc` and `packageManager`
+  - resolved: `dialog:allow-message` is never needed for a native flow; the app owns its dialogs
 
 ## US-11 — Ship a self-contained, offline-first Linux AppImage
 

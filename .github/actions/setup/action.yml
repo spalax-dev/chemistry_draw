@@ -1,5 +1,8 @@
 name: Setup environment
-description: Install Rust, Node, pnpm, system deps, and frontend dependencies
+description: >-
+  Install Rust, Node, pnpm, system deps, and frontend dependencies. Node comes
+  from `node-version-file: .nvmrc` and pnpm from the `packageManager` field in
+  `package.json`; these two declarations are the only toolchain source of truth.
 
 runs:
   using: composite
@@ -9,15 +12,15 @@ runs:
       with:
         components: rustfmt, clippy
 
+    # Node is read from `.nvmrc` (24.20.0), the single source of truth.
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
 
+    # No `version` input: pnpm comes from `packageManager` in package.json.
     - name: Install pnpm
       uses: pnpm/action-setup@v4
-      with:
-        version: "11"
 
     - name: Rust cache
       uses: Swatinem/rust-cache@v2

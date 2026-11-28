@@ -1201,7 +1201,10 @@ a download action, a poll, verify, a `409`, and the backend's offline, disk,
 checksum and transport errors — stays inside the dialog. The app never calls
 Tauri `message()` / `confirm()`, never uses browser `alert()` / `confirm()` and
 never opens a second OS window. The only native dialogs in the app remain the
-file pickers for Open, Save As and Export. The failure copy is the backend's
+file pickers for Open, Save As and Export, so the capability grants only
+`dialog:allow-open` and `dialog:allow-save`: `dialog:allow-message` and the
+`dialog:default` set (which includes it) are not part of the surface. The
+failure copy is the backend's
 actionable `download.error` (it names the URL and asks to check the network, or
 the required/available bytes for a full disk), so the UI does not duplicate
 that mapping.

@@ -6,7 +6,8 @@
 > **Reconstructed from the manifests and lockfiles on 2026-11-21.** Versions are
 > the dependencies declared in this repository, not a promise about the next
 > release. Updated for the Ketcher 3.21.0/Indigo 1.49.0 policy in US-07 on
-> 2026-11-28 (ADR 0011); the dependency activity lands the manifests.
+> 2026-11-28 (ADR 0011); the dependency activity lands the manifests. US-10 pins
+> the Node/pnpm source of truth and the CI coverage on 2026-11-28 (ADR 0012).
 
 ## 1. Runtime and language
 
@@ -16,9 +17,13 @@
   in CI). The workspace is the repository root: `src-tauri` and
   `src-tauri/sidecar`.
 - **JavaScript runtime:** Node.js **24.20.0** is the floor (`>=24.20.0 <25`),
-  pinned in `.nvmrc`; Ketcher 3.21 requires it. pnpm is installed through
-  Corepack, and `packageManager` in `package.json` is the authoritative version;
-  CI and the Docker builder resolve the latest 24.x.
+  pinned in `.nvmrc`; Ketcher 3.21 requires it. `.nvmrc` is the **single source
+  of truth** for Node: every workflow and composite action reads it through
+  `node-version-file`, and the `chemistry-builder` image pins the same 24
+  major. pnpm is provisioned through Corepack, and `packageManager` in
+  `package.json` is the authoritative version (**12.21.0**) for the workflows,
+  the composite actions and the builder image. No workflow, composite action or
+  Dockerfile pins a different Node major or an unversioned pnpm.
 - **Style:** one formatter and one linter per language, enforced by the harness —
   Prettier 3.9.10 + ESLint 10.14 (typescript-eslint 8.72, react-hooks 7.1) for
   TypeScript/TSX/CSS/JSON/YAML/Markdown; rustfmt + Clippy `-D warnings` for Rust;
@@ -71,17 +76,17 @@ ADR.
 
 ## 4. Tooling
 
-| Purpose         | Tool                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------- |
-| Package manager | pnpm (`pnpm-lock.yaml`, `pnpm-workspace.yaml`); Rust builds with cargo                  |
-| Frontend tests  | Vitest 3.2.7, Node environment, `src/**/*.test.ts`                                      |
-| Backend tests   | `cargo test -p indigo-server`, with `LD_LIBRARY_PATH` pointing at the native libs       |
-| Contract tests  | Node's built-in test runner, `node --test scripts/lib/*.test.mjs`                       |
-| Documentation   | `scripts/docsgen.sh`: TypeDoc 0.28.20 for the frontend, rustdoc for both Rust crates    |
-| Build           | `pnpm build` (tsc + Vite); `cargo build --release -p indigo-server`; `pnpm tauri build` |
-| Packaging       | Tauri bundler (`.deb`, `.rpm`, NSIS) plus the custom AppDir script for AppImage         |
-| CI              | GitHub Actions: `ci.yml`, `quality.yml`, `release.yml`; Windows build composite action  |
-| Task runner     | `Taskfile.yml` (`task libs`, `task run`, `task packages`, `task harness`)               |
+| Purpose         | Tool                                                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Package manager | pnpm (`pnpm-lock.yaml`, `pnpm-workspace.yaml`); Rust builds with cargo                                                      |
+| Frontend tests  | Vitest 3.2.7, Node environment, `src/**/*.test.ts`                                                                          |
+| Backend tests   | `cargo test -p indigo-server`, with `LD_LIBRARY_PATH` pointing at the native libs                                           |
+| Contract tests  | Node's built-in test runner, `node --test scripts/lib/*.test.mjs`                                                           |
+| Documentation   | `scripts/docsgen.sh`: TypeDoc 0.28.20 for the frontend, rustdoc for both Rust crates                                        |
+| Build           | `pnpm build` (tsc + Vite); `cargo build --release -p indigo-server`; `pnpm tauri build`                                     |
+| Packaging       | Tauri bundler (`.deb`, `.rpm`, NSIS) plus the custom AppDir script for AppImage                                             |
+| CI              | GitHub Actions: `ci.yml` (build/test on `main` and `develop`), `quality.yml`, `release.yml`; Windows build composite action |
+| Task runner     | `Taskfile.yml` (`task libs`, `task run`, `task packages`, `task harness`)                                                   |
 
 Generated documentation is build output: TypeDoc writes `docs/generated/api`
 (gitignored), rustdoc writes into Cargo's target directory. The source of truth
@@ -161,3 +166,4 @@ later version pin taken in US-07:
 | [0006](adr/0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a calibrated parity gate         |
 | [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                   |
 | [0011](adr/0011-adopt-ketcher-321-on-1x.md)            | Adopt Ketcher 3.21.0 and Indigo 1.49.0 on 1.x                   |
+| [0012](adr/0012-single-toolchain-source-of-truth.md)   | One toolchain source of truth: `.nvmrc` and `packageManager`    |

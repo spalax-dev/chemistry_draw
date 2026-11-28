@@ -1258,6 +1258,46 @@ gate, not a CI step:
    orchestrator runs it serially) and the full `node scripts/harness.mjs` with
    the frontend build, Clippy and the sidecar suite.
 
+### Toolchain drift (US-10)
+
+The story checkpoint is C18 in `docs/CHECKPOINTS.md`. It keeps one toolchain
+source of truth (`.nvmrc` for Node, `packageManager` for pnpm) across the
+workflows, the composite actions and the builder image (ADR 0012), covers
+`develop` in `ci.yml`, and trims the capability set to the file-picker dialogs.
+The automated half was run on the `us-10-tooling-drift` branch; the manual half
+is **pending** until a packaged build and a real `develop` CI run. A command not
+listed as run here is not green.
+
+**Automated gates (run).**
+
+| Command                                                | Result                                                                                                                                         |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node --test scripts/lib/toolchain-alignment.test.mjs` | 7 tests, 7 pass, 0 fail: `.nvmrc`/`packageManager` parity, `node-version-file`, no pnpm major, `develop` triggers, builder pin, capability set |
+| `node --test scripts/lib/*.test.mjs`                   | 131 tests, 131 pass, 0 fail (includes `clean-install.test.mjs`)                                                                                |
+| `node scripts/harness.mjs --fast`                      | green (format, structure, docblocks; lint/type/test skipped on a docs-only tree)                                                               |
+
+The capability JSON in `src-tauri/capabilities/default.json` is syntactically
+parsed and asserted by `toolchain-alignment.test.mjs` (it is data, not Rust), so
+`cargo check -p indigo-server` is not the gate for it. `clean-install.test.mjs`
+reads packaging scripts and configs only and spawns nothing; it needs no Docker
+or network, and runs as part of the suite above.
+
+**Pending manual checks (not yet verified).**
+
+1. **Packages and clean install.** Run `task packages`, then the payload
+   inspection and the packaged-sidecar empty-root/download smoke in "Clean
+   install (B3)" above. Expected: the `.deb`/`.rpm`/AppImage build with the
+   pinned toolchain, no `.onnx`/`models/`/`manifest.json` in any payload, and
+   Indigo plus the ONNX Runtime 1.31.0 payload retained.
+2. **Real `develop` CI run.** Push the branch and confirm the `ci` job (Node
+   `24.20.0` and pnpm `12.21.0` from `.nvmrc`/`packageManager`, builder image
+   from `scripts/Dockerfile`, Node tests, sidecar tests, frontend build) and the
+   `windows` job are green. The local contract suite does not reproduce a
+   clean-runner run.
+3. **Full harness.** `node scripts/harness.mjs --activity ACT-03` (the
+   orchestrator runs it serially) and the full `node scripts/harness.mjs` with
+   the frontend build, Clippy and the sidecar suite.
+
 ---
 
 ## 3. Reviewer checklist
@@ -1302,6 +1342,11 @@ gates and the story approval are described in `docs/harness/verification.md`):
       filter/OCSR, the packaged app's clean-root Models flow works, the Windows
       smoke covers `/v2/models` empty and `/v2/info` `[]`, and the measured
       sizes are recorded
+- [ ] Toolchain drift is fixed: every workflow and composite action reads Node
+      from `.nvmrc` and pnpm from `packageManager`, `ci.yml` covers `main` and
+      `develop`, the builder pins Node 24 and `pnpm@12.21.0`, and the capability
+      set keeps only `dialog:allow-open`/`dialog:allow-save` (no
+      `dialog:allow-message`); see `docs/CHECKPOINTS.md` C18
 - [ ] When `models/` exists, model-gated tests pass with `--include-ignored`
 - [ ] No ONNX model file is committed or bundled; the shipped
       `libonnxruntime` 1.31.0 comes only from the builder image / Windows fetch

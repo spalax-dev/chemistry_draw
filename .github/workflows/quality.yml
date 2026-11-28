@@ -23,15 +23,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # No `version` input: pnpm comes from `packageManager` in package.json.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 12.21.0
 
+      # Node is read from `.nvmrc` (24.20.0), the single source of truth.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Setup Rust
