@@ -601,9 +601,60 @@ scripts/lib/e1-indigo.test.mjs` → 12 tests, 12 pass, 0 fail.
       Recognize Molecule behave as documented on 3.21 (the contracts are
       unit-tested, the rendering is not).
 
+## C18 — Toolchain and packaging drift (US-10)
+
+> Evidence contract for US-10. The automated rows were run in this repository on
+> the story branch `us-10-tooling-drift`; the manual rows are **pending** until a
+> packaged build and a real `develop` CI run exist. A row that was not run is
+> `[ ]`, never "green by inspection".
+
+### Automated
+
+- [x] One toolchain declaration: `.nvmrc` is `24.20.0`, `packageManager` is
+      `pnpm@12.21.0` and `engines.node` covers the `.nvmrc` version. Every
+      `.github/**/*.yml` reads Node with `node-version-file: .nvmrc` and pins no
+      numeric `node-version`; every `pnpm/action-setup` step omits the version
+      (or pins `12.21.0`), so pnpm comes from `packageManager`
+      (`node --test scripts/lib/toolchain-alignment.test.mjs`, 7 tests, 7 pass,
+      0 fail).
+- [x] `ci.yml` triggers on `push` and `pull_request` for `main` **and**
+      `develop`, so the 1.x line runs the same build/test suite as `main`
+      (same test).
+- [x] The builder image `scripts/Dockerfile` installs Node 24 (`setup_24.x`) and
+      the exact `pnpm@12.21.0`; no unpinned `npm install -g pnpm` remains (same
+      test).
+- [x] The capability set grants `dialog:allow-open` and `dialog:allow-save`, and
+      no `dialog:allow-message` (nor the `dialog:default` bundle that includes
+      it). The JSON is parsed and asserted by the contract test, not by
+      `cargo check`, and no `message()` call exists in `src/` or the Rust host.
+- [x] The full packaging/harness contract suite is green:
+      `node --test scripts/lib/*.test.mjs` → 131 tests, 131 pass, 0 fail
+      (includes `toolchain-alignment.test.mjs` and `clean-install.test.mjs`).
+- [x] `node scripts/harness.mjs --fast` → green (format, structure, docblocks;
+      lint/type/test skipped because the working tree is documentation-only).
+- [x] `clean-install.test.mjs` is a pure file-reading contract test (no Docker,
+      no build, no model download), so it runs inside the suite above; the
+      packaged clean-install smoke it guards stays manual.
+
+### Manual (pending)
+
+- [ ] The package/clean-install gates run on this change: `task packages`, then
+      the payload inspection and the packaged-sidecar empty-root/download smoke
+      in `docs/verification.md` §2 "Clean install (B3)". Expected unchanged: the
+      `.deb`/`.rpm`/AppImage build, no `.onnx`/`models/`/`manifest.json` in the
+      payload, and Indigo plus the ONNX Runtime 1.31.0 payload retained.
+- [ ] A real `develop` CI run on the pushed branch shows the `ci` and `windows`
+      jobs green, with Node `24.20.0` and pnpm `12.21.0` read from
+      `.nvmrc`/`packageManager` and the builder built from the pinned Dockerfile.
+      The local contract suite and `--fast` are not a substitute for a
+      clean-runner run.
+- [ ] The full closing gate stays green. The orchestrator runs the activity
+      gate, and the full `node scripts/harness.mjs` runs with the frontend
+      build, Clippy and the sidecar suite.
+
 ---
 
 **How to use this file:** go through each checkbox and mark `[x]` or `[ ]`.
 There is no reviewer agent in the two-stage harness; the user checks the
-approval boxes. Any empty box in C1–C16 blocks session close, and
+approval boxes. Any empty box in C1–C18 blocks session close, and
 `docs/harness/CHECKPOINTS.md` holds the harness-level evaluation.
