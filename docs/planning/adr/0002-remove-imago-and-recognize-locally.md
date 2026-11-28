@@ -14,7 +14,7 @@ it end to end, which temporarily removed recognition until the local pipeline
 landed. The repository now ships no Imago library, worker or native dependency,
 and `/v2/health` has no Imago fields.
 
-The easy part was deleting code. The hard part is the boundary: Ketcher 3.18's
+The easy part was deleting code. The hard part is the boundary: Ketcher's
 built-in **Recognize Molecule** control hardcodes the Imago job protocol
 (`POST {apiPath}imago/uploads`, then `GET {apiPath}imago/uploads/:id`), and it
 disables the control when `/v2/info` returns an empty `imago_versions` list. A

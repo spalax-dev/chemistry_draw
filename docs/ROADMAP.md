@@ -1,6 +1,6 @@
 # Chemistry Draw — Roadmap
 
-> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.18.x (patched for `parametrizeUrl`; upstream fix tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo, the B1 ONNX classifier gate and B2 OCSR recognition**. Phase A shipped Imago-free builds on Windows and Linux; B2 re-enables _Recognize Molecule_ through the local filter → OCSR → Indigo pipeline and its Ketcher-compatible job shim.
+> Living on the `develop` branch. Grounded in the current state of the repo (Nov 2026): Tauri v2 shell + `ketcher-react/core` 3.21.0 (patched for `parametrizeUrl` only; upstream fix ships in `3.22.0-rc.1`, tracked in [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552)), and a local Rust sidecar exposing **Indigo, the B1 ONNX classifier gate and B2 OCSR recognition**. Phase A shipped Imago-free builds on Windows and Linux; B2 re-enables _Recognize Molecule_ through the local filter → OCSR → Indigo pipeline and its Ketcher-compatible job shim.
 
 ## Overview
 
@@ -223,7 +223,7 @@ GUI check passed on the user's machine.
 **Objective:** move to a Ketcher release that includes the `parametrizeUrl` fix and ship with the language selector enabled.
 
 - **Track upstream:** monitor a published `ketcher-core`/`ketcher-react` version containing [epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552) (or equivalent). Periodically check (`pnpm info ketcher-core dist-tags`).
-- **Upgrade & depatch:** bump `ketcher-core`/`ketcher-react`, delete `patches/ketcher-core@3.18.0.patch`, remove the `patchedDependencies` entry, and run the full harness plus Recognize/Indigo flows.
+- **Upgrade & depatch:** bump `ketcher-core`/`ketcher-react`, delete `patches/ketcher-core@3.21.0.patch`, remove the `patchedDependencies` entry, and run the full harness plus Recognize/Indigo flows.
 - **Language selector:** build/configure Ketcher with the i18n/language picker enabled; verify available locales, persistence (if any), and that it doesn’t regress the custom Indigo base URL wiring.
 - **DoD:** no local Ketcher patch; green harness; language selector works in the packaged app.
 

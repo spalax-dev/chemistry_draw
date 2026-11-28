@@ -54,7 +54,7 @@
 
 ## C6 — No Imago Backend (compatibility route only)
 
-- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.46.0, verifies SHA-256 and
+- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.49.0, verifies SHA-256 and
       never vendors DLLs/`.lib` files.
 - [ ] No Imago code, worker binary, native library or packaging reference
       remains (outside `CHANGELOG.md`, `progress/history.md`, the roadmap and

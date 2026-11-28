@@ -22,7 +22,7 @@
 | -------------------------- | ------------------------------ | -------------------------------- | -------------------------------------------- | ------------------- |
 | Sidecar HTTP API           | `indigo-server`                | Ketcher webview; support tooling | HTTP/1.1 on `127.0.0.1:<port>`               | `/v2`               |
 | Model catalog and manifest | Sidecar (compiled + generated) | Sidecar registry; setup UI       | Embedded JSON + `<model root>/manifest.json` | schema 1            |
-| Ketcher job protocol       | Sidecar (shim)                 | Ketcher `RemoteStructService`    | HTTP POST + poll (`/v2/imago/uploads`)       | Ketcher 3.18        |
+| Ketcher job protocol       | Sidecar (shim)                 | Ketcher `RemoteStructService`    | HTTP POST + poll (`/v2/imago/uploads`)       | Ketcher 3.21        |
 | Tauri IPC commands         | Tauri host                     | Ketcher webview                  | `invoke` over Tauri IPC                      | Tauri v2            |
 | Host ↔ sidecar process     | Tauri host                     | `indigo-server`                  | Spawn, environment, stdout, stdin            | —                   |
 | Sidecar ↔ Indigo           | `libindigo` / renderer         | `ffi/`                           | C ABI                                        | Indigo platform pin |
@@ -181,7 +181,7 @@ low-confidence decode is still `200`.
 
 ### 3.5 Ketcher compatibility shim
 
-Ketcher 3.18's `RemoteStructService.recognize()` hardcodes this protocol. The
+Ketcher 3.21's `RemoteStructService.recognize()` hardcodes this protocol. The
 route name is Ketcher's; the pipeline behind it is local.
 
 | Method | Path                              | Contract                                                                                                                                                                                                                |
@@ -404,7 +404,8 @@ ADR 0009. The rules that must not be broken are:
   imported structure is serialized back to KET for its snapshot, so it restores
   on the next launch.
 - Export images use `ketcher.generateImage(ket, { outputFormat })`;
-  `exportImage` is not used because Ketcher 3.18 supports only SVG there.
+  `exportImage` is not used because it supports only SVG, while `generateImage`
+  covers both formats.
 - The window title and dialog copy use the active tab's title: the base name
   without `.ket` (`benzene`), then `name`, then `Untitled`, plus `*` while dirty
   (`benzene*`). The strip paints a dot instead of the asterisk.

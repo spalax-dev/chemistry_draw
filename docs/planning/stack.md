@@ -5,7 +5,8 @@
 >
 > **Reconstructed from the manifests and lockfiles on 2026-11-21.** Versions are
 > the dependencies declared in this repository, not a promise about the next
-> release.
+> release. Updated for the Ketcher 3.21.0/Indigo 1.49.0 policy in US-07 on
+> 2026-11-28 (ADR 0011); the dependency activity lands the manifests.
 
 ## 1. Runtime and language
 
@@ -14,9 +15,10 @@
 - **Systems language:** Rust, edition 2021, stable toolchain (`dtolnay/rust-toolchain@stable`
   in CI). The workspace is the repository root: `src-tauri` and
   `src-tauri/sidecar`.
-- **JavaScript runtime:** Node.js 22 in CI. pnpm 11 in CI (`pnpm/action-setup@v4`);
-  a newer local pnpm still resolves the committed `pnpm-lock.yaml`, and CI is
-  the authoritative version.
+- **JavaScript runtime:** Node.js **24.20.0** is the floor (`>=24.20.0 <25`),
+  pinned in `.nvmrc`; Ketcher 3.21 requires it. pnpm is installed through
+  Corepack, and `packageManager` in `package.json` is the authoritative version;
+  CI and the Docker builder resolve the latest 24.x.
 - **Style:** one formatter and one linter per language, enforced by the harness —
   Prettier 3.9.10 + ESLint 10.14 (typescript-eslint 8.72, react-hooks 7.1) for
   TypeScript/TSX/CSS/JSON/YAML/Markdown; rustfmt + Clippy `-D warnings` for Rust;
@@ -24,23 +26,23 @@
 
 ## 2. Frameworks and libraries
 
-| Concern           | Choice                                                                                       | Why                                                                                                   | ADR  |
-| ----------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---- |
-| Desktop shell     | Tauri v2 (host crate `2`, CLI and JS API `2.12.4`)                                           | Small native shell over the system WebView; Rust host for process supervision                         | —    |
-| UI framework      | React 18.3.1 + React DOM 18.3.1                                                              | Ketcher is a React component tree; matching its major version avoids duplicate React copies           | —    |
-| Chemical editor   | `ketcher-react` / `ketcher-core` 3.18.0 (patched)                                            | The product is a Ketcher packaging; the patch carries the `parametrizeUrl` fix and the `ReBond` guard | 0005 |
-| Build tool        | Vite 6.0.3, `@vitejs/plugin-react` 4.3, `vite-plugin-node-polyfills`                         | Ketcher's bundles expect a few browser globals; the alias keeps saves on Tauri's filesystem           | —    |
-| HTTP sidecar      | axum 0.7 + tokio 1 (full)                                                                    | Small, typed HTTP surface on a loopback port; async keeps Indigo responsive during ML work            | —    |
-| HTTP middleware   | tower-http 0.5 (`cors`, `trace`)                                                             | The webview origin differs from the loopback server; trace logs every route                           | —    |
-| Serialization     | serde 1 + serde_json 1                                                                       | JSON for the Indigo API, model status and error envelope                                              | —    |
-| Native chemistry  | Indigo and Indigo Renderer via C FFI                                                         | The product replaces Ketcher's WASM backend with the native library                                   | 0002 |
-| ONNX binding      | `ort` 2.0.0-rc.15, `default-features = false`, `std` + `api-31` + `load-dynamic`             | No link-time dependency; the shipped runtime is selected at process start                             | 0003 |
-| Inference runtime | ONNX Runtime 1.31.0 (CPU)                                                                    | Pinned, shipped, SHA-256 verified; no Python or TensorFlow at runtime                                 | 0003 |
-| Image decoding    | `image` 0.25 (png, jpeg, webp only)                                                          | The three accepted upload formats; bounded decoder limits are part of the contract                    | —    |
-| Model download    | reqwest 0.12 (`rustls-tls`, `stream`) + futures-util 0.3                                     | Streaming bodies for progress and cancellation; rustls avoids an OpenSSL link dependency              | 0004 |
-| Checksums         | sha2 0.10                                                                                    | Artifact and manifest verification                                                                    | 0004 |
-| Disk preflight    | fs2 0.4                                                                                      | Cross-platform free-space probe before a download                                                     | 0004 |
-| Logging           | `tracing` 0.1 + `tracing-subscriber` 0.3 (sidecar), `log` 0.4 + `tauri-plugin-log` (host/UI) | One rotating file plus stdout; the host forwards sidecar output                                       | —    |
+| Concern           | Choice                                                                                        | Why                                                                                                                          | ADR        |
+| ----------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Desktop shell     | Tauri v2 (host crate `2`, CLI and JS API `2.12.4`)                                            | Small native shell over the system WebView; Rust host for process supervision                                                | —          |
+| UI framework      | React 18.3.1 + React DOM 18.3.1                                                               | Ketcher is a React component tree; matching its major version avoids duplicate React copies                                  | —          |
+| Chemical editor   | `ketcher-core` 3.21.0 (patched) and `ketcher-react` 3.21.0 (committed multi-language tarball) | The product is a Ketcher packaging; the patch is narrowed to `parametrizeUrl`, and the tarball carries the language selector | 0005, 0011 |
+| Build tool        | Vite 6.0.3, `@vitejs/plugin-react` 4.3, `vite-plugin-node-polyfills`                          | Ketcher's bundles expect a few browser globals; the alias keeps saves on Tauri's filesystem                                  | —          |
+| HTTP sidecar      | axum 0.7 + tokio 1 (full)                                                                     | Small, typed HTTP surface on a loopback port; async keeps Indigo responsive during ML work                                   | —          |
+| HTTP middleware   | tower-http 0.5 (`cors`, `trace`)                                                              | The webview origin differs from the loopback server; trace logs every route                                                  | —          |
+| Serialization     | serde 1 + serde_json 1                                                                        | JSON for the Indigo API, model status and error envelope                                                                     | —          |
+| Native chemistry  | Indigo and Indigo Renderer via C FFI                                                          | The product replaces Ketcher's WASM backend with the native library                                                          | 0002       |
+| ONNX binding      | `ort` 2.0.0-rc.15, `default-features = false`, `std` + `api-31` + `load-dynamic`              | No link-time dependency; the shipped runtime is selected at process start                                                    | 0003       |
+| Inference runtime | ONNX Runtime 1.31.0 (CPU)                                                                     | Pinned, shipped, SHA-256 verified; no Python or TensorFlow at runtime                                                        | 0003       |
+| Image decoding    | `image` 0.25 (png, jpeg, webp only)                                                           | The three accepted upload formats; bounded decoder limits are part of the contract                                           | —          |
+| Model download    | reqwest 0.12 (`rustls-tls`, `stream`) + futures-util 0.3                                      | Streaming bodies for progress and cancellation; rustls avoids an OpenSSL link dependency                                     | 0004       |
+| Checksums         | sha2 0.10                                                                                     | Artifact and manifest verification                                                                                           | 0004       |
+| Disk preflight    | fs2 0.4                                                                                       | Cross-platform free-space probe before a download                                                                            | 0004       |
+| Logging           | `tracing` 0.1 + `tracing-subscriber` 0.3 (sidecar), `log` 0.4 + `tauri-plugin-log` (host/UI)  | One rotating file plus stdout; the host forwards sidecar output                                                              | —          |
 
 Rule: a new runtime dependency needs a reason and a lockfile update. A new
 _foundational_ dependency (a framework, a runtime, a protocol client) needs an
@@ -51,7 +53,8 @@ ADR.
 - **Native libraries are generated, never vendored.** Linux builds Indigo and
   Indigo Renderer inside `chemistry-builder` (Debian 12) and copies them with
   `task libs` into `src-tauri/lib/linux-x86_64/` (gitignored). Windows downloads
-  the pinned Indigo 1.46.0 archive with `scripts/fetch-windows-libs.ps1`.
+  the pinned Indigo 1.49.0 archive with `scripts/fetch-windows-libs.ps1`. Linux
+  pins the `indigo-1.49.0` tag in the builder with a version guard.
 - **ONNX Runtime** is shipped as 1.31.0 on both platforms, fetched from the
   official `Microsoft.ML.OnnxRuntime` NuGet package (the GitHub release assets
   are gone), SHA-256 verified, and loaded dynamically.
@@ -127,11 +130,6 @@ produces artifacts; a release publishes the same installers CI validated.
 
 ## 8. Pending decisions
 
-- **Ketcher 3.21 and Indigo 1.49.0 on 1.x** — US-07. Stable 3.21.0 does **not**
-  contain the upstream `parametrizeUrl` fix, so a narrowed patch remains; the
-  ReBond fix is upstream. The source-built multi-language `ketcher-react`
-  tarball needs its own ADR. Redo on `develop`; the parked
-  `wip/e1-develop-based`/`phase-e1-ketcher-indigo` prototypes are reference only.
 - **Documentation generator pinning** — the generator is wired through
   `scripts/docsgen.sh`, which prefers a local TypeDoc and falls back to a pinned
   `npx` version. Whether TypeDoc becomes a `devDependency` is a harness decision.
@@ -151,7 +149,8 @@ produces artifacts; a release publishes the same installers CI validated.
 ## 9. Reverse ADRs for baked-in choices
 
 These decisions were already in the code when the foundation was reconstructed.
-They are recorded as accepted with their reconstruction date:
+They are recorded as accepted with their reconstruction date, together with the
+later version pin taken in US-07:
 
 | ADR                                                    | Decision                                                        |
 | ------------------------------------------------------ | --------------------------------------------------------------- |
@@ -161,3 +160,4 @@ They are recorded as accepted with their reconstruction date:
 | [0005](adr/0005-ketcher-parametrizeurl-patch.md)       | Patch Ketcher per version through pnpm, never `node_modules`    |
 | [0006](adr/0006-ocsr-single-model-parity.md)           | One hand-drawn OCSR model with a calibrated parity gate         |
 | [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                   |
+| [0011](adr/0011-adopt-ketcher-321-on-1x.md)            | Adopt Ketcher 3.21.0 and Indigo 1.49.0 on 1.x                   |

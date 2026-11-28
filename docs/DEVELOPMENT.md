@@ -304,7 +304,7 @@ mkdir -p build/appimage
 
 ## Windows 10/11 (x86_64)
 
-Windows uses the prebuilt EPAM Indigo 1.46.0 DLLs instead of the Docker
+Windows uses the prebuilt EPAM Indigo 1.49.0 DLLs instead of the Docker
 builder. It runs the same sidecar as Linux; B2 re-enables Recognize Molecule
 through the local filter + OCSR pipeline and its Ketcher-compatible job shim.
 
@@ -312,7 +312,7 @@ Prerequisites:
 
 - Visual Studio Build Tools with **Desktop development with C++** (MSVC x64 +
   Windows SDK)
-- Rust stable MSVC toolchain, Node.js ≥ 22, pnpm and PowerShell 5.1+
+- Rust stable MSVC toolchain, Node.js ≥ 24.20.0, pnpm (through Corepack) and PowerShell 5.1+
 - WebView2 Runtime (included in Windows 11; the installer embeds the
   bootstrapper for Windows 10)
 
