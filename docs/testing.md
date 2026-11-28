@@ -182,27 +182,36 @@ Rules:
 
 ### 4.3 Ketcher patch contract
 
-`patches/ketcher-core@3.18.0.patch` is configuration the editor depends on, so a
-contract test (Vitest, alongside the capability test) reads the real patch file
-and the installed `dist/` and asserts the guards survive a reinstall:
+`patches/ketcher-core@3.21.0.patch` is configuration the editor depends on, so
+the contract is split across two layers: the manifest-level check reads the real
+patch file and the installed `dist/` (Node's built-in runner,
+`scripts/lib/e1-ketcher.test.mjs`), and the executed-bundle check runs the
+installed helper (Vitest, `src/ketcherPatch.test.ts`).
 
-| Target                                      | Assertion                                                                                                                                                                       |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `patches/ketcher-core@3.18.0.patch`         | contains the `ReBond.getSelectionPoints` half-bond guards for both `dist/application/render/restruct/rebond.js` and `rebond.modern.js`                                          |
-| installed `ketcher-core` `rebond.modern.js` | the patched `getSelectionPoints` returns early on a missing half-bond, `getSelectionContour` returns `null` on an empty list, and the plate/`drawHover` helpers no-op on `null` |
+| Target                                         | Test                   | Assertion                                                                                                                                                                                              |
+| ---------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `patches/ketcher-core@3.21.0.patch`            | `e1-ketcher.test.mjs`  | contains exactly the `parametrizeUrl` hunks for both `dist/infrastructure/services/struct/remoteStructService.js` and `remoteStructService.modern.js`, one hunk each, and no `rebond`/`halfBonds` hunk |
+| installed `ketcher-core` `remoteStructService` | `e1-ketcher.test.mjs`  | both dist builds carry the narrowed `:([A-Za-z_]\w*)` regex and the `hasOwnProperty.call(params, key)` guard, and no `:(\w+)` matcher                                                                  |
+| installed `ketcher-core` poll URL              | `ketcherPatch.test.ts` | executing the installed `parametrizeUrl` with `{ id: "abc" }` keeps the explicit port (`http://127.0.0.1:9321/v2/imago/uploads/abc`), and an undeclared `:id` stays literal                            |
 
 Rules:
 
 - Assert the real files, not a fixture. Removing either the `.js` or the
-  `.modern.js` hunk, or removing a guard from the installed bundle, must make
-  the test fail.
-- The test reads the patch text and the installed `node_modules/ketcher-core`
-  file; it does not run Ketcher. The end-to-end behaviour — hovering/selecting a
-  bond with a stale half-bond without an error flood — is the manual step in
-  `docs/verification.md` §2, "Ketcher render robustness".
-- Keep the assertions narrow: the `parametrizeUrl` hunk is covered by its own
-  upstream regression, so this test names only the ReBond guard symbols and the
-  two dist paths.
+  `.modern.js` hunk, restoring `:(\w+)`, re-adding a `ReBond` hunk or removing a
+  guard from the installed bundle must make a test fail.
+- The Node test reads the patch text and the installed
+  `node_modules/ketcher-core` files; it does not execute them. The Vitest test
+  evaluates the exact installed `parametrizeUrl` source with `new Function`, so
+  it is the real installed helper, not a copy of the expected implementation;
+  it still does not run Ketcher.
+- The end-to-end behaviour — Recognize polling `/v2/imago/uploads/:id` through
+  an `apiPath` with an explicit port — remains the manual recognition check in
+  `docs/verification.md`.
+- Keep the assertions narrow: the `ReBond` guard is upstream in 3.21.0, so both
+  tests name only the `parametrizeUrl` symbols and the two `remoteStructService`
+  dist paths. `e1-ketcher.test.mjs` runs in `node --test` and in the harness
+  block that auto-discovers `scripts/lib/*.test.mjs`; `ketcherPatch.test.ts` runs
+  in `pnpm test`.
 
 ---
 

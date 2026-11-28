@@ -32,7 +32,7 @@
 ├── .opencode/                    agent roles and the harness-guard plugin
 ├── .harness/                     stage and schedule state (ignored)
 ├── patches/
-│   └── ketcher-core@3.18.0.patch
+│   └── ketcher-core@3.21.0.patch
 ├── public/
 │   └── raphael.min.js
 ├── src/                          frontend source and colocated tests

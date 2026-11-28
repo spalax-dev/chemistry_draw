@@ -1,9 +1,15 @@
 # 0005 — Patch Ketcher per version through pnpm
 
-- **Status:** accepted
+- **Status:** accepted; superseded in part by [0011](0011-adopt-ketcher-321-on-1x.md) (the 3.21.0 patch replaces the 3.18.0 file and drops the ReBond hunk; the per-version patch principle stands)
 - **Date:** 2026-11-21 (reconstructed from the code on 2026-11-21; decided during 0.1.x)
 - **Activity:** planning reconstruction (pre-development)
 - **Deciders:** Repository owner
+
+> **History note.** This ADR records the 3.18.0 decision as it stood. US-07
+> moved the 1.x line to Ketcher 3.21.0 under ADR 0011: the patch file is now
+> `patches/ketcher-core@3.21.0.patch`, narrowed to `parametrizeUrl`, because the
+> ReBond guard is upstream. The rules below are unchanged; only the version and
+> the hunk list moved.
 
 ## Context
 
@@ -32,6 +38,7 @@ Patch Ketcher through pnpm's `patchedDependencies`, never by editing
 1. **One patch file per package version:**
    `patches/ketcher-core@3.18.0.patch`, registered in `pnpm-workspace.yaml`. A new
    Ketcher version gets a new file; an existing one is never renamed or widened.
+   For 3.21.0 that file is `patches/ketcher-core@3.21.0.patch` (ADR 0011).
 2. **Mirror every hunk for both bundles** (`dist/**/*.js` and
    `dist/**/*.modern.js`), because the app may resolve either build.
 3. **Every hunk cites its origin** — the upstream issue/PR and the exact `dist/`
@@ -61,16 +68,17 @@ The manual reproduction and removal procedure for `parametrizeUrl` live in
   reviewable with its upstream reference, and a Ketcher upgrade has an explicit
   removal checklist.
 - **Negative:** a patch is a maintenance debt tied to a version; every upgrade
-  must re-check both bundles and the patch-contract test. The 3.18 patch is not
+  must re-check both bundles and the patch-contract test. The 3.18 patch was not
   the long-term fix.
-- **Follow-up:** US-07 adopts Ketcher 3.21 and Indigo 1.49.0, which removes the
-  `parametrizeUrl` hunk; the prototype branch already carries a
-  `patches/ketcher-core@3.21.0.patch` and must not be merged as-is.
+- **Follow-up:** US-07 adopted Ketcher 3.21.0 and Indigo 1.49.0 (ADR 0011). The
+  ReBond hunk is gone because it is upstream; the `parametrizeUrl` hunk remains
+  as `patches/ketcher-core@3.21.0.patch` until stable 3.22.0 publishes the
+  upstream fix.
 
 ## References
 
 - `docs/KETCHER-BUG-parametrizeUrl.md`.
 - `docs/planning/architecture.md` §11 "Temporary workarounds".
 - `docs/conventions.md` §12 "Vendored Ketcher patches".
-- `patches/ketcher-core@3.18.0.patch`, `pnpm-workspace.yaml`.
-- Related ADRs: 0007 (line model, because E1 is main-only).
+- `patches/ketcher-core@3.18.0.patch` (historical), `patches/ketcher-core@3.21.0.patch`, `pnpm-workspace.yaml`.
+- Related ADRs: 0007 (line model, because E1 is main-only), 0011 (3.21.0 adoption).

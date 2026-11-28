@@ -54,7 +54,7 @@
 
 ## C6 — No Imago Backend (compatibility route only)
 
-- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.46.0, verifies SHA-256 and
+- [ ] `scripts/fetch-windows-libs.ps1` pins Indigo 1.49.0, verifies SHA-256 and
       never vendors DLLs/`.lib` files.
 - [ ] No Imago code, worker binary, native library or packaging reference
       remains (outside `CHANGELOG.md`, `progress/history.md`, the roadmap and
@@ -543,6 +543,63 @@
 - [x] `docs/architecture.md`, `docs/testing.md`, `docs/verification.md` and
       `docs/ROADMAP.md` are updated; `node scripts/harness.mjs` is green; the
       working tree is left uncommitted for user approval.
+
+## C17 — Ketcher 3.21.0 / Indigo 1.49.0 adoption (US-07)
+
+> Evidence contract for US-07. The automated rows were run in this repository on
+> the story branch `us-07-ketcher-321`; the manual rows are **pending** until a
+> packaged build is exercised on the user's machine. A row that was not run is
+> `[ ]`, never "green by inspection".
+
+### Automated
+
+- [x] The exact dependency pins hold: `ketcher-core`/`ketcher-react` are 3.21.0,
+      `ketcher-react` resolves to the committed
+      `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz`, the 3.18 patch is
+      gone and `pnpm-workspace.yaml` patches exactly
+      `ketcher-core@3.21.0`. `node --test scripts/lib/e1-ketcher.test.mjs
+scripts/lib/e1-indigo.test.mjs` → 12 tests, 12 pass, 0 fail.
+- [x] The narrowed patch is the only divergence: the patch has exactly the two
+      `parametrizeUrl` hunks (`.js` and `.modern.js`), no `ReBond`/`halfBonds`
+      hunk, and the installed bundle carries the narrowed regex and
+      own-property guard (`e1-ketcher.test.mjs`). Executing the installed
+      `parametrizeUrl` keeps the explicit port
+      (`http://127.0.0.1:9321/v2/imago/uploads/abc`) and leaves an undeclared
+      `:id` literal (`src/ketcherPatch.test.ts`, 3 tests).
+- [x] Indigo is pinned to `indigo-1.49.0` on both platforms: the Linux builder
+      clones the tag with a checkout guard and the Windows fetch pins the 1.49.0
+      archive SHA-256 (`e1-indigo.test.mjs`).
+- [x] `/v2/info` reports Indigo 1.49.0 from the built sidecar against the real
+      `src-tauri/lib/linux-x86_64` libraries: `GET /v2/info` → `200` with
+      `indigo_version` `1.49.0.0-g92d2821-x86_64-linux-gnu-12.2.0`. With
+      `models/` present it also advertises `imago_versions: ["local-ocsr"]`.
+- [x] The toolbar/dialog/option-store/recognition contracts still hold on 3.21
+      at the unit level: `pnpm test` → 21 files, 484 tests, all pass (includes
+      `ketcherOptions`, `ketcherPatch`, `recognizeErrors`, `modelSetup`,
+      `editorButtons`, `tokens`).
+- [x] The frontend typechecks: `pnpm exec tsc --noEmit` → exit 0.
+- [x] `node scripts/harness.mjs --fast` → green (format, structure, docblocks;
+      lint/type/test skipped because the working tree is documentation-only).
+
+### Manual (pending)
+
+- [ ] The full harness and the closing gate are green:
+      `node scripts/harness.mjs --activity ACT-05` (the orchestrator runs it) and
+      the full `node scripts/harness.mjs` with the frontend build, Clippy and the
+      sidecar suite.
+- [ ] The language selector works in the **packaged** app, switches between
+      English and Simplified Chinese, persists
+      `localStorage["ketcher-language"]` across a relaunch, and does not regress
+      the sidecar API base wiring (drawing, Recognize and Export still reach the
+      sidecar). Steps in `docs/verification.md` §2 "Ketcher 3.21 / Indigo 1.49
+      adoption (US-07)".
+- [ ] The packaged smoke runs against the packaged payload: the sidecar answers
+      `/v2/info` with 1.49.0, Recognize/Indigo flows work, and no artifact
+      regresses. `task packages`/`pnpm tauri build` plus the manual checklist are
+      the user's closing gate.
+- [ ] The GUI toolbar, Export/close-guard dialogs, the Models setup dialog and
+      Recognize Molecule behave as documented on 3.21 (the contracts are
+      unit-tested, the rendering is not).
 
 ---
 

@@ -6,7 +6,8 @@
 > authoritative for shipped behaviour.
 >
 > **Reconstructed from the code on 2026-11-21.** Updated for the US-01 port of
-> the `main` 0.1.8 backstage/file workflow (ADR 0009); the 1.x ML surface is
+> the `main` 0.1.8 backstage/file workflow (ADR 0009) and for the Ketcher
+> 3.21.0/Indigo 1.49.0 policy in US-07 (ADR 0011); the 1.x ML surface is
 > unchanged. The port lands through ACT-02–ACT-05, and the detailed
 > [`docs/architecture.md`](../architecture.md) is reconciled as each surface
 > lands. Diagrams live in `docs/planning/c4/` and the flows in
@@ -39,7 +40,7 @@ Diagram: `docs/planning/c4/container.puml`.
 
 | Container               | Technology                                                        | Responsibility                                                                                                                                                |
 | ----------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ketcher webview         | React 18, TypeScript, Vite 6, `ketcher-react`/`ketcher-core` 3.18 | Backstage, editor tabs, File menu, recent structures, document workflow, in-app dialogs, model setup UI, error mapping                                        |
+| Ketcher webview         | React 18, TypeScript, Vite 6, `ketcher-react`/`ketcher-core` 3.21 | Backstage, editor tabs, File menu, recent structures, document workflow, in-app dialogs, model setup UI, error mapping                                        |
 | Tauri host              | Rust, Tauri v2                                                    | Window lifecycle, free-port selection, sidecar spawn/supervision, environment, log forwarding, two IPC commands                                               |
 | `indigo-server` sidecar | Rust, axum 0.7, tokio 1                                           | `/v2` HTTP API: Indigo operations, filter, OCSR, model delivery, Ketcher job shim, health                                                                     |
 | Model store             | Filesystem under `<app_data>/models`                              | `manifest.json` plus the classifier, encoder, decoder and vocabulary artifacts                                                                                |
@@ -301,6 +302,7 @@ shape this architecture are:
 | [0007](adr/0007-two-line-repository-model.md)          | Maintain two repository lines                                             |
 | [0009](adr/0009-update-1x-from-main-baseline.md)       | Update 1.x from the `main` 0.1.8 baseline, keeping the 1.x ML surface     |
 | [0010](adr/0010-app-integration-and-model-surface.md)  | One command path, two entry points: workflow from `main`, Models from 1.x |
+| [0011](adr/0011-adopt-ketcher-321-on-1x.md)            | Adopt Ketcher 3.21.0 and Indigo 1.49.0 on the 1.x line                    |
 
 If a story changes the architecture, it must update this document and add an ADR
 in the same activity.

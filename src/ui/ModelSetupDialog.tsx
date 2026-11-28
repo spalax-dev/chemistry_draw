@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { Ketcher } from "ketcher-core";
 
-import { applyKetcherAppOptions, findKetcherRoot } from "../ketcherOptions";
+import { applyKetcherAppOptions } from "../ketcherOptions";
 import {
   cancelModelDownload,
   fetchModelsStatus,
@@ -468,8 +468,7 @@ export function useModelSetup({
         return;
       }
 
-      const container = findKetcherRoot(ketcher);
-      if (!applyKetcherAppOptions(container, { server: true, imagoVersions: versions })) {
+      if (!applyKetcherAppOptions(ketcher, { server: true, imagoVersions: versions })) {
         console.warn(
           "[chemistry-draw] could not update the Ketcher option store; " +
             "the Recognize control may need a restart.",

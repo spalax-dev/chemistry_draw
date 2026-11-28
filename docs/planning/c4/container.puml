@@ -6,7 +6,7 @@ title Chemistry Draw (1.x line) — Containers
 Person(user, "Chemist, teacher or student", "Uses the editor, documents and recognition")
 
 System_Boundary(app, "Chemistry Draw desktop application") {
-  Container(webview, "Ketcher webview", "React 18, TypeScript, Vite 6, ketcher-react / ketcher-core 3.18", "Backstage, editor tabs, File menu, recent structures, document workflow, in-app dialogs, model setup UI, error mapping")
+  Container(webview, "Ketcher webview", "React 18, TypeScript, Vite 6, ketcher-react / ketcher-core 3.21", "Backstage, editor tabs, File menu, recent structures, document workflow, in-app dialogs, model setup UI, error mapping")
 
   Container(host, "Tauri host", "Rust, Tauri v2", "Window lifecycle, free-port selection, sidecar spawn/supervision, environment, log forwarding, indigo_port and log_dir commands")
 

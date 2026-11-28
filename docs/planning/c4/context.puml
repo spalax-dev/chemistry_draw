@@ -5,7 +5,7 @@ title Chemistry Draw (1.x line) — System Context
 
 Person(user, "Chemist, teacher or student", "Draws structures, saves .ket documents, exports formats and recognizes structures from images")
 
-System(chemistry_draw, "Chemistry Draw", "Offline desktop chemical structure editor: Tauri v2 shell, backstage and document tabs over an embedded Ketcher 3.18 editor, native Indigo sidecar and local ONNX inference")
+System(chemistry_draw, "Chemistry Draw", "Offline desktop chemical structure editor: Tauri v2 shell, backstage and document tabs over an embedded Ketcher 3.21 editor, native Indigo 1.49.0 sidecar and local ONNX inference")
 
 System_Ext(os_runtime, "Desktop OS runtime", "Window, WebView (WebView2 on Windows, WebKitGTK on Linux), file dialogs, app-data and log directories, process control")
 

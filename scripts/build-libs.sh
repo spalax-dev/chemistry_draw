@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# Builds the generated native libraries for the Linux sidecar.
+#
+# Indigo is pinned to the stable `indigo-1.49.0` tag (git refs are lowercase;
+# the GitHub release is named `Indigo-1.49.0`) and cloned with `--depth 1
+# --branch`. `master` reports a `1.51.0-dev...` version string through
+# /v2/info, which the E1 contract rejects, so a tag guard fails the build when
+# HEAD is not exactly the pinned tag. Windows uses the same 1.49.0 release
+# through scripts/fetch-windows-libs.ps1, which verifies the downloaded ZIP's
+# SHA-256; see ADR 0011.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,8 +24,15 @@ if ls src-tauri/lib/linux-x86_64/*.so* &>/dev/null; then
 fi
 
 # ----- Repo 1: Build Indigo -----
-echo "==> Cloning Indigo..."
-git clone --depth 1 https://github.com/epam/Indigo.git /tmp/indigo
+# Pinned to the stable `indigo-1.49.0` tag; `master` reports a `1.51.0-dev...`
+# version string through /v2/info, which the E1 contract rejects.
+INDIGO_TAG=indigo-1.49.0
+echo "==> Cloning Indigo ${INDIGO_TAG}..."
+git clone --depth 1 --branch indigo-1.49.0 https://github.com/epam/Indigo.git /tmp/indigo
+if ! git -C /tmp/indigo tag --points-at HEAD | grep -qx "$INDIGO_TAG"; then
+  echo "ERROR: /tmp/indigo is not at the pinned $INDIGO_TAG tag." >&2
+  exit 1
+fi
 
 echo "==> Building Indigo..."
 mkdir -p /tmp/indigo/build

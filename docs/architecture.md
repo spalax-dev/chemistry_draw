@@ -26,7 +26,7 @@ community packaging: it is not an official EPAM product.
 | ----------------- | --------------------------------------------------------------------------------------------- |
 | Desktop shell     | Tauri v2 (Rust)                                                                               |
 | Frontend          | React 18 + TypeScript + Vite                                                                  |
-| Editor            | `ketcher-react` / `ketcher-core` 3.18.x (patched, see §11)                                    |
+| Editor            | `ketcher-react` / `ketcher-core` 3.21.0 (patched, see §11)                                    |
 | Chemistry backend | `indigo-server` sidecar: Rust + axum                                                          |
 | Native chemistry  | `libindigo`, `libindigo-renderer` (FFI)                                                       |
 | Image inference   | ONNX Runtime 1.31.0 (shipped) via `ort` 2.0.0-rc.15 (dynamic, CPU, DECIMER classifier + OCSR) |
@@ -216,8 +216,8 @@ prompts.
 
 Image formats render through `generateImage`, which returns a `Blob` that goes
 through the same save dialog as the text formats. `ketcher.exportImage` is
-deliberately **not** used: in Ketcher 3.18 it supports only `"svg"` and throws
-for `"png"`, while `generateImage` covers both through the same save route.
+deliberately **not** used: it supports only `"svg"` and throws for `"png"`,
+while `generateImage` covers both through the same save route.
 
 `getSdf`, `getCml`, `getCDXml` and `getRxn` exist on the same API if more
 export entries are added later, but they are not part of this contract.
@@ -305,7 +305,7 @@ Ketcher API used:
 - Dirty signal: `ketcher.changeEvent` (`add` / `remove`).
 - Export: `getMolfile(format)`, `getSmiles()`, `getInchi()`, and
   `generateImage(ket, { outputFormat: "svg" | "png" })` for image formats.
-  `exportImage` is not used: it supports only SVG in Ketcher 3.18, while
+  `exportImage` is not used: it supports only SVG, while
   `generateImage` covers SVG and PNG through the same route.
 - Import of non-`.ket` files: `ketcher.setMolecule` (Open prefers `.ket`;
   other formats go through the same Ketcher API).
@@ -1171,10 +1171,10 @@ Recognize control disabled. When a status report becomes `ready: true`, the app
 fetches `/v2/info` and copies its `imago_versions` array into Ketcher's option
 store through `src/ketcherOptions.ts`.
 
-Ketcher 3.18's `ketcher.editor.options()` is **not** that store: it rebuilds the
-render (clears the client area and recreates the canvas) and leaves the React
-store's `app.imagoVersions` and the toolbar `actionState` unchanged, so the
-Recognize control stays disabled. The adapter therefore locates the store from
+The published Ketcher's `ketcher.editor.options()` is **not** that store: it
+rebuilds the render (clears the client area and recreates the canvas) and leaves
+the React store's `app.imagoVersions` and the toolbar `actionState` unchanged, so
+the Recognize control stays disabled. The adapter therefore locates the store from
 the `.Ketcher-root` React container and dispatches Ketcher's own
 `APP_OPTIONS` + `UPDATE` pair, followed by a no-op `ACTION` (the action shape
 the toolbar dispatches) so the derived `recognize.disabled` flag is recomputed:
@@ -1246,7 +1246,7 @@ it. The muted attention notice is rendered by
 verify-capable dialog (`setupView(...).canVerify`) and with no Repair report, so
 the note appears exactly when Verify is the action it points at.
 
-**Private-internals risk.** `src/ketcherOptions.ts` reaches into Ketcher 3.18's
+**Private-internals risk.** `src/ketcherOptions.ts` reaches into Ketcher's
 React fiber and Redux store because the public `editor.options()` API only
 rebuilds the render and never updates the toolbar. The adapter is deliberately
 defensive: it optional-chains the `clientArea.closest` lookup, caps the fiber
@@ -1660,7 +1660,7 @@ a complete low-confidence decode.
 > **Status:** implemented by activity 9 (`phase-b2-recognize-e2e`). This
 > subsection describes the shipped contract and the tests that pin it.
 
-**Why a shim.** Ketcher 3.18 hardcodes the Imago job protocol in
+**Why a shim.** Ketcher hardcodes the Imago job protocol in
 `RemoteStructService.recognize()`: `POST {apiPath}imago/uploads` with the image
 blob, then `GET {apiPath}imago/uploads/:id` every 500 ms after a 300 ms
 delay. The route name is Ketcher's, not ours. The sidecar implements the
@@ -1926,7 +1926,7 @@ Indigo, Indigo Renderer and ONNX Runtime are **not vendored in git**.
   likewise contains only our libraries and resolves the platform libraries from
   the host.
 - **Windows**: `scripts/fetch-windows-libs.ps1` downloads the pinned EPAM
-  Indigo **1.46.0** x86_64 archive, verifies its SHA-256, extracts
+  Indigo **1.49.0** x86_64 archive, verifies its SHA-256, extracts
   `indigo.dll`, `indigo-renderer.dll`, `msvcp140.dll`, `vcruntime140.dll` and
   `vcruntime140_1.dll` into `src-tauri/lib/windows-x86_64/` (gitignored) and
   generates the MSVC import libraries `indigo.lib` / `indigo-renderer.lib`
@@ -2047,25 +2047,19 @@ Version bumps are driven by release-please and must stay in sync across
 
 ## 11. Temporary workarounds
 
-`ketcher-core` 3.18.0 has a bug in `parametrizeUrl` that turns the port in
-`127.0.0.1:9321` into a placeholder. We ship `patches/ketcher-core@3.18.0.patch`
-(registered in `pnpm-workspace.yaml`). Upstream fixed it in
-[epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552) but has not
-published a release with the fix yet. Removal procedure:
-`docs/KETCHER-BUG-parametrizeUrl.md`.
+`ketcher-core` 3.21.0 has a bug in `parametrizeUrl` that turns the port in
+`127.0.0.1:9321` into a placeholder. We ship
+`patches/ketcher-core@3.21.0.patch` (registered in `pnpm-workspace.yaml`).
+Upstream fixed it in
+[epam/ketcher#12552](https://github.com/epam/ketcher/pull/12552), which ships in
+`3.22.0-rc.1` but not in the `3.21.0` stable release; the patch remains until a
+stable `3.22.0`. Removal procedure: `docs/KETCHER-BUG-parametrizeUrl.md`.
 
-The same patch file guards `ReBond` against a struct/render desync. When a bond
-still references a half-bond that is no longer in `restruct.molecule.halfBonds`
-(invalid-valence edits, undo of deletions), `ReBond.getSelectionPoints` dereferences
-`undefined` (`halfBonds.get(bond.hb1).p`) and throws every frame, flooding the
-console with uncaught render-loop errors. The patch mirrors
-[epam/ketcher#11165](https://github.com/epam/ketcher/pull/11165) in both
-`dist/application/render/restruct/rebond.js` and `rebond.modern.js`: a missing
-half-bond returns an empty point list, `getSelectionContour` returns `null` for
-that list, and `makeHoverPlate`, `makeSelectionPlate`, `makeHighlitePlate` and
-`drawHover` no-op on `null`. The bond then simply renders without hover or
-selection instead of crashing. The patch rules are in `docs/conventions.md` §12
-and the manual check is in `docs/verification.md` §2.
+The patch is narrowed to `parametrizeUrl` only. The 3.18.0 patch also guarded
+`ReBond` against a struct/render desync; that fix is upstream in 3.21.0
+([epam/ketcher#11165](https://github.com/epam/ketcher/pull/11165)), so its
+`rebond.js` / `rebond.modern.js` hunks were dropped. The patch rules are in
+`docs/conventions.md` §12 and the manual check is in `docs/verification.md` §2.
 
 ---
 

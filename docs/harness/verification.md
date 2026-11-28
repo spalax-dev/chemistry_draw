@@ -296,7 +296,7 @@ environment cannot drive the WebView. The user's pass uses §10.
 - **ACT-02 closed on recorded RED evidence.** The harness has no tests-first
   mode; this is a known harness gap, not a skipped gate.
 - **Packaged Indigo reports `1.51.0-dev.1`.** The builder image's Indigo differs
-  from the `1.46.0` pinned in `docs/CHECKPOINTS.md` C6 and the Windows fetch
+  from the `1.49.0` pinned in `docs/CHECKPOINTS.md` C6 and the Windows fetch
   script. US-01 did not change the native library pin; packaging/tooling drift
   belongs to US-10.
 
@@ -404,7 +404,7 @@ printf 'c1ccccc1 benzene\n' > "$PROJ/benzene.smi"
    **Untitled** tab and `+`.
 6. Click the home button: the backstage opens again on **Welcome**. The
    document, the active tab and the canvas are unchanged.
-7. Open **About**: **Chemistry Draw** shows `0.1.8`; **Ketcher** shows `3.18.0`;
+7. Open **About**: **Chemistry Draw** shows `0.1.8`; **Ketcher** shows `3.21.0`;
    **Indigo** and **Sidecar port** come from `/v2/info` (not `Unavailable` once
    the sidecar has answered); **Platform** and **Runtime** are real values and
    **Runtime** says `Desktop (Tauri)`.
