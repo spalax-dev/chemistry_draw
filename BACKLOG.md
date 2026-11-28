@@ -175,6 +175,39 @@
   - does the builder image need a Node pin bump, or only the Dockerfile install step?
   - is `dialog:allow-message` ever needed for a native flow?
 
+## US-11 — Ship a self-contained, offline-first Linux AppImage
+
+- status: pending
+- target: **`main` (0.x).** Release packaging for the 0.x line; not a 1.x story.
+  Only port it here if 1.x keeps the AppImage target.
+- value: The 0.1.x/0.2.x AppImage runs on a machine that does not have WebKitGTK
+  4.1 installed and survives starting without network, so it can be handed to
+  reviewers — and eventually listed in an AppImage catalog — instead of staying a
+  test-only artifact.
+- context: an AppImage catalog test rejected `chemistry-draw_0.1.8_amd64.AppImage`.
+  The binary links against the system `libwebkit2gtk-4.1.so.0` and glibc 2.36 and
+  aborts during startup under firejail (`error while loading shared libraries`).
+  The sidecar and the native Indigo/Imago libraries are already bundled
+  (`scripts/bundle-libs.sh`); WebKitGTK and its dependency tree are not.
+- acceptance:
+  - the AppImage starts on a clean system without `libwebkit2gtk-4.1` installed,
+    and no unresolved library remains in the AppDir
+  - the glibc floor the AppImage requires is documented, and no symbol above it
+    is required
+  - the app shows its window (or a clear message) before contacting the sidecar,
+    and a failed or unavailable sidecar does not terminate it
+  - a sandboxed no-network start is verified, not assumed
+  - the size increase and the update path from the previous release are recorded
+  - the full harness is green
+- open questions:
+  - bundle the full WebKitGTK stack (large; drags in GLib/GIO network helpers) or
+    require a documented distro floor?
+  - can the local sidecar be reached when the sandbox has no network at all, or
+    must startup be independent of it?
+  - is a catalog listing actually wanted before 1.0, or is the AppImage only for
+    reviewers until then?
+  - is this worth doing on 0.x at all, or should it be solved once for 1.0?
+
 ---
 
 ## How to add a story
