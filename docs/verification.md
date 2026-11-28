@@ -1198,6 +1198,66 @@ Windows: the NSIS payload contains `onnxruntime.dll` under
 `ORT_DYLIB_PATH`, so the packaged classifier answers `200` when the models are
 present.
 
+### Ketcher 3.21 / Indigo 1.49 adoption (US-07)
+
+The story checkpoint is C17 in `docs/CHECKPOINTS.md`. Its automated half was run
+on the `us-07-ketcher-321` branch; its manual half is **pending** until a
+packaged build is exercised. A command not listed as run here is not green.
+
+**Automated gates (run).**
+
+| Command                                                                      | Result                                                                                                       |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `node --test scripts/lib/e1-ketcher.test.mjs scripts/lib/e1-indigo.test.mjs` | 12 tests, 12 pass, 0 fail: exact 3.21.0 pins, committed multi-language tarball, narrowed patch, Indigo pins  |
+| `pnpm test`                                                                  | 21 files, 484 tests, all pass: toolbar, option store, patch, recognition, model setup and dialog-token units |
+| `pnpm exec tsc --noEmit`                                                     | exit 0                                                                                                       |
+| `node scripts/harness.mjs --fast`                                            | green (format, structure, docblocks; lint/type/test skipped on a docs-only tree)                             |
+
+The `/v2/info` version check does not need Docker or a native rebuild because
+`src-tauri/lib/linux-x86_64` already holds the 1.49.0 libraries:
+
+```bash
+cargo build -p indigo-server --bin indigo-server
+LD_LIBRARY_PATH=$PWD/src-tauri/lib/linux-x86_64 \
+  INDIGO_PORT=19472 INDIGO_NO_PARENT_WATCHDOG=1 \
+  CHEMISTRY_MODELS_DIR=$PWD/models ./target/debug/indigo-server &
+curl -s http://127.0.0.1:19472/v2/info | jq '{indigo_version, imago_versions}'
+kill %1
+```
+
+Observed: `HTTP 200` with `indigo_version`
+`1.49.0.0-g92d2821-x86_64-linux-gnu-12.2.0`; with `models/` installed,
+`imago_versions: ["local-ocsr"]`. The version string comes from the loaded
+Indigo library, so this is the real pin, not a constant. A clean model root must
+answer `imago_versions: []` (covered by the sidecar tests and `docs/verification`
+"Model delivery (B3)").
+
+**Pending manual checks (not yet verified).** These need a packaged build
+(`task packages` / `pnpm tauri build`) and a GUI, so they are the user's closing
+gate, not a CI step:
+
+1. **Language selector in the packaged app.** Launch the packaged app, open the
+   language selector, switch English → Simplified Chinese and back. Every
+   Ketcher label, menu and dialog title changes; the choice persists across a
+   relaunch in `localStorage["ketcher-language"]`. The packaged payload must
+   carry the multi-language `ketcher-react` build, not the English-only npm
+   bundle.
+2. **Sidecar wiring after the switch.** With the language changed, draw a
+   structure, run Layout/Clean, Open and Export, and Recognize Molecule with
+   `src-tauri/sidecar/fixtures/caffeine.png`. All reach the sidecar; `/v2/info`
+   still answers 1.49.0 and the API base is the bound port (no
+   `127.0.0.1undefined`).
+3. **Packaged smoke.** Run the packaged sidecar (see "Packaged sidecar, empty
+   root" and "Clean install (B3)") and confirm `/v2/info` reports 1.49.0 from the
+   packaged libraries, with `imago_versions` following the installed models.
+4. **GUI contracts on 3.21.** Re-run the "Toolbar integration", "In-app dialog
+   styling", "Documents, autosave and recovery" and "Recognize Molecule end to
+   end" checklists on the 3.21 build. The unit contracts are green; the rendered
+   toolbar, dialogs and recognition surface are not unit-tested.
+5. **Full harness.** `node scripts/harness.mjs --activity ACT-05` (the
+   orchestrator runs it serially) and the full `node scripts/harness.mjs` with
+   the frontend build, Clippy and the sidecar suite.
+
 ---
 
 ## 3. Reviewer checklist

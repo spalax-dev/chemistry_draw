@@ -54,6 +54,14 @@ The patch principle of ADR 0005 is unchanged: one patch file per package
 version, registered in `pnpm-workspace.yaml`, with every hunk citing its upstream
 origin and removal plan.
 
+**Implementation note (ACT-02).** The lockfile was regenerated with
+`pnpm install --no-frozen-lockfile` and confirmed with
+`pnpm install --frozen-lockfile`. Corepack resolves the pnpm version pinned in
+`packageManager`, so the install does not depend on a globally installed pnpm.
+The option-store adapter needed for 3.21 landed in the same activity (the
+former ACT-03 was merged into ACT-02); its checks are the `src/ketcherOptions`
+Vitest suite and the temporary browser flow in `docs/testing.md` §6.2.
+
 ## Alternatives considered
 
 | Alternative                                             | Why not                                                                                                                                                   |
@@ -72,12 +80,17 @@ origin and removal plan.
 - **Negative:** the `parametrizeUrl` patch remains maintenance debt until stable
   `3.22.0`; the multi-language tarball must be regenerated when Ketcher moves;
   the Node 24.20.0 floor raises the local development baseline.
-- **Follow-up:** ACT-02 adopts the dependencies, the patch and the tarball;
-  ACT-03 re-checks the option-store adapter; ACT-04 moves Indigo to 1.49.0;
-  ACT-05 records the verification. A future Ketcher bump must re-check, before
-  the dependency moves:
+- **Follow-up:** ACT-01 records the policy (this ADR); ACT-02 adopts the
+  dependencies, the patch and the tarball and adapts the option store (the
+  former separate option-store activity was merged into it); ACT-04 moves Indigo
+  to 1.49.0; ACT-05 records the verification. A future Ketcher bump must
+  re-check, before the dependency moves:
   - the patch shape and its two `remoteStructService` hunks, plus the
-    patch-contract test;
+    patch-contract tests split across two files: the manifest-level check in
+    `scripts/lib/e1-ketcher.test.mjs` (patch text, installed regex and one
+    hunk per dist file) and the executed installed-bundle check in
+    `src/ketcherPatch.test.ts` (the patched helper keeps the explicit port and
+    leaves undeclared placeholders literal);
   - the option-store adapter in `src/ketcherOptions.ts`, which reaches into
     Ketcher's React fiber and Redux store rather than the public
     `editor.options()` API;
@@ -97,6 +110,7 @@ origin and removal plan.
   version-bound compatibility rules.
 - `docs/planning/c4/container.puml`, `docs/planning/c4/context.puml`.
 - `docs/architecture.md` §11 — the temporary workaround.
-- `docs/testing.md` §4.3 — the Ketcher patch contract test.
+- `docs/testing.md` §4.3 — the Ketcher patch contract tests (manifest-level and
+  executed bundle).
 - Related ADRs: 0005 (patch per version; superseded in part by this ADR),
   0007 (line model), 0009 (1.x baseline).

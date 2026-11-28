@@ -182,29 +182,36 @@ Rules:
 
 ### 4.3 Ketcher patch contract
 
-`patches/ketcher-core@3.21.0.patch` is configuration the editor depends on, so a
-contract test (Node's built-in runner, `scripts/lib/e1-ketcher.test.mjs`) reads
-the real patch file and the installed `dist/` and asserts the fix survives a
-reinstall:
+`patches/ketcher-core@3.21.0.patch` is configuration the editor depends on, so
+the contract is split across two layers: the manifest-level check reads the real
+patch file and the installed `dist/` (Node's built-in runner,
+`scripts/lib/e1-ketcher.test.mjs`), and the executed-bundle check runs the
+installed helper (Vitest, `src/ketcherPatch.test.ts`).
 
-| Target                                         | Assertion                                                                                                                                                           |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `patches/ketcher-core@3.21.0.patch`            | contains the `parametrizeUrl` hunks for both `dist/infrastructure/services/struct/remoteStructService.js` and `remoteStructService.modern.js`, and no `rebond` hunk |
-| installed `ketcher-core` `remoteStructService` | `parametrizeUrl` only substitutes placeholders that start with a letter or `_`, and an unknown placeholder stays intact                                             |
-| installed `ketcher-core` poll URL              | executing the patched helper with `{ id: "abc" }` keeps the explicit port: `http://127.0.0.1:9321/v2/imago/uploads/abc`                                             |
+| Target                                         | Test                   | Assertion                                                                                                                                                                                              |
+| ---------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `patches/ketcher-core@3.21.0.patch`            | `e1-ketcher.test.mjs`  | contains exactly the `parametrizeUrl` hunks for both `dist/infrastructure/services/struct/remoteStructService.js` and `remoteStructService.modern.js`, one hunk each, and no `rebond`/`halfBonds` hunk |
+| installed `ketcher-core` `remoteStructService` | `e1-ketcher.test.mjs`  | both dist builds carry the narrowed `:([A-Za-z_]\w*)` regex and the `hasOwnProperty.call(params, key)` guard, and no `:(\w+)` matcher                                                                  |
+| installed `ketcher-core` poll URL              | `ketcherPatch.test.ts` | executing the installed `parametrizeUrl` with `{ id: "abc" }` keeps the explicit port (`http://127.0.0.1:9321/v2/imago/uploads/abc`), and an undeclared `:id` stays literal                            |
 
 Rules:
 
 - Assert the real files, not a fixture. Removing either the `.js` or the
-  `.modern.js` hunk, or removing a guard from the installed bundle, must make
-  the test fail.
-- The test reads the patch text and the installed `node_modules/ketcher-core`
-  file; it does not run Ketcher. The end-to-end behaviour — Recognize polling
-  `/v2/imago/uploads/:id` through an `apiPath` with an explicit port — is the
-  manual recognition check in `docs/verification.md`.
-- Keep the assertions narrow: the `ReBond` guard is upstream in 3.21.0, so this
-  test names only the `parametrizeUrl` symbols and the two `remoteStructService`
-  dist paths.
+  `.modern.js` hunk, restoring `:(\w+)`, re-adding a `ReBond` hunk or removing a
+  guard from the installed bundle must make a test fail.
+- The Node test reads the patch text and the installed
+  `node_modules/ketcher-core` files; it does not execute them. The Vitest test
+  evaluates the exact installed `parametrizeUrl` source with `new Function`, so
+  it is the real installed helper, not a copy of the expected implementation;
+  it still does not run Ketcher.
+- The end-to-end behaviour — Recognize polling `/v2/imago/uploads/:id` through
+  an `apiPath` with an explicit port — remains the manual recognition check in
+  `docs/verification.md`.
+- Keep the assertions narrow: the `ReBond` guard is upstream in 3.21.0, so both
+  tests name only the `parametrizeUrl` symbols and the two `remoteStructService`
+  dist paths. `e1-ketcher.test.mjs` runs in `node --test` and in the harness
+  block that auto-discovers `scripts/lib/*.test.mjs`; `ketcherPatch.test.ts` runs
+  in `pnpm test`.
 
 ---
 
