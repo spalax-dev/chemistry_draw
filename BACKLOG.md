@@ -122,7 +122,7 @@
 
 ## US-07 — Adopt Ketcher 3.21 and Indigo 1.49 on 1.x
 
-- status: pending
+- status: awaiting-approval
 - value: The 1.x line adopts stable Ketcher 3.21.0 and Indigo 1.49.0 with the narrowed `parametrizeUrl` patch (3.21.0 does **not** contain the upstream fix; the ReBond fix is upstream), plus the source-built multi-language `ketcher-react` tarball (committed) and its own ADR. Redo on `develop`; do not merge the parked main E1.
 - acceptance:
   - `ketcher-core`/`ketcher-react` are exactly 3.21.0; `ketcher-react` comes from the committed vendor multi-language tarball; the 3.18 patch is replaced by a narrowed 3.21.0 `parametrizeUrl`-only patch (no ReBond hunk); the explicit Indigo port survives
