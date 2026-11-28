@@ -852,3 +852,46 @@ Consolidate the project's generated artifacts under one ignored root.
 - known performance: cold OCSR pair load ~92 s on this machine; recorded in
   US-02 for measurement and a warm-up/session-reuse decision.
 - approval: Jorge, 2026-11-22T03:55:32.396Z.
+
+## US-07 — Adopt Ketcher 3.21 and Indigo 1.49 on 1.x
+
+- approved by: Jorge at 2026-11-28T15:06:03.284Z
+
+### US-07 close evidence
+
+- branch: `us-07-ketcher-321`, based on `develop` (`634b736`); merged only after
+  approval.
+- commits: `71eb62f`, `30353ec`, `ab3461c`, `2b0c750`, `91b2c7c`. Net diff vs
+  `develop`: 37 files, +1,861 / -603, including the committed
+  `vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz` (2,314,592 B).
+- dependencies: `ketcher-core` exactly `3.21.0`; `ketcher-react` from the
+  committed multi-language tarball; the 3.18 two-hunk patch replaced by
+  `patches/ketcher-core@3.21.0.patch` narrowed to `parametrizeUrl`
+  (two `remoteStructService` hunks, no ReBond hunk); Node floor `>=24.20.0 <25`
+  with `.nvmrc`, `packageManager: pnpm@12.21.0`, the quality workflow and the
+  builder Dockerfile raised to Node 24; the develop `overrides` preserved.
+- app: Ketcher 3.21 moved `app` out of `editor.options()`. The adapter now
+  resolves the Redux store through the React fiber (`applyAppOptionsToStore`,
+  `applyKetcherAppOptions`) and `initKetcherServerMode` is the single entry
+  point called from `App.handleInit`; the Models dialog keeps copying
+  `imago_versions`; the multi-language bundle supplies the language selector
+  with no extra `src/` change.
+- native: Linux clones the `indigo-1.49.0` tag with a guard; Windows downloads
+  1.49.0 and verifies SHA-256
+  (`5bd405cc4c2b19521b88e015e7266f1a2914bc7d5ca7b769f1e1c16378871515`).
+- decisions: ADR 0011 (3.21.0 adoption, tarball as a sanctioned source build,
+  narrowed patch until stable 3.22, Indigo 1.49.0, Node floor); ADR 0005
+  superseded in part.
+- plan correction: the former ACT-03 (option-store adapter) was merged into
+  ACT-02 because 3.21's types reject `app` in `editor.options()`, so the
+  dependency bump cannot be green on its own. Same total scope.
+- gates: `--story US-07` green (format, lint, type, structure, docs, test,
+  build, docsgen, docblocks); 484 Vitest tests; 12 Ketcher/Indigo contract
+  tests; `tsc --noEmit` clean.
+- runtime: a locally built sidecar reported
+  `indigo_version: 1.49.0.0-g92d2821-x86_64-linux-gnu-12.2.0` through `/v2/info`.
+- pending/manual: packaged language selector, packaged smoke and the 3.21 GUI
+  contracts are recorded as pending in `docs/verification.md`. The repository
+  owner confirmed the equivalent flows on `main` and accepted the dev-line
+  result without a separate packaged run.
+- approval: Jorge, 2026-11-28T15:06:03.284Z.
