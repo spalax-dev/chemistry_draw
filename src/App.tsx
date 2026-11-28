@@ -65,6 +65,7 @@ import { routeSavedBlob } from "./saveRoute";
 import { describeError, errorMessage, isModelUnavailable } from "./recognizeErrors";
 import {
   cancelActiveTool,
+  initKetcherServerMode,
   openStructureLibrary,
   resolveApiBase,
   StaleSafeStructServiceProvider,
@@ -251,11 +252,9 @@ function App() {
 
   const handleInit = useCallback((ketcher: Ketcher) => {
     ketcherRef.current = ketcher;
-    const currentOptions = ketcher.editor.options();
-    ketcher.editor.options({
-      ...currentOptions,
-      app: { ...currentOptions.app, server: true },
-    });
+    // Ketcher 3.21 keeps `app` in Redux state; the adapter enables server mode
+    // without rebuilding the render, so canvas, selection and undo survive.
+    initKetcherServerMode(ketcher);
     setReady(true);
   }, []);
 

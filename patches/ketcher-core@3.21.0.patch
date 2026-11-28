@@ -1,0 +1,36 @@
+diff --git a/dist/infrastructure/services/struct/remoteStructService.js b/dist/infrastructure/services/struct/remoteStructService.js
+index 05fb2ed..a9757e8 100644
+--- a/dist/infrastructure/services/struct/remoteStructService.js
++++ b/dist/infrastructure/services/struct/remoteStructService.js
+@@ -44,7 +44,12 @@ function pollDeferred(process, complete, timeGap, startTimeGap) {
+   });
+ }
+ function parametrizeUrl(url, params) {
+-  return url.replace(/:(\w+)/g, (_, val) => params[val]);
++  return url.replace(/:([A-Za-z_]\w*)/g, (match, key) => {
++    if (params && Object.prototype.hasOwnProperty.call(params, key) && params[key] !== undefined && params[key] !== null) {
++      return String(params[key]);
++    }
++    return match;
++  });
+ }
+ function request(method, url, data, headers, responseHandler) {
+   let requestUrl = url;
+diff --git a/dist/infrastructure/services/struct/remoteStructService.modern.js b/dist/infrastructure/services/struct/remoteStructService.modern.js
+index 640ea5f..e796094 100644
+--- a/dist/infrastructure/services/struct/remoteStructService.modern.js
++++ b/dist/infrastructure/services/struct/remoteStructService.modern.js
+@@ -40,7 +40,12 @@ function pollDeferred(process, complete, timeGap, startTimeGap) {
+   });
+ }
+ function parametrizeUrl(url, params) {
+-  return url.replace(/:(\w+)/g, (_, val) => params[val]);
++  return url.replace(/:([A-Za-z_]\w*)/g, (match, key) => {
++    if (params && Object.prototype.hasOwnProperty.call(params, key) && params[key] !== undefined && params[key] !== null) {
++      return String(params[key]);
++    }
++    return match;
++  });
+ }
+ function request(method, url, data, headers, responseHandler) {
+   let requestUrl = url;

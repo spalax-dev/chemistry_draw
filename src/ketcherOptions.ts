@@ -3,13 +3,16 @@
  * API. Four private seams meet here:
  *
  * - `app.imagoVersions` (and the derived `Recognize` disabled state) lives in
- *   the Redux store owned by Ketcher's React tree. `ketcher.editor.options()`
- *   only updates the render options and rebuilds the canvas, so the toolbar
- *   action state never sees the model capability and the control stays disabled.
- *   `applyKetcherAppOptions` dispatches the same `APP_OPTIONS` + `UPDATE` pair
- *   Ketcher's own `checkServer` thunk uses, followed by a no-op `ACTION` so the
- *   toolbar action state (which gates Recognize) is recomputed. The editor is
- *   not remounted and the struct, selection and undo history survive.
+ *   the Redux store owned by Ketcher's React tree. Ketcher 3.21 narrowed
+ *   `ketcher.editor.options()` to render options: `app` is Redux store state,
+ *   so passing it to `options()` is rejected by the 3.21 types and never
+ *   reaches the toolbar. `applyAppOptionsToStore` dispatches the same
+ *   `APP_OPTIONS` + `UPDATE` pair Ketcher's own `checkServer` thunk uses,
+ *   followed by a no-op `ACTION` so the toolbar action state (which gates
+ *   Recognize) is recomputed; `applyKetcherAppOptions` resolves the mounted
+ *   store first. `initKetcherServerMode` is the editor-init entry point that
+ *   applies it and logs a failure. The editor is not remounted and the struct,
+ *   selection and undo history survive.
  * - Ketcher exposes no public "open a dialog" or "clear the armed tool" API.
  *   `openStructureLibrary` dispatches the same `MODAL_OPEN` action as Ketcher's
  *   `template-lib` toolbar button, and `cancelActiveTool` sends the Escape the
@@ -27,8 +30,15 @@
  * returns `false` on any mismatch. If a future Ketcher version changes the
  * store or the action shapes, the caller keeps working with the capability
  * unapplied (Recognize stays disabled) and the backstage reports that it could
- * not open the library; a Ketcher upgrade must re-check this module before
- * bumping the dependency.
+ * not open the library.
+ *
+ * A future Ketcher bump must re-check, before the dependency moves: that `app`
+ * is still Redux state (not render options); the `APP_OPTIONS`/`UPDATE`/`ACTION`
+ * shapes and the no-op action used to refresh `actionState`; the
+ * `render.clientArea` → `canvas` → `.Ketcher-root` lookup; the multi-language
+ * build (the tarball supplies the language selector and the
+ * `ketcher-language` storage key, so no app code reads it); and the
+ * `imago_versions` capability copy that the Models dialog relies on.
  */
 
 import {
@@ -114,15 +124,17 @@ function closestElement(value: unknown, selector: string): Element | null {
 /**
  * Locates the `.Ketcher-root` element from the mounted editor.
  *
- * The editor's `render.clientArea` and `canvas` are private surface; the lookup
- * optional-chains them and falls back to the document so a shape change only
- * skips the in-place operation instead of breaking the dialog flow.
+ * Ketcher 3.21's `ketcher.editor` is the micromolecules editor, which keeps its
+ * client area in `render.clientArea`; the `CoreEditor` alternative carries
+ * `canvas`. Both are private surface: the lookup optional-chains them and
+ * falls back to the document so a shape change only skips the in-place
+ * operation instead of breaking the dialog flow.
  */
-export function findKetcherRoot(editor: unknown): Element | null {
-  const inner = isRecord(editor) && isRecord(editor.editor) ? editor.editor : null;
-  const render = inner === null ? null : inner.render;
+export function findKetcherRoot(ketcher: Ketcher | null): Element | null {
+  const editor = isRecord(ketcher) && isRecord(ketcher.editor) ? ketcher.editor : null;
+  const render = editor === null ? null : editor.render;
   const clientArea = isRecord(render) ? render.clientArea : null;
-  const canvas = inner === null ? null : inner.canvas;
+  const canvas = editor === null ? null : editor.canvas;
   const root =
     closestElement(clientArea, KETCHER_ROOT_SELECTOR) ??
     closestElement(canvas, KETCHER_ROOT_SELECTOR);
@@ -216,18 +228,17 @@ export function findKetcherStore(ketcher: Ketcher | null): KetcherStore | null {
 /**
  * Merges `app` into Ketcher's option store and refreshes the toolbar state.
  *
- * Returns `false` when the store cannot be found, the state does not look like
- * Ketcher's or a dispatch throws, so the caller can log the fallback instead of
- * silently believing the capability was advertised.
+ * Returns `false` without dispatching when the store is missing, or when a
+ * dispatch throws, so the caller can log the fallback instead of silently
+ * believing the capability was advertised.
  */
-export function applyKetcherAppOptions(
-  container: Element | null,
+export function applyAppOptionsToStore(
+  store: KetcherStore | null,
   app: Record<string, unknown>,
 ): boolean {
-  try {
-    const store = storeInContainer(container);
-    if (store === null) return false;
+  if (store === null) return false;
 
+  try {
     store.dispatch({ type: "APP_OPTIONS", data: { ...app } });
     store.dispatch({ type: "UPDATE" });
     // A no-op action recomputes Ketcher's actionState (and therefore the
@@ -237,6 +248,42 @@ export function applyKetcherAppOptions(
   } catch {
     return false;
   }
+}
+
+/**
+ * Applies app-level options to the mounted editor's store.
+ *
+ * Ketcher 3.21 keeps `app` in the Redux store, not in `editor.options()`, so
+ * this resolves the store through `findKetcherStore` and delegates the dispatch
+ * sequence. Returns `false` when the editor's React root or Redux store cannot
+ * be resolved, or a dispatch throws.
+ */
+export function applyKetcherAppOptions(
+  ketcher: Ketcher | null,
+  app: Record<string, unknown>,
+): boolean {
+  return applyAppOptionsToStore(findKetcherStore(ketcher), app);
+}
+
+/**
+ * Enables Ketcher's server mode through the option-store adapter on editor init.
+ *
+ * Ketcher 3.21 narrowed `editor.options()` to render options: `app` is Redux
+ * store state, read by the server-backed toolbar controls. Applying it through
+ * the store keeps the canvas, selection and undo history intact. A failure is
+ * logged once and reported so the caller can continue; the server-backed
+ * controls simply stay disabled.
+ *
+ * @returns `true` when the store accepted the update.
+ */
+export function initKetcherServerMode(ketcher: Ketcher | null): boolean {
+  const applied = applyKetcherAppOptions(ketcher, { server: true });
+  if (!applied) {
+    console.warn(
+      "[chemistry-draw] could not enable Ketcher server mode; server-backed controls stay disabled.",
+    );
+  }
+  return applied;
 }
 
 /**

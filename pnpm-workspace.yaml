@@ -1,4 +1,10 @@
 allowBuilds:
   esbuild: false
 patchedDependencies:
-  ketcher-core@3.18.0: patches/ketcher-core@3.18.0.patch
+  ketcher-core@3.21.0: patches/ketcher-core@3.21.0.patch
+
+# Ketcher 3.21 is pinned to the committed multi-language tarball build.
+# pnpm 12 reads these settings from this file; package.json#pnpm is ignored.
+overrides:
+  ketcher-core: 3.21.0
+  ketcher-react: file:vendor/ketcher-react/ketcher-react-3.21.0-multi.tgz
