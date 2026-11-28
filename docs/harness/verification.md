@@ -100,6 +100,32 @@ Packaging changes additionally need `task packages` and the payload checks in
 CI job. Model-gated tests need `models/` and the ONNX Runtime dylib; they
 self-skip with an explicit `[SKIP]` when those are absent.
 
+### 3.1 CI gate (`ci.yml`)
+
+`ci.yml` is the build/test suite for both maintained lines. It triggers on
+`push` and `pull_request` for **`main` and `develop`**, so a change merged to
+`develop` is validated by the same gate as `main` (ADR 0012). A branch that
+never triggers it is not covered, and the local `--story` gate is not a
+substitute: CI runs on a clean runner with the Docker builder.
+
+The `ci` job runs on `ubuntu-24.04` and covers:
+
+| Step                                 | What it proves                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `./.github/actions/setup`            | Node from `.nvmrc` (`24.20.0`), pnpm from `packageManager` (`12.21.0`), Rust, deps   |
+| Build builder image (cached)         | `scripts/Dockerfile` builds `chemistry-builder` with the pinned Node 24/pnpm 12.21.0 |
+| Build native libs                    | `src-tauri/lib/linux-x86_64/` is filled from the builder image, never from git       |
+| `node --test scripts/lib/*.test.mjs` | packaging and harness contracts                                                      |
+| `cargo test` (sidecar)               | sidecar behavior against the native libs                                             |
+| `pnpm build`                         | the production frontend bundle                                                       |
+| Build sidecar (release)              | `indigo-server` builds and is staged as `indigo-server-<triple>` for `externalBin`   |
+
+The `windows` job calls `.github/actions/windows-build`, which runs the same
+toolchain with the same `.nvmrc`/`packageManager` pair, runs the Node packaging
+tests and the sidecar tests, smoke-tests the sidecar with an empty model root,
+and builds the NSIS installer. `quality.yml` adds style and static checks (also
+on `main` and `develop`) but is not the build/test gate.
+
 ---
 
 ## 4. The story boundary

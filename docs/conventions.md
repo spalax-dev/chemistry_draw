@@ -145,6 +145,14 @@ sits outside the webview. Native dialogs are only for file selection — Tauri
 `open` / `save` for Open, Save As and Export destinations. The model setup
 dialog follows the same rules (`src/ui/ModelSetupDialog.tsx`).
 
+**Capability.** Because the app owns every dialog, native message dialogs are
+not part of the UI contract and the webview does not need the permission. The
+capability file grants only the file-picker permissions the app calls:
+`dialog:allow-open` and `dialog:allow-save`. It must **not** include
+`dialog:allow-message`, and it must not include the `dialog:default` set, which
+bundles `allow-message` with the file pickers. Adding a native message,
+confirmation or ask dialog back requires changing this rule first.
+
 ### 6.1 Primitives
 
 | Module              | Export   | Responsibility                          |

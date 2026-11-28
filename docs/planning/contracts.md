@@ -493,8 +493,12 @@ These are the only custom commands. Everything else goes through plugins.
 ### 6.2 Capabilities
 
 `src-tauri/capabilities/default.json` is the single source of truth for what the
-webview may do. It grants `core:default`, window title/destroy, opener, dialog,
-fs, log, the sidecar shell execute/spawn/kill/stdin and these fs scopes:
+webview may do. It grants `core:default`, window title/destroy, opener, fs, log,
+the sidecar shell execute/spawn/kill/stdin and these fs scopes. The dialog
+surface is exactly the file pickers: `dialog:allow-open` and
+`dialog:allow-save`. It does **not** grant `dialog:allow-message` or the
+`dialog:default` set, because the app owns its dialogs (ADR 0010,
+`docs/conventions.md` §6).
 
 | Scope         | Grants                                | Why                                                                                            |
 | ------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -569,9 +573,6 @@ Indigo when no model or runtime is installed.
 
 ## 9. Open questions
 
-- `dialog:allow-message` is granted in the capability file but no `src/` caller
-  uses `message()`, and the conventions forbid it for in-app errors. Remove the
-  grant, or document the one allowed native-message case.
 - The `413` plain-text body forces the UI to parse a JSON error and fall back to
   size copy. Whether to replace it with a JSON `413` (and how) is undecided; it
   would change a documented exception.

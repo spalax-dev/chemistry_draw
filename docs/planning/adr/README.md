@@ -29,6 +29,7 @@
 | [0009](0009-update-1x-from-main-baseline.md)       | Update 1.x from the main 0.1.8 baseline         | accepted                   | 2026-11-21 |
 | [0010](0010-app-integration-and-model-surface.md)  | Integrate the backstage with the 1.x ML surface | accepted                   | 2026-11-21 |
 | [0011](0011-adopt-ketcher-321-on-1x.md)            | Adopt Ketcher 3.21.0 and Indigo 1.49.0 on 1.x   | accepted                   | 2026-11-28 |
+| [0012](0012-single-toolchain-source-of-truth.md)   | One toolchain source of truth                   | accepted                   | 2026-11-28 |
 
 ADRs 0002–0007 were reconstructed from the code, the manifests and the existing
 documentation on 2026-11-21. Their dates record the reconstruction, not the
