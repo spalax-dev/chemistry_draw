@@ -26,7 +26,7 @@ ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang
 
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y nodejs && \
-    npm install -g pnpm && \
+    npm install -g pnpm@12.21.0 && \
     rm -rf /var/lib/apt/lists/*
 
 # rpmbuild needs `cpio` to build the payload and `zstd` for compression.
